@@ -198,7 +198,11 @@ def main():
             avatar_items_by_gender[gender] = (positions, list(positions.items()))
 
         if args.retarget_job:
-            with open(args.retarget_job, encoding="utf-8") as f:
+            # dev#970走査: --retarget-jobはconvert.ps1が書くjob.json/
+            # job.resolved.jsonをそのまま渡す運用がありうる(dev#957と同型の
+            # BOM混入経路)。vp_core.load_job()と同じくutf-8-sigでBOM有無
+            # どちらのUTF-8も読めるようにする。
+            with open(args.retarget_job, encoding="utf-8-sig") as f:
                 _job = json.load(f)
             retarget_job_params = {
                 k: _job[k] for k in (

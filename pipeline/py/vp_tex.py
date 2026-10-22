@@ -15,16 +15,110 @@ import zlib
 
 # ------------------------------------------------------------------ PNG decode
 
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def is_real_png(path):
+    """先頭8バイトのマジックナンバーでPNG実体かを判定する(拡張子は信用しない、
+    dev#990: 拡張子だけ.pngにリネームされた非PNG(JPEG/BMP等)がatlas_bakeまで
+    運ばれて後段で落ちる不具合の対策)。読めない・8バイト未満はFalse。
+
+    dev#1417: このFalse(存在しないtex_dir配下のOSErrorを含む)は、呼び出し元
+    vp_atlas.plan_avatar()経由でconvert_noue.py resolve_textures()の
+    「テクスチャ既定柄フォールバック」を引き起こす起点になる。判定自体
+    (=fail-open設計)は変更しない(聖域: フォールバック挙動そのものの変更禁止)
+    が、フォールバックが起きた事実を黙らせないため、下の
+    tex_fallback_diagnostics()でログ+GUI警告の文言を組み立てる。"""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(8)
+    except OSError:
+        return False
+    return head == PNG_SIGNATURE
+
+
+# dev#1417: テクスチャ入力欠落等でテンプレート既定柄へフォールバックした
+# ときに使う、grep用固定タグ(サポート仕分けがログから拾えるようにする)。
+TEX_FALLBACK_TAG = "TEX_FALLBACK"
+
+
+def tex_fallback_diagnostics(slot_id, skip_marker):
+    """テクスチャ既定柄フォールバックのfail-loud化(dev#1417)。
+
+    convert_noue.py の resolve_textures() は、vp_atlas.plan_avatar() が返す
+    skipped_non_png(= [(slot_id, marker), ...])の各エントリについて、
+    「どのメッシュ/マテリアルの・どの入力が・なぜ弾かれ・何に置き換えたか」を
+    表す診断ログ1行とGUI変換完了時警告(##AVATAR_WARNING##)の本文を必要とする。
+    ここではその文言生成だけを行う(純粋関数、I/Oなし)。フォールバック自体の
+    発生条件(is_real_png等)は変更しない -- 変換は今までどおり完走し、
+    テンプレート既定柄を使う判断そのものも変えない。
+
+    skip_marker は plan_avatar()のskipped_non_pngが使う3形式のいずれか:
+      - "<no-texture-no-basecolor:orig_name>" -- texture=nullかつbase_color無し
+      - "<not-actually-png:filename>"          -- 拡張子は.pngだが実体が非PNG
+                                                    (dev#990、tex_dir不存在の
+                                                    OSError経由も含む)
+      - それ以外(素のファイル名文字列)          -- 拡張子自体が.pngでない
+
+    戻り値: (diag_line, warning_text)
+      diag_line: 診断ログ用の1行。先頭に"[TEX_FALLBACK]"固定タグを含む
+        (呼び出し元のモジュールタグ等の追加プレフィクスは呼び出し側の裁量)。
+      warning_text: ##AVATAR_WARNING## に続けて出す本文(マーカー文字列
+        "##AVATAR_WARNING## " 自体は含まない、呼び出し側が付与する)。
+    """
+    if skip_marker.startswith("<no-texture-no-basecolor:"):
+        orig_name = skip_marker[len("<no-texture-no-basecolor:"):-1]
+        diag_line = (
+            f"[{TEX_FALLBACK_TAG}][WARN] slot={slot_id} material={orig_name} "
+            "reason=no_texture_no_basecolor fallback=template_default -- has "
+            "neither a texture nor a resolvable base color, so it is excluded "
+            "from auto-injection (appearance may be missing)"
+        )
+        warning_text = (
+            "Color information for some materials could not be retrieved, "
+            f"so they may not display correctly (material={orig_name})"
+        )
+        return diag_line, warning_text
+    if skip_marker.startswith("<not-actually-png:"):
+        orig_fn = skip_marker[len("<not-actually-png:"):-1]
+        diag_line = (
+            f"[{TEX_FALLBACK_TAG}][WARN] slot={slot_id} texture={orig_fn} "
+            "reason=not_actually_png fallback=template_default -- has a .png "
+            "extension but is not actually a PNG file, skipping auto-injection "
+            "(leaving the template default)"
+        )
+        warning_text = (
+            f"Texture file '{orig_fn}' has a .png extension but is not a "
+            "valid PNG, so the template's default texture is used instead"
+        )
+        return diag_line, warning_text
+    # それ以外: 拡張子自体が.pngでない(FBX入力でjpg/tga等を参照した場合等)。
+    diag_line = (
+        f"[{TEX_FALLBACK_TAG}][WARN] slot={slot_id} texture={skip_marker} "
+        "reason=not_png fallback=template_default -- is not a PNG, skipping "
+        "auto-injection (leaving the template default)"
+    )
+    warning_text = (
+        f"Texture file '{skip_marker}' is not a PNG file, so the template's "
+        "default texture is used instead"
+    )
+    return diag_line, warning_text
+
+
 def decode_png(path):
-    """PNG→(w, h, RGBA ndarray(h,w,4) uint8)。8bit・非インターレースのみ対応。
-    フィルタ0/1/2は完全ベクトル化、3/4(Average/Paeth)は行内逐次(実測で許容)。"""
+    """PNG→(w, h, RGBA ndarray(h,w,4) uint8)。8bit/16bit・非インターレースのみ対応。
+    16bitは各サンプルの上位バイトを採用して8bitへ正規化する(dev#564: 拒否では
+    なく入口で正規化。品質影響は事実上なし、アトラスは最終的に8bitのため)。
+    フィルタ0/1/2は完全ベクトル化、3/4(Average/Paeth)は行内逐次(実測で許容)。
+    フィルタの「1つ前の同チャネル画素」への距離はPNG仕様どおりバイト単位の
+    bpp(=チャネル数×サンプルバイト数)を使う(8bit時はbpp==ch)。"""
     import numpy as np
     with open(path, "rb") as f:
         data = f.read()
-    if data[:8] != b"\x89PNG\r\n\x1a\n":
+    if data[:8] != PNG_SIGNATURE:
         raise RuntimeError(f"not a PNG: {path}")
     pos = 8
-    w = h = colortype = None
+    w = h = colortype = bitdepth = None
     palette = trns = None
     idat = []
     while pos + 8 <= len(data):
@@ -35,8 +129,8 @@ def decode_png(path):
         if ctype == b"IHDR":
             w, h, bitdepth, colortype, _comp, _filt, interlace = \
                 struct.unpack(">IIBBBBB", body)
-            if bitdepth != 8:
-                raise RuntimeError(f"bitdepth {bitdepth} unsupported (8bit only): {path}")
+            if bitdepth not in (8, 16):
+                raise RuntimeError(f"bitdepth {bitdepth} unsupported (8/16bit only): {path}")
             if interlace != 0:
                 raise RuntimeError(f"interlaced PNG is unsupported: {path}")
         elif ctype == b"PLTE":
@@ -50,8 +144,10 @@ def decode_png(path):
     if w is None:
         raise RuntimeError(f"no IHDR: {path}")
     ch = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[colortype]
+    bps = 2 if bitdepth == 16 else 1   # サンプルあたりバイト数
+    bpp = ch * bps                     # フィルタ距離(バイト単位、PNG仕様のbpp)
     raw = zlib.decompress(b"".join(idat))
-    stride = w * ch
+    stride = w * bpp
     if len(raw) != h * (stride + 1):
         raise RuntimeError(f"PNG data length mismatch: {path}")
     arr = np.frombuffer(raw, dtype=np.uint8).reshape(h, stride + 1)
@@ -66,12 +162,12 @@ def decode_png(path):
         if f == 0:
             line = cur
         elif f == 1:    # Sub: チャネル独立のcumsum(mod 256)
-            line = cur.reshape(-1, ch).cumsum(axis=0, dtype=np.int64).reshape(-1)
+            line = cur.reshape(-1, bpp).cumsum(axis=0, dtype=np.int64).reshape(-1)
         elif f == 2:    # Up
             line = cur + prev
         elif f == 3:    # Average(行内逐次)
             # dev#288(atlas_bake高速化): 数式は無変更、実装だけ高速化。
-            # numpyのスカラー要素アクセス(line[x-ch]等)は1回ごとに
+            # numpyのスカラー要素アクセス(line[x-bpp]等)は1回ごとに
             # box化のオーバーヘッドがあり、実測でこの行内ループが
             # decode_png全体の9割以上を占めていた(Seed-san 7枚で約10秒)。
             # 純Pythonのlist/bytearrayへ一度だけ変換して同じ算術を行うと、
@@ -80,7 +176,7 @@ def decode_png(path):
             prev_l = prev.tolist()
             buf = bytearray(stride)
             for x in range(stride):
-                a = buf[x - ch] if x >= ch else 0
+                a = buf[x - bpp] if x >= bpp else 0
                 buf[x] = (cur_l[x] + ((a + prev_l[x]) >> 1)) & 0xFF
             out[y] = np.frombuffer(bytes(buf), dtype=np.uint8)
             continue
@@ -89,9 +185,9 @@ def decode_png(path):
             prev_l = prev.tolist()
             buf = bytearray(stride)
             for x in range(stride):
-                a = buf[x - ch] if x >= ch else 0
+                a = buf[x - bpp] if x >= bpp else 0
                 b = prev_l[x]
-                c = prev_l[x - ch] if x >= ch else 0
+                c = prev_l[x - bpp] if x >= bpp else 0
                 p = a + b - c
                 pa = p - a if p >= a else a - p
                 pb = p - b if p >= b else b - p
@@ -104,7 +200,12 @@ def decode_png(path):
             raise RuntimeError(f"unknown PNG filter {f}: {path}")
         out[y] = (line & 0xFF).astype(np.uint8)
 
-    px = out.reshape(h, w, ch)
+    if bitdepth == 16:
+        # big-endian 2byte/サンプルの上位バイトを採用して8bit化(PNG仕様の
+        # ビット深度縮小と同じ考え方: 下位バイトは丸め誤差程度で無視できる)
+        px = out.reshape(h, w, ch, 2)[:, :, :, 0]
+    else:
+        px = out.reshape(h, w, ch)
     full = np.full((h, w, 1), 255, np.uint8)
     if colortype == 6:
         rgba = px.copy()

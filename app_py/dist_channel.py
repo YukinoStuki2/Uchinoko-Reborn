@@ -40,7 +40,13 @@ def read_dist_channel_from_file(file_path: str) -> str:
     try:
         if not os.path.isfile(file_path):
             return UNKNOWN_DIST_CHANNEL
-        with open(file_path, "r", encoding="utf-8") as f:
+        # dev#970走査: channel.txtは build\make_dist.ps1 の -Channel パラメータ
+        # 経路(任意、既定は使われない)で Set-Content -Encoding utf8 により
+        # 書かれることがあり、PowerShell 5.1(Desktop Edition)ではBOM付きUTF-8
+        # になる(dev#957と同型)。素の"utf-8"だとBOM(U+FEFF)が文字列の先頭に
+        # 残ってnormalize_dist_channel()の完全一致判定が静かにunknownへ倒れる
+        # 潜在バグだった。"utf-8-sig"はBOM有無どちらのUTF-8も正しく読める。
+        with open(file_path, "r", encoding="utf-8-sig") as f:
             return normalize_dist_channel(f.read())
     except OSError:
         return UNKNOWN_DIST_CHANNEL

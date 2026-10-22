@@ -104,20 +104,38 @@ def _basename_noext(s):
     return s
 
 
-def is_excluded(path_or_name):
-    """pak内相対パス / /Game/... フルパッケージパス / SK名 のいずれでも判定する。"""
+def is_excluded(path_or_name, extra_excluded=None):
+    """pak内相対パス / /Game/... フルパッケージパス / SK名 のいずれでも判定する。
+
+    dev#165第2期(2026-08-08、装備限定): `extra_excluded`は呼び出し側が
+    計算した追加の除外SK名集合(拡張子なしベース名、大小文字区別、例
+    "SK_Player_Male_Outfit_Bronze001")を渡すための**任意引数**。
+    省略/None/空なら**固定denylist(EXCLUDED_SK_NAMES)のみ**で判定し、
+    既存の全呼び出し元(引数1個のみで呼んでいる箇所)は挙動が一切変わらない
+    (=既存の「コラボ固定denylist」の挙動は不変)。
+
+    典型的な使い方(live_template.py/build_pak_from_avatar.py):
+    その場のjob.jsonのequipment_filterから計算した「未選択装備SK名集合」を
+    extra_excludedとして渡し、「固定denylist ∪ 未選択装備」という有効除外
+    集合をこの1関数で一括判定する(グローバル状態は一切変更しない)。"""
     if not path_or_name:
         return False
     s = str(path_or_name).replace("\\", "/")
     for sub in EXCLUDED_PATH_SUBSTRINGS:
         if sub in s:
             return True
-    return _basename_noext(s) in EXCLUDED_SK_NAMES
+    name = _basename_noext(s)
+    if name in EXCLUDED_SK_NAMES:
+        return True
+    if extra_excluded and name in extra_excluded:
+        return True
+    return False
 
 
-def excluded_reason(path_or_name):
-    """除外理由(英語)を返す。除外対象でなければ None。"""
-    if not is_excluded(path_or_name):
+def excluded_reason(path_or_name, extra_excluded=None):
+    """除外理由(英語)を返す。除外対象でなければ None。
+    extra_excludedの意味はis_excluded()と同じ(任意引数、省略時は挙動不変)。"""
+    if not is_excluded(path_or_name, extra_excluded=extra_excluded):
         return None
     name = _basename_noext(path_or_name)
     if name in EXCLUDED_SK_NAMES:
@@ -126,14 +144,17 @@ def excluded_reason(path_or_name):
     for sub in EXCLUDED_PATH_SUBSTRINGS:
         if sub in s:
             return f"unsupported (collab item: {sub})"
+    if extra_excluded and name in extra_excluded:
+        return "lab: equipment filter, not selected"
     return "unsupported"
 
 
-def filter_paths(paths):
-    """(残すパス, 除外したパス) に分ける。"""
+def filter_paths(paths, extra_excluded=None):
+    """(残すパス, 除外したパス) に分ける。extra_excludedの意味は
+    is_excluded()と同じ(任意引数、省略時は挙動不変)。"""
     keep, drop = [], []
     for p in paths:
-        (drop if is_excluded(p) else keep).append(p)
+        (drop if is_excluded(p, extra_excluded=extra_excluded) else keep).append(p)
     return keep, drop
 
 

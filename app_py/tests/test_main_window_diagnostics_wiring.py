@@ -56,6 +56,30 @@ class _FakeWidget:
         self.forgotten = True
 
 
+class _FakeRemoteWaitEvent:
+    """dev#1447: threading.Event互換の最小フェイク。実待機せずwait()の
+    呼び出し回数・引数を記録する(sleep_fnの注入と同じ思想)。`already_set`は
+    構築時点でis_set()=Trueにするための引数(_check_for_update_once側の
+    リモート取得が判定より先に完了していたケースを模す)。`resolves_on_wait`は
+    wait()呼び出し時にEventがsetされる(=リモート取得がその間に完了する)
+    かどうかを表す——Falseなら「取得が有限時間内に確定しない(真のタイムアウト)」
+    ケースを模す。"""
+
+    def __init__(self, already_set: bool = False, resolves_on_wait: bool = True) -> None:
+        self._is_set = already_set
+        self._resolves_on_wait = resolves_on_wait
+        self.wait_calls: list[float | None] = []
+
+    def is_set(self) -> bool:
+        return self._is_set
+
+    def wait(self, timeout: float | None = None) -> bool:
+        self.wait_calls.append(timeout)
+        if self._resolves_on_wait:
+            self._is_set = True
+        return self._is_set
+
+
 class _FakeSelf:
     """MainWindow各メソッドを束縛せずに呼ぶための最小self。パス計算のみの
     小さなヘルパー(_read_steam_build_id/_known_good_bundled_path/
@@ -192,6 +216,23 @@ def test_detect_palworld_version_not_found_when_paks_missing(monkeypatch, tmp_pa
     assert det.detected is False
 
 
+def test_detect_palworld_version_reads_pak_size_for_xbox_gamepass_pak_name(tmp_path, monkeypatch):
+    """dev#229続報: Pal-WinGDK.pak(Xbox App/Game Pass版)のフォルダでもpak_sizeを
+    拾えること(build_idはacf不在のためNoneのまま=Steam専用機構の想定挙動)。
+    以前はPal-Windows.pak単一決め打ちでOSError無視によりpak_size=Noneのままだった。"""
+    paks = tmp_path / "XboxPaks"
+    paks.mkdir(parents=True)
+    (paks / "Pal-WinGDK.pak").write_bytes(b"x" * 4096)
+    fake_self = _FakeSelf(app_root=str(tmp_path), work_root=str(tmp_path / "work"))
+    monkeypatch.setattr(mw.pak_manager, "paks_dir_quiet", lambda *a, **k: str(paks))
+
+    det = mw.MainWindow._detect_palworld_version(fake_self)
+
+    assert det.detected is True
+    assert det.build_id is None
+    assert det.pak_size == 4096
+
+
 def test_read_manifest_combined_hash_found(tmp_path):
     fake_self = _FakeSelf(app_root=str(tmp_path), work_root=str(tmp_path / "work"))
     manifest_dir = tmp_path / "work" / "_warm_dummy" / "vanilla"
@@ -321,6 +362,235 @@ def test_resolve_palworld_compat_status_not_detected_no_warn(tmp_path):
     st, _known = result
     assert st.detected is False
     assert st.should_warn is False
+
+
+# ===========================================================================
+# dev#1447: リモート白リスト取得を待たずに警告が出る競合の修正
+# ===========================================================================
+
+
+def test_resolve_palworld_compat_status_waits_for_remote_then_suppresses_warning_when_known(
+    tmp_path,
+):
+    """(a) リモート取得が判定より遅れて完了するシナリオで、待った後の
+    再評価でリモートに指紋があれば警告が出ない(remote_wait_eventのwait()が
+    1回だけ呼ばれ、manifestポーリングへは入らないこと=sleep回数0も確認)。"""
+    fake_self = _FakeSelf(app_root=str(tmp_path), work_root=str(tmp_path / "work"))
+    known_without_remote = cc.merge_known_good(BUNDLED_JSON, None)
+    known_with_remote = cc.merge_known_good(
+        BUNDLED_JSON,
+        json.dumps({"known_versions": [{"build_id": "999", "pak_size": 9999, "label": "1.0.9"}]}),
+    )
+    det = cc.PalworldDetection(detected=True, build_id="999", pak_size=9999)
+
+    call_count = {"n": 0}
+
+    def fake_evaluate():
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            # 判定worker側の初回評価: リモートがまだ_remote_known_good_jsonへ
+            # 反映されていない(dev#1447が直す競合そのもの)
+            return cc.evaluate(known_without_remote, det, None), known_without_remote
+        # remote_wait_event.wait()後の再評価: リモート取得が完了し指紋が判明
+        return cc.evaluate(known_with_remote, det, None), known_with_remote
+
+    fake_self._evaluate_palworld_compat_now = fake_evaluate
+    event = _FakeRemoteWaitEvent(already_set=False, resolves_on_wait=True)
+    sleeps: list[float] = []
+
+    result = mw.MainWindow._resolve_palworld_compat_status(
+        fake_self, sleep_fn=sleeps.append, remote_wait_event=event
+    )
+
+    assert result is not None
+    st, _known = result
+    assert st.should_warn is False, "リモート指紋が判明したのに警告扱いのまま"
+    assert event.wait_calls == [8.0], "remote_wait_eventの待ちが1回・既定timeoutで呼ばれていない"
+    assert sleeps == [], "リモートで解決したのにmanifestポーリングへ入った"
+
+
+def test_resolve_palworld_compat_status_negative_control_still_warns_when_remote_lacks_fingerprint(
+    tmp_path,
+):
+    """(b) 負の対照: リモート取得が完了しても、その指紋がリモート白リストにも
+    無ければ待った後も警告が出る(黙って握りつぶさない)。"""
+    fake_self = _FakeSelf(app_root=str(tmp_path), work_root=str(tmp_path / "work"))
+    known = cc.merge_known_good(BUNDLED_JSON, None)
+    det = cc.PalworldDetection(detected=True, build_id="777", pak_size=7777)
+    # 初回・再評価とも同じ(リモートにも該当指紋なし)
+    fake_self._evaluate_palworld_compat_now = lambda: (cc.evaluate(known, det, "unknown-hash"), known)
+    event = _FakeRemoteWaitEvent(already_set=False, resolves_on_wait=True)
+    sleeps: list[float] = []
+
+    result = mw.MainWindow._resolve_palworld_compat_status(
+        fake_self, sleep_fn=sleeps.append, remote_wait_event=event
+    )
+
+    assert result is not None
+    st, _known = result
+    assert st.should_warn is True, "リモートにも指紋が無いのに警告が消えた"
+    assert event.wait_calls == [8.0]
+
+
+def test_resolve_palworld_compat_status_still_warns_when_remote_fetch_times_out(tmp_path):
+    """(c) リモート取得が有限時間内に確定しない(真のタイムアウト、
+    event.wait()がFalseを返す)場合でも、例外にならず従来どおり警告が出る
+    (聖域: 取得失敗はいかなるエラー表示・例外にもならない、を待ちゲート側でも
+    壊さないことの確認)。"""
+    fake_self = _FakeSelf(app_root=str(tmp_path), work_root=str(tmp_path / "work"))
+    known = cc.merge_known_good(BUNDLED_JSON, None)
+    det = cc.PalworldDetection(detected=True, build_id="888", pak_size=8888)
+    fake_self._evaluate_palworld_compat_now = lambda: (cc.evaluate(known, det, None), known)
+    event = _FakeRemoteWaitEvent(already_set=False, resolves_on_wait=False)
+    sleeps: list[float] = []
+
+    result = mw.MainWindow._resolve_palworld_compat_status(
+        fake_self, sleep_fn=sleeps.append, remote_wait_event=event
+    )
+
+    assert result is not None
+    st, _known = result
+    assert st.should_warn is True
+    assert event.wait_calls == [8.0]
+    # manifest未取得のままなので、待ちゲートの後は従来どおりmanifestポーリング
+    # へ続く(5分ポーリングの最初の1回でmanifestも取れないまま尽きる前提の
+    # 最小確認として、少なくとも1回はsleepが呼ばれていること)。
+    assert sleeps, "タイムアウト後にmanifestポーリングへ続いていない"
+
+
+def test_resolve_palworld_compat_status_no_extra_wait_when_bundled_match(tmp_path):
+    """(d) 同梱一致で既にshould_warn=Falseなら、remote_wait_eventが渡されても
+    待ちゼロ(wait()が一度も呼ばれない)。"""
+    fake_self = _FakeSelf(app_root=str(tmp_path), work_root=str(tmp_path / "work"))
+    known = cc.merge_known_good(BUNDLED_JSON, None)
+    det = cc.PalworldDetection(detected=True, build_id="111", pak_size=1000)
+    fake_self._evaluate_palworld_compat_now = lambda: (cc.evaluate(known, det, None), known)
+    event = _FakeRemoteWaitEvent(already_set=False, resolves_on_wait=True)
+    sleeps: list[float] = []
+
+    result = mw.MainWindow._resolve_palworld_compat_status(
+        fake_self, sleep_fn=sleeps.append, remote_wait_event=event
+    )
+
+    assert result is not None
+    st, _known = result
+    assert st.should_warn is False
+    assert event.wait_calls == [], "同梱一致(警告不要)なのにリモート待ちが発生した"
+    assert sleeps == []
+
+
+def test_resolve_palworld_compat_status_no_wait_when_remote_already_done(tmp_path):
+    """remote_wait_eventが既にset済み(リモート取得の方が先に終わっていた
+    通常ケース)なら、wait()自体を呼ばずに即manifestポーリング/返却へ進む。"""
+    fake_self = _FakeSelf(app_root=str(tmp_path), work_root=str(tmp_path / "work"))
+    known = cc.merge_known_good(BUNDLED_JSON, None)
+    det = cc.PalworldDetection(detected=True, build_id="999", pak_size=9999)
+    fake_self._evaluate_palworld_compat_now = lambda: (cc.evaluate(known, det, "unknown-hash"), known)
+    event = _FakeRemoteWaitEvent(already_set=True)
+
+    result = mw.MainWindow._resolve_palworld_compat_status(fake_self, sleep_fn=lambda _s: None, remote_wait_event=event)
+
+    assert result is not None
+    st, _known = result
+    assert st.should_warn is True
+    assert event.wait_calls == [], "既にset済みのEventでwait()を呼んだ"
+
+
+def test_check_for_update_once_worker_sets_event_after_assigning_remote_known_good(monkeypatch):
+    """dev#1447: `_check_for_update_once`のworkerが、
+    `self._remote_known_good_json`への代入を完了してから
+    `self._update_check_done.set()`すること(happens-before)。ここでは
+    set()が呼ばれた時点での_remote_known_good_jsonの値を記録し、代入前に
+    setされていないことを確認する。"""
+    fake_self = _FakeSelf(app_root="C:\\app", work_root="C:\\app\\work")
+
+    class _RecordingEvent:
+        def __init__(self) -> None:
+            self.value_at_set: list[str | None] = []
+
+        def set(self) -> None:
+            self.value_at_set.append(fake_self._remote_known_good_json)
+
+    fake_self._update_check_done = _RecordingEvent()
+    fake_self._refresh_verified_version_label = lambda: None
+
+    class _FakeRoot:
+        def after(self, _ms, fn) -> None:
+            fn()
+
+    fake_self.root = _FakeRoot()
+    monkeypatch.setattr(
+        mw.update_check, "check_for_update",
+        lambda *_a, **_k: mw.update_check.UpdateCheckResult(
+            has_update=False, remote_known_good_json='{"known_versions":[{"build_id":"1","pak_size":1,"label":"x"}]}',
+        ),
+    )
+
+    # _check_for_update_onceはスレッドを起こす。worker本体を直接抽出して
+    # 同期実行できるよう、内部関数を再現するのではなく実メソッドを呼び、
+    # スレッド生成のみ即時実行に差し替える(スレッド生成自体は本WPの対象
+    # ロジックではないため、既存test_check_for_update_once_shows_notice_...
+    # と同様の割り切り)。
+    started_threads: list = []
+
+    class _ImmediateThread:
+        def __init__(self, target=None, daemon=None, name=None) -> None:
+            self._target = target
+
+        def start(self) -> None:
+            started_threads.append(self._target)
+            self._target()
+
+    monkeypatch.setattr(mw.threading, "Thread", _ImmediateThread)
+
+    mw.MainWindow._check_for_update_once(fake_self)
+
+    assert started_threads, "workerスレッドが起動していない"
+    assert fake_self._update_check_done.value_at_set == [
+        '{"known_versions":[{"build_id":"1","pak_size":1,"label":"x"}]}'
+    ], "set()が_remote_known_good_json代入より前に呼ばれた(happens-before違反)"
+
+
+def test_check_for_update_once_worker_sets_event_even_on_fetch_exception(monkeypatch):
+    """dev#1447: update_check.check_for_update()が例外を出しても
+    (聖域: 取得失敗はいかなるエラー表示・例外にもならないこと)
+    _update_check_done.set()は必ず呼ばれる(呼ばれないと判定worker側が
+    remote_wait_timeout_sいっぱい無駄に待ってしまう)。"""
+    fake_self = _FakeSelf(app_root="C:\\app", work_root="C:\\app\\work")
+
+    class _RecordingEvent:
+        def __init__(self) -> None:
+            self.set_count = 0
+
+        def set(self) -> None:
+            self.set_count += 1
+
+    fake_self._update_check_done = _RecordingEvent()
+
+    class _FakeRoot:
+        def after(self, _ms, fn) -> None:
+            fn()
+
+    fake_self.root = _FakeRoot()
+
+    def raise_error(*_a, **_k):
+        raise OSError("simulated network failure")
+
+    monkeypatch.setattr(mw.update_check, "check_for_update", raise_error)
+
+    class _ImmediateThread:
+        def __init__(self, target=None, daemon=None, name=None) -> None:
+            self._target = target
+
+        def start(self) -> None:
+            self._target()
+
+    monkeypatch.setattr(mw.threading, "Thread", _ImmediateThread)
+
+    mw.MainWindow._check_for_update_once(fake_self)  # 例外を外へ出さなければ合格
+
+    assert fake_self._update_check_done.set_count == 1
+    assert fake_self._remote_known_good_json is None
 
 
 # ===========================================================================

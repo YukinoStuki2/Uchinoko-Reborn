@@ -31,8 +31,6 @@ import sys
 import tkinter as tk
 from tkinter import ttk
 
-import pytest
-
 _APP_PY_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _APP_PY_DIR not in sys.path:
     sys.path.insert(0, _APP_PY_DIR)
@@ -59,14 +57,11 @@ def _make_fake_self(root: tk.Tk, app_root: str) -> mw.MainWindow:
     return self
 
 
-@pytest.fixture
-def hidden_root():
-    root = tk.Tk()
-    root.withdraw()  # 画面には一切表示しない(common brief契約の例外条項どおり)
-    try:
-        yield root
-    finally:
-        root.destroy()
+# dev#672: hidden_root フィクスチャは conftest.py の session スコープ共有版を
+# 使う(本ファイル単独のmodule scope fixtureは撤去)。理由はconftest.py
+# 冒頭のコメントを参照。tk.Tk()の生成をapp_py/tests全体でプロセス当たり
+# 最大1回に絞らないと、他ファイル(test_avatar_warning_diagnostics.py)の
+# tk.Tk()生成と合算されてフレークが再現し続けることを実測で確認した。
 
 
 def test_lang_combo_shows_current_language_after_build(hidden_root, tmp_path):

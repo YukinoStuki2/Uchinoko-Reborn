@@ -11,6 +11,20 @@
     from pak_live_extract import extract_files
     files = extract_files(pak_path, ["Pal/Content/.../Foo.uasset", ...])
     # -> {path: bytes}
+
+dev#1259(2026-08-09、ラボ装備限定の初回押下でコンソールが一瞬表示される
+不具合の修正): 本モジュール内の2箇所のsubprocess.run()(_resolve_ooz_python()の
+ooz importプローブ、_decompress_batch()のooz_worker_gpl.py起動)にCREATE_NO_WINDOW
+を付けた。呼び出し元(app_py\\ui\\equipment_select_dialog.py /
+headequip_select_dialog.py)はvp_equipment_names.pyをCREATE_NO_WINDOW付きの
+subprocessとして起動していたが、そのpythonw非経由の子(=本モジュールが更に
+起動するooz関連の孫プロセス)にはこのフラグが伝播しない(subprocessの
+creationflagsは呼び出しごとに指定が要る)。孫プロセスはコンソールを持たない
+親から起動されるconsoleサブシステムのpython.exeなので、Windowsが新規コンソール
+を割り当てて一瞬表示していた。resolve_display_names()はディスク上のJSON
+キャッシュがヒットすると本モジュールのextract_files()自体を呼ばないため、
+「初回のみ」発生する症状と一致する(2回目以降はキャッシュヒットで孫プロセスが
+一切起動されない)。
 """
 import os
 import shutil
@@ -70,10 +84,12 @@ def _resolve_ooz_python():
         candidates.append([py_launcher, "-3.11"])
         candidates.append([py_launcher, "-3"])
 
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     for cmd in candidates:
         try:
             r = subprocess.run(cmd + ["-c", "import ooz"],
-                                capture_output=True, timeout=30)
+                                capture_output=True, timeout=30,
+                                creationflags=creationflags)
         except (OSError, subprocess.TimeoutExpired):
             continue
         if r.returncode == 0:
@@ -122,7 +138,8 @@ def _decompress_batch(requests):
     ooz_python = _resolve_ooz_python()
     proc = subprocess.run(
         ooz_python + [_WORKER], input=bytes(payload),
-        capture_output=True, check=False)
+        capture_output=True, check=False,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     if proc.returncode != 0:
         core.die(TAG, f"ooz_worker_gpl.py exited abnormally (code={proc.returncode}): "
                  f"{proc.stderr[-2000:].decode('utf-8', errors='replace')}")

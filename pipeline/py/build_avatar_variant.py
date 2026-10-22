@@ -72,9 +72,20 @@ def load_dump(dump_path):
         return json.load(f)
 
 
-def build_duplicated_vertices(sec_verts):
+def build_duplicated_vertices(sec_verts, stats=None):
     """U8-T2: 位置一致(byte-exact, encode_position後)頂点をクラスタ化し、
     FDuplicatedVerticesBuffer.DupVertData/DupVertIndexDataを構築する。
+
+    dev#1072: `stats`にdictを渡すと、`max_cluster_size`(最大クラスタの
+    メンバー数、位置重複が1件も無ければ1)と`n_clusters_gt1`(サイズ2以上の
+    クラスタ数)を書き込む。サイズkのクラスタはDupVertDataへk*(k-1)エントリ
+    (4byte/個)を追加する実装(下記ループ参照)のため、大きな位置重複クラスタが
+    1個でもあると出力サイズがO(k^2)で膨張しうる(dev#1072の実測、
+    issue #1072コメント2026-08-07参照: k=501の単一クラスタで+約1MB/衣装)。
+    従来この分布は一切ログに出ておらず、容量膨張の報告(実例K4XRB4DK)が
+    来ても原因を特定できなかった。このstats引数はその計装のための追加のみで、
+    戻り値(dup_vert_data/dup_vert_index)・出力バイト列は一切変更しない
+    (stats=None=従来どおりのデフォルト、Layers-Affected: none)。
 
     U8診断で判明: 従来実装は全セクションでDupVertData.Num()==0固定
     (「重複なし」規約)だったが、これは実機クラッシュ(D3D11Util.cpp:261
@@ -91,11 +102,48 @@ def build_duplicated_vertices(sec_verts):
     ハード法線の分割元)に倣い、同一position(エンコード後バイト完全一致)の
     頂点グループについて、各頂点のDupVertDataに「自分以外の同グループ全員」
     を列挙する。戻り値: (dup_vert_data: list[int](ローカル頂点索引),
-    dup_vert_index: list[(length, index)]、長さ=len(sec_verts))。"""
+    dup_vert_index: list[(length, index)]、長さ=len(sec_verts))。
+
+    dev#1072(2026-08-07、構造修正WP): このO(k^2)の全ペア列挙を、O(k)の
+    代替(代表点/上限打ち切り等)へ置換できないか判定した結果、**置換不可と
+    判断し、意図的にこのままにしている**。根拠:
+
+    1. U8診断(docs/REPORT_U8_2026-07-23.md②)で、この全ペア列挙の実装が
+       実テンプレートSK(cooked、Epic純正)のDupVertData.Num()と**バイト完全
+       一致**することが既に実測されている(section1: 442==442)。つまり
+       O(k^2)は本実装のバグや設計選択ではなく、UE本体が実際に構築する
+       バイナリの形そのものである。
+    2. 代替案として「クラスタ全体で1本の共有リスト(自分自身を含むk件)を
+       全メンバーが指す」O(k)方式(RecomputeTangentが対称な平均化処理である
+       ことを利用した案)を検討したが、これは上記1の完全一致という実測事実と
+       矛盾する(共有リスト方式なら実測countはO(k)相当になるはずが、実際は
+       O(k^2)相当の値と一致した)。したがって共有リスト方式は不採用。
+    3. 大きな単一クラスタ(dev#1072実測: k≈3600で報告のpak膨張4GB超えを
+       説明可能)は、実際にEpicがcookした60体/120セクションの実測分布
+       (小さなUVシーム由来のクラスタのみ、単一巨大クラスタは0件)には
+       存在しない。つまりk≈3600クラスタは入力メッシュ側のデータ品質問題
+       (位置重複が異常発生している)であり、DVBビルダー側の設計問題では
+       ないと判断する。
+    4. Palworldエンジン側の実ソース(RecomputeTangentsPerVertexPassCS等の
+       消費側コード)にアクセスできないため、「DupVertDataの中身が
+       bRecomputeTangent=Falseのセクションで実際に読まれるか」を確定
+       できない。中身を削る(上限打ち切り等)修正は、たとえ理論上安全に
+       見えても、値そのものを憶測で変えることになりCLAUDE.mdの
+       「値を寄せて合わせる修正は却下」「憶測で出力フォーマットを変えることは
+       絶対にしない」に抵触するため見送った。
+
+    結論: `build_duplicated_vertices()`自体は変更しない。根本対策の方向は
+    入力メッシュ側(異常な位置重複クラスタの検出/是正)に置くべき、という
+    判断をissue #1072へコメントで固着した(このWPの完了報告)。"""
     groups = {}
     for li, v in enumerate(sec_verts):
         key = vm.encode_position(*v['pos'])
         groups.setdefault(key, []).append(li)
+
+    if stats is not None:
+        cluster_sizes = [len(members) for members in groups.values() if len(members) >= 2]
+        stats['max_cluster_size'] = max(cluster_sizes, default=(1 if sec_verts else 0))
+        stats['n_clusters_gt1'] = len(cluster_sizes)
 
     dup_vert_data = []
     dup_vert_index = [None] * len(sec_verts)
@@ -178,6 +226,16 @@ def pack_section(global_strip, class_strip, material_index, base_index, num_tria
 # テンプレートのquatだけを使ったFK合成→逆分解で誤差1e-13cm未満の完全往復)
 # なので、回転・スケールはテンプレート値のまま使い回し、位置のみを
 # chibi-fit後の値へ差し替えればよい。
+#
+# 例外(dev#19 rotfix WP、2026-08-11、work\rd_19_scurve\PROPOSAL.md §7.1が
+# 正本): sway donorチェーン(揺れもの用に転用されたdonor骨)に限っては、
+# 「回転不変」の前提そのものが症状の主因だった(donor骨のquatが旧donorの
+# 静止姿勢のまま据え置かれ、KawaiiPhysicsのSimulateRotationが静止時から
+# 致命的な不整合を可視化していた)。このチェーンのボーンだけは、上記の
+# chibi_bone_world_head(位置)に加えてchibi_bone_world_quat(回転)も
+# パッチする(load_chibi_bone_world_quat/compute_patched_local_rotations/
+# patch_refskeleton_rotations)。それ以外の全ボーンは引き続き「回転は
+# テンプレート値のまま」の原則どおり。
 
 def _quat_mul(a, b):
     """UE FTransformの回転合成(親→子、a=親クォータニオン、b=子ローカル)。"""
@@ -234,7 +292,42 @@ def compute_component_transforms(bones):
     return comp_rot, comp_pos
 
 
-def compute_patched_local_positions(bones, avatar_world_pos):
+def compute_effective_component_rotations(bones, avatar_world_quat):
+    """dev#19 rotfix WP(work\\rd_19_scurve\\PROPOSAL.md §7.1が正本):
+    bones(compute_component_transforms()と同じ、親→子の順で並んでいる前提)
+    のテンプレートFKに、avatar_world_quat({bone_name: (x,y,z,w)}、sway donor
+    チェーンだけの上書きコンポーネント空間quat、pipeline/blender/
+    step02_retarget.pyのchibi_bone_world_quat_{gender}.json)を適用した
+    「実効コンポーネント回転」を返す。
+
+    avatar_world_quatに無いボーンはテンプレートのローカルquatをそのまま
+    使うが、**親が上書きされていればその新しい親回転で再合成する**
+    (donor chain内は親も子も上書き対象になりうるため、親の新回転を無視して
+    テンプレート回転のまま子を合成すると、実際にRefSkeletonへ書き込んだ
+    親の新quatとズレる——position側の従来ロジックが抱えていたのと同じ
+    落とし穴。本関数はposition・rotation両方のパッチ計算で共有する)。
+
+    avatar_world_quatがNone/空なら、返り値はcompute_component_transforms()
+    が返す素のcomp_rotと完全一致する(非sway時の完全no-op、負の対照で確認)。
+    """
+    effective = {}
+    for name, b in bones.items():
+        parent = b['parent']
+        override = None
+        if avatar_world_quat and name in avatar_world_quat:
+            override = tuple(avatar_world_quat[name])
+        if parent is None:
+            effective[name] = override if override is not None else tuple(b['quat'])
+            continue
+        pr = effective[parent]
+        if override is not None:
+            effective[name] = override
+        else:
+            effective[name] = _quat_mul(pr, tuple(b['quat']))
+    return effective
+
+
+def compute_patched_local_positions(bones, avatar_world_pos, avatar_world_quat=None):
     """avatar_world_pos: {bone_name: (x,y,z)}(chibi-fit後のpal_arm各ボーンの
     ワールド位置、UEコンポーネント空間、pipeline/blender/step02_retarget.pyの
     chibi_bone_world_head_*.json)から、RefSkeletonに書き戻すべき新しい
@@ -246,8 +339,18 @@ def compute_patched_local_positions(bones, avatar_world_pos):
     ため、元のFTransform.pos(テンプレート値)と厳密に一致する
     (回転は不変という前提の下で自明。U21診断で検証済み)。
     そのため書き換えを要するのはavatar_world_posに明示的に含まれる
-    ボーンだけでよい。"""
+    ボーンだけでよい。
+
+    avatar_world_quat(dev#19 rotfix WP、デフォルトNone): sway donorチェーン
+    のボーンだけ回転(quat)も併せて上書きされる場合、位置の「親からの
+    ローカルオフセット」を決める分解にも**親の新しい回転**を使わないと、
+    実際にRefSkeletonへ書き込む親quatとズレて子の位置が破綻する
+    (compute_effective_component_rotations()のdocstring参照)。Noneのときは
+    従来通りテンプレートの親回転を使う(完全後方互換、既存呼び出し元は
+    無改修で従来と同じ結果になる)。"""
     template_comp_rot, template_comp_pos = compute_component_transforms(bones)
+    comp_rot = (compute_effective_component_rotations(bones, avatar_world_quat)
+                if avatar_world_quat else template_comp_rot)
     new_comp_pos = {}
     patched = {}
     for name, b in bones.items():
@@ -257,7 +360,7 @@ def compute_patched_local_positions(bones, avatar_world_pos):
         elif parent is None:
             new_comp_pos[name] = template_comp_pos[name]
         else:
-            pr = template_comp_rot[parent]
+            pr = comp_rot[parent]
             rv = _quat_rotate(pr, b['pos'])
             pp = new_comp_pos[parent]
             new_comp_pos[name] = (pp[0] + rv[0], pp[1] + rv[1], pp[2] + rv[2])
@@ -267,7 +370,7 @@ def compute_patched_local_positions(bones, avatar_world_pos):
         if parent is None:
             patched[name] = new_comp_pos[name]
         else:
-            pr = template_comp_rot[parent]
+            pr = comp_rot[parent]
             pp = new_comp_pos[parent]
             diff = (new_comp_pos[name][0] - pp[0],
                     new_comp_pos[name][1] - pp[1],
@@ -314,12 +417,70 @@ def load_chibi_bone_world_head(dump):
     return None
 
 
-def patch_refskeleton_positions(data, uexp_path, uasset_path, bones, avatar_world_pos):
+def load_chibi_bone_world_quat(dump):
+    """dev#19 rotfix WP: dumpに対応するchibi_bone_world_quat_{gender}.json
+    (pipeline/blender/step02_retarget.pyがsway donorチェーンのみについて
+    出力する、再構成後のコンポーネント空間quat)を探して読む。
+    load_chibi_bone_world_head()と同じ探索順序・後方互換フォールバック
+    (見つからなければNone=回転パッチは一切行わない、非swayジョブ/旧dumpの
+    どちらでも完全no-op)。"""
+    gender = dump.get('gender')
+    if not gender:
+        return None
+    candidates = []
+    job_conv = dump.get('_job_converted_dir')
+    if job_conv:
+        candidates.append(os.path.join(job_conv, f"chibi_bone_world_quat_{gender.lower()}.json"))
+    src = dump.get('source_blend')
+    if src:
+        candidates.append(os.path.join(os.path.dirname(src),
+                                       f"chibi_bone_world_quat_{gender.lower()}.json"))
+    for path in candidates:
+        if os.path.exists(path):
+            with open(path, encoding='utf-8') as f:
+                raw = json.load(f)
+            return {k: tuple(v) for k, v in raw.items()}
+    return None
+
+
+def compute_patched_local_rotations(bones, avatar_world_quat):
+    """dev#19 rotfix WP: avatar_world_quat({bone_name: (x,y,z,w)}、sway
+    donorチェーンだけのコンポーネント空間目標quat)から、RefSkeletonに
+    書き戻すべき新しいローカルquatを計算する。avatar_world_quatが
+    None/空なら空辞書を返す(完全no-op)。
+
+    avatar_world_quatに無いボーン(donorチェーン以外の全て、およびleaf
+    ボーン自身)は対象外(戻り値に含めない=既存のテンプレートquatを
+    verbatimで維持、他機能への副作用を避ける——scurve PROPOSAL §7.1
+    「sway donor+leafチェーンに限り」の"leafは位置のみ"という設計どおり、
+    leafの回転はここでは一切扱わない)。"""
+    if not avatar_world_quat:
+        return {}
+    effective = compute_effective_component_rotations(bones, avatar_world_quat)
+    patched = {}
+    for name in avatar_world_quat:
+        if name not in bones:
+            continue
+        parent = bones[name]['parent']
+        if parent is None:
+            patched[name] = effective[name]
+        else:
+            pr = effective[parent]
+            patched[name] = _quat_mul(_quat_conj(pr), effective[name])
+    return patched
+
+
+def patch_refskeleton_positions(data, uexp_path, uasset_path, bones, avatar_world_pos,
+                                 avatar_world_quat=None):
     """dataの中のRefSkeleton FTransform配列(位置成分のみ)を、
     compute_patched_local_positions()の結果でその場パッチする。
     dataは同一サイズのまま(バイト数不変、オフセット調整不要)。
     avatar_world_posがNone(chibi_bone_world_head_*.json未検出)の場合は
-    何もせずdataをそのまま返す。"""
+    何もせずdataをそのまま返す。
+
+    avatar_world_quat(dev#19 rotfix WP、デフォルトNone): sway donor
+    チェーンの回転も併せて上書きする場合、位置分解に使う親回転を
+    compute_patched_local_positions()へ橋渡しする(引数のdocstring参照)。"""
     if avatar_world_pos is None:
         return data
     names = vp_core.read_names(uasset_path)
@@ -329,7 +490,7 @@ def patch_refskeleton_positions(data, uexp_path, uasset_path, bones, avatar_worl
     elemsize = tsize // 10
     fmt3 = '<3d' if elemsize == 8 else '<3f'
 
-    patched = compute_patched_local_positions(bones, avatar_world_pos)
+    patched = compute_patched_local_positions(bones, avatar_world_pos, avatar_world_quat)
     out = bytearray(data)
     n_patched = 0
     for name, pos in patched.items():
@@ -341,6 +502,38 @@ def patch_refskeleton_positions(data, uexp_path, uasset_path, bones, avatar_worl
         n_patched += 1
     print(f"[build_avatar_variant] U21 RefSkeleton bind-pose position patch: "
           f"{n_patched}/{len(patched)} bones (matched to post-chibi-fit values)")
+    return bytes(out)
+
+
+def patch_refskeleton_rotations(data, uexp_path, uasset_path, bones, avatar_world_quat):
+    """dev#19 rotfix WP(work\\rd_19_scurve\\PROPOSAL.md §7.1が正本): dataの
+    中のRefSkeleton FTransform配列の回転(quat)成分を、sway donorチェーンの
+    ボーンに限りcompute_patched_local_rotations()の結果でその場パッチする。
+    位置は別途patch_refskeleton_positions()が担当(本関数は回転のみ)。
+    dataは同一サイズのまま(バイト数不変)。avatar_world_quatがNone/空
+    (chibi_bone_world_quat_{gender}.json未検出=非swayジョブ/旧dump)の場合は
+    何もせずdataをそのまま返す(バイト単位の完全no-op、負の対照で確認)。"""
+    if not avatar_world_quat:
+        return data
+    names = vp_core.read_names(uasset_path)
+    raw_bones, transforms, tsize, _data, tpos = vp_core.find_refskeleton(
+        uexp_path, names, with_offset=True)
+    bone_index = {raw_bones[i][0]: i for i in range(len(raw_bones))}
+    elemsize = tsize // 10
+    fmt4 = '<4d' if elemsize == 8 else '<4f'
+
+    patched = compute_patched_local_rotations(bones, avatar_world_quat)
+    out = bytearray(data)
+    n_patched = 0
+    for name, quat in patched.items():
+        i = bone_index.get(name)
+        if i is None:
+            continue  # avatar_world_quatにあってもRefSkeleton側に無いボーンは対象外
+        off = tpos + i * tsize  # quat(4要素)はFTransformレコード先頭
+        struct.pack_into(fmt4, out, off, *quat)
+        n_patched += 1
+    print(f"[build_avatar_variant] dev#19 rotfix RefSkeleton bind-pose "
+          f"rotation patch: {n_patched}/{len(patched)} bones (sway donor chain only)")
     return bytes(out)
 
 
@@ -442,8 +635,17 @@ def build_uexp_variant(uexp_path, uasset_path, dump):
     # U21: RefSkeletonバインドポーズ位置をchibi-fit後の値へパッチ(指の破裂状
     # 変形の根治、本ファイル冒頭のコメント参照)。dump未対応(古いdump/
     # chibi_bone_world_head_*.json未検出)なら何もせずverbatimのまま。
+    #
+    # dev#19 rotfix WP: sway donorチェーンの回転(quat)も、chibi_bone_world_quat_
+    # {gender}.jsonが見つかった場合に限り併せてパッチする(非swayジョブ/旧dumpは
+    # avatar_world_quat=None、position側の分解も従来通りテンプレート回転を使う
+    # ため完全no-op)。位置パッチの直後に回転パッチを適用する(どちらもdataの
+    # 同一FTransformレコード内の別フィールドを書くだけなので順序自体は無関係)。
     avatar_world_pos = load_chibi_bone_world_head(dump)
-    data = patch_refskeleton_positions(data, uexp_path, uasset_path, bones, avatar_world_pos)
+    avatar_world_quat = load_chibi_bone_world_quat(dump)
+    data = patch_refskeleton_positions(data, uexp_path, uasset_path, bones, avatar_world_pos,
+                                        avatar_world_quat)
+    data = patch_refskeleton_rotations(data, uexp_path, uasset_path, bones, avatar_world_quat)
 
     # dev#157 / WP-I157: サイズ可変(スケルトン一様スケール)。U21位置パッチの
     # 直後に適用する(上のapply_uniform_scaleのdocstring参照)。
@@ -601,7 +803,10 @@ def build_uexp_variant(uexp_path, uasset_path, dump):
 
     # --- セクション(2本、BaseIndex/BaseVertexIndexがセクションごとに可変) ---
     # U8-T2: セクションごとに位置一致クラスタからDVBを実測構築(重複なし固定規約から是正)
-    dvb_by_section = [build_duplicated_vertices(sec['verts']) for sec in sections_data]
+    # dev#1072: statsで各セクションの最大クラスタサイズを併せて計装する(下のinfo参照)。
+    dvb_stats_by_section = [{} for _ in sections_data]
+    dvb_by_section = [build_duplicated_vertices(sec['verts'], stats=st)
+                       for sec, st in zip(sections_data, dvb_stats_by_section)]
     section_bytes = b''.join(
         pack_section(
             global_strip=sec['global_strip_flags'], class_strip=sec['class_strip_flags'],
@@ -711,6 +916,11 @@ def build_uexp_variant(uexp_path, uasset_path, dump):
         'section_vertex_counts': [sec['num_vertices'] for sec in sections_data],
         'section_bone_map_sizes': [len(sec['bone_map']) for sec in sections_data],
         'section_dvb_dup_vert_counts': [len(dvb[0]) for dvb in dvb_by_section],
+        # dev#1072: 最大位置重複クラスタのサイズ(見つからなければ1)。
+        # build_duplicated_vertices()のdocstring参照: サイズkのクラスタは
+        # O(k^2)でDupVertDataを膨張させるため、容量膨張の問い合わせを
+        # ログだけで診断するための計装(出力バイト列には一切影響しない)。
+        'section_dvb_max_cluster_size': [st.get('max_cluster_size', 1) for st in dvb_stats_by_section],
         'active_bone_indices': active_bone_indices,
         # G2デコード検証(verify_avatar_decode_sections.py)向け: 出力頂点バッファの
         # i番目が元ダンプのどの頂点(global index)の複製かを追跡できる情報。

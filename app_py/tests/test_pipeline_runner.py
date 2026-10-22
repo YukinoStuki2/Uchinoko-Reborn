@@ -14,6 +14,8 @@ _APP_PY_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _APP_PY_DIR not in sys.path:
     sys.path.insert(0, _APP_PY_DIR)
 
+import pytest  # noqa: E402
+
 import pipeline_runner as pr  # noqa: E402
 import settings  # noqa: E402
 
@@ -153,6 +155,28 @@ def test_paks_dir_quiet_none_when_cached_dir_missing_pak(tmp_path):
     assert pr.paks_dir_quiet(app_root) is None
 
 
+def test_paks_dir_quiet_accepts_xbox_gamepass_pak_name(tmp_path):
+    """dev#229続報: settings_paksdir.txtにXbox App版のPaksフォルダ
+    (Pal-WinGDK.pakのみ)が保存されていても、以前は単一名決め打ちで
+    「pak無し」扱いされていたが、いまは解決できる。"""
+    app_root = _make_app_root(tmp_path)
+    paks_dir = tmp_path / "XboxPaks"
+    paks_dir.mkdir()
+    (paks_dir / "Pal-WinGDK.pak").write_bytes(b"xbox")
+    settings.save_paksdir(app_root, str(paks_dir))
+    assert pr.paks_dir_quiet(app_root) == str(paks_dir)
+
+
+def test_paks_dir_quiet_none_when_only_unrelated_pak_present(tmp_path):
+    """負の対照: 無関係な.pakが1つあるだけでは解決しない。"""
+    app_root = _make_app_root(tmp_path)
+    paks_dir = tmp_path / "Paks"
+    paks_dir.mkdir()
+    (paks_dir / "SomeOtherMod_P.pak").write_bytes(b"")
+    settings.save_paksdir(app_root, str(paks_dir))
+    assert pr.paks_dir_quiet(app_root) is None
+
+
 # ---------------------------------------------------------------------------
 # write_job: job.jsonスキーマ1:1一致 (DESIGN.md §2.1)
 # ---------------------------------------------------------------------------
@@ -167,11 +191,19 @@ def test_write_job_top_level_keys_match_design_schema(tmp_path):
     with open(job_json_path, encoding="utf-8") as f:
         job = json.load(f)
 
-    # DESIGN.md §2.1のスキーマそのもの(§6-1裁定によりengine_modeを追加した版)
+    # DESIGN.md §2.1のスキーマそのもの(§6-1裁定によりengine_modeを追加した版、
+    # dev#560第③段でuniform_scaleを追加した版、dev#1230(2026-08-08)で
+    # preflight_nonblockingを追加した版、dev#1572(2026-08-18、「揺れの度合い」
+    # 4択の復元でsway_intensity/sway_enableを追加した版)——write_job()の
+    # 既定sway_intensity="normal"により、無指定呼び出しでもこの2キーが常に
+    # 書かれるようになった。旧`sway_enabled`(dev#1508 W2b由来のGUI内部専用
+    # bool)は本WPでjob.jsonへの出力を廃止した)。
     expected_keys = {
         "vrm_path", "avatar_name", "shoulder_offset_deg", "merge_fingers",
         "unlit", "force_two_sided", "shadow_lift", "drop_bones",
-        "license_confirmed", "engine_mode", "paths",
+        "license_confirmed", "engine_mode", "uniform_scale",
+        "preflight_nonblocking", "paths",
+        "sway_intensity", "sway_enable",
     }
     assert set(job.keys()) == expected_keys
     assert set(job["paths"].keys()) == {"blender_exe", "vrm_addon_zip", "palworld_pak"} \
@@ -208,6 +240,18 @@ def test_write_job_engine_mode_is_noue(tmp_path):
     with open(job_json_path, encoding="utf-8") as f:
         job = json.load(f)
     assert job["engine_mode"] == pr.ENGINE_MODE == "noue"
+
+
+def test_write_job_preflight_nonblocking_always_true(tmp_path):
+    # dev#1230(2026-08-08オーナー裁定): GUI(ユーザーサイド)経由の変換は
+    # 常にpreflight非ブロック。devtools\relgate.py等の開発側job.jsonは
+    # write_job()を通らない(=このキー自体が無く、job.get既定Falseで
+    # 従来どおりブロックする)ため、このテストの対象はGUI経路だけでよい。
+    app_root = _make_app_root(tmp_path, with_blender=True, with_addon=True)
+    job_json_path = pr.write_job(app_root, str(tmp_path / "work"), _make_vrm(tmp_path))
+    with open(job_json_path, encoding="utf-8") as f:
+        job = json.load(f)
+    assert job["preflight_nonblocking"] is True
 
 
 def test_write_job_avatar_name_sanitized_from_filename(tmp_path):
@@ -259,6 +303,109 @@ def test_write_job_shadow_lift_value_wired(tmp_path):
     assert job["shadow_lift"] == 0.7
 
 
+# ---------------------------------------------------------------------------
+# uniform_scale (dev#560 第③段: 身長スライダーGUI結線)
+# ---------------------------------------------------------------------------
+
+
+def test_write_job_uniform_scale_default_is_one(tmp_path):
+    """負の対照(4b): スライダーに触れない既存ユーザーは既定1.0のまま。
+    パイプライン側(apply_output_scale())は1.0を早期returnの完全no-opとして
+    扱うため、既存ユーザーへの挙動影響はゼロ(dev#560第①段PR #1126)。"""
+    app_root = _make_app_root(tmp_path, with_blender=True, with_addon=True)
+    job_json_path = pr.write_job(app_root, str(tmp_path / "work"), _make_vrm(tmp_path))
+    with open(job_json_path, encoding="utf-8") as f:
+        job = json.load(f)
+    assert job["uniform_scale"] == 1.0
+    # 既定値以外のフィールドは、uniform_scaleキーワード引数を渡さない
+    # 呼び出しであっても他のテストと同じ既定値のまま(=このWPの追加が
+    # 既存フィールドへ副作用を持たないことの確認)。
+    assert job["shoulder_offset_deg"] == 0
+    assert job["shadow_lift"] == 0.7
+
+
+def test_write_job_uniform_scale_value_wired(tmp_path):
+    """(4a): スライダー値(1.0以外)がjob.jsonへ写ること。"""
+    app_root = _make_app_root(tmp_path, with_blender=True, with_addon=True)
+    job_json_path = pr.write_job(
+        app_root, str(tmp_path / "work"), _make_vrm(tmp_path), uniform_scale=0.8
+    )
+    with open(job_json_path, encoding="utf-8") as f:
+        job = json.load(f)
+    assert job["uniform_scale"] == 0.8
+
+
+def test_write_job_uniform_scale_clamped_to_dev158_range(tmp_path):
+    """(4c): 範囲外値(dev#158裁定0.5〜2.0)はクランプされる。UI(tk.Scale
+    50〜200%)からは通常出ない値だが、write_job()自体にも多重防御として
+    持たせてあるので直接呼び出しでも越境しないことを確認する。"""
+    app_root = _make_app_root(tmp_path, with_blender=True, with_addon=True)
+    job_json_path_low = pr.write_job(
+        app_root, str(tmp_path / "work"), _make_vrm(tmp_path, name="Low.vrm"),
+        uniform_scale=0.1,
+    )
+    with open(job_json_path_low, encoding="utf-8") as f:
+        assert json.load(f)["uniform_scale"] == 0.5
+
+    job_json_path_high = pr.write_job(
+        app_root, str(tmp_path / "work"), _make_vrm(tmp_path, name="High.vrm"),
+        uniform_scale=9.9,
+    )
+    with open(job_json_path_high, encoding="utf-8") as f:
+        assert json.load(f)["uniform_scale"] == 2.0
+
+
+# ---------------------------------------------------------------------------
+# sway_intensity (dev#1572、2026-08-18裁定「かたさが配線されていない問題」
+# 案C: v2.11方式の復元)。標準機能「揺れの度合い」の4択
+# (none/soft/normal/hard)がjob["sway_intensity"]へ直接書かれ、
+# job["sway_enable"](bool、アロケータのゲート)がsway_intensity!="none"の
+# ときだけTrueで併記される。旧`sway_enabled`(dev#1508 W2b由来のGUI内部
+# 専用bool)は本WPでjob.jsonへの出力を廃止した(下記テストで不在を確認)。
+# ---------------------------------------------------------------------------
+
+
+def test_write_job_sway_intensity_default_is_normal(tmp_path):
+    """既定はSPEC復元前と同じ「ふつう」相当(sway_intensityを渡さない呼び
+    出し)。job["sway_intensity"]=="normal"+job["sway_enable"]=Trueが書かれ、
+    旧GUI内部専用キーjob["sway_enabled"]はもう書かれない。"""
+    app_root = _make_app_root(tmp_path, with_blender=True, with_addon=True)
+    job_json_path = pr.write_job(app_root, str(tmp_path / "work"), _make_vrm(tmp_path))
+    with open(job_json_path, encoding="utf-8") as f:
+        job = json.load(f)
+    assert job["sway_intensity"] == "normal"
+    assert job["sway_enable"] is True
+    assert "sway_enabled" not in job
+
+
+@pytest.mark.parametrize("intensity", ["soft", "normal", "hard"])
+def test_write_job_sway_intensity_each_choice_is_written_verbatim(tmp_path, intensity):
+    """4択のうちsoft/normal/hardは、選んだ値そのものがjob["sway_intensity"]へ
+    書かれる(既存の一括刻印経路 pipeline\\py\\sway_abp_build.py
+    hardness_key_for_intensity()がこの値をそのまま読む契約)。"""
+    app_root = _make_app_root(tmp_path, with_blender=True, with_addon=True)
+    job_json_path = pr.write_job(
+        app_root, str(tmp_path / "work"), _make_vrm(tmp_path), sway_intensity=intensity)
+    with open(job_json_path, encoding="utf-8") as f:
+        job = json.load(f)
+    assert job["sway_intensity"] == intensity
+    assert job["sway_enable"] is True
+
+
+def test_write_job_sway_intensity_none_omits_keys(tmp_path):
+    """負の対照: 「なし」(sway_intensity="none")のときはsway_intensity/
+    sway_enableのどちらのキーも書かれない(=揺れ無し、旧「なし」と同じ
+    挙動。ラボ憲章④「既定値のときは未実装状態と完全に同一」の踏襲)。"""
+    app_root = _make_app_root(tmp_path, with_blender=True, with_addon=True)
+    job_json_path = pr.write_job(
+        app_root, str(tmp_path / "work"), _make_vrm(tmp_path), sway_intensity="none")
+    with open(job_json_path, encoding="utf-8") as f:
+        job = json.load(f)
+    assert "sway_intensity" not in job
+    assert "sway_enable" not in job
+    assert "sway_enabled" not in job
+
+
 def test_write_job_hidden_compat_defaults_match_csharp_initial_fields(tmp_path):
     # DiveToPalworld.cs L.1042-1046: 「内部互換性のためにフィールドを初期化
     # (UIには表示しない)」既定値そのもの
@@ -308,6 +455,23 @@ def test_write_job_palworld_pak_included_when_paksdir_cached(tmp_path):
     assert job["paths"]["palworld_pak"] == str(paks_dir / pr.PAL_WINDOWS_PAK_NAME)
 
 
+def test_write_job_palworld_pak_uses_xbox_gamepass_pak_name_when_cached(tmp_path):
+    """dev#229続報: settings_paksdir.txtがXbox App版のPaksフォルダを指している
+    とき、job.jsonのpaths.palworld_pakには実在するPal-WinGDK.pakのフルパスが
+    書かれること(以前はPal-Windows.pak決め打ちで存在しないパスを書いていた)。"""
+    app_root = _make_app_root(tmp_path, with_blender=True, with_addon=True)
+    paks_dir = tmp_path / "XboxPaks"
+    paks_dir.mkdir()
+    (paks_dir / "Pal-WinGDK.pak").write_bytes(b"xbox")
+    settings.save_paksdir(app_root, str(paks_dir))
+
+    job_json_path = pr.write_job(app_root, str(tmp_path / "work"), _make_vrm(tmp_path))
+    with open(job_json_path, encoding="utf-8") as f:
+        job = json.load(f)
+    assert job["paths"]["palworld_pak"] == str(paks_dir / "Pal-WinGDK.pak")
+    assert os.path.isfile(job["paths"]["palworld_pak"])
+
+
 def test_write_job_file_is_utf8_without_bom(tmp_path):
     app_root = _make_app_root(tmp_path, with_blender=True, with_addon=True)
     vrm = _make_vrm(tmp_path, name="日本語アバター.vrm")
@@ -345,6 +509,7 @@ def test_read_job_round_trips_write_job_output(tmp_path):
         shoulder_offset_deg=5, merge_fingers=True, unlit=True,
         force_two_sided=False, shadow_bar_value=10,
         drop_bones_text="Bone_L, Bone_R", license_confirmed=True,
+        uniform_scale=1.5,
     )
     data = pr.read_job(job_json_path)
     assert data is not None
@@ -356,6 +521,7 @@ def test_read_job_round_trips_write_job_output(tmp_path):
     assert data["drop_bones"] == ["Bone_L", "Bone_R"]
     assert data["license_confirmed"] is True
     assert data["shadow_lift"] == round((100 - 10) / 100.0, 3)
+    assert data["uniform_scale"] == 1.5
 
 
 # ---------------------------------------------------------------------------
@@ -418,6 +584,13 @@ def test_launch_command_matches_gui_wiring_contract_regex(tmp_path):
     assert m.group(2) == job_json
 
 
+# dev#1242申し送りの共通化(本WP): pr.find_pwsh()はもはや独自実装を持たず、
+# blender_setup.find_pwsh()(dev#1242で三点セット化済み)への薄い委譲になった
+# (blender_setup.py側のdocstring・test_blender_setup.pyのfind_pwsh系試験が
+# 正本)。ここでは「委譲が実際に効いていること」(=pipeline_runner経由でも
+# 同じ根治が働くこと)だけを、赤→緑で直接検査する。
+
+
 def test_find_pwsh_prefers_path_entry(tmp_path, monkeypatch):
     pwsh_dir = tmp_path / "pwshbin"
     pwsh_dir.mkdir()
@@ -436,9 +609,53 @@ def test_find_pwsh_falls_back_to_program_files(tmp_path, monkeypatch):
 
 
 def test_find_pwsh_falls_back_to_powershell_exe(tmp_path, monkeypatch):
+    # dev#1242で自動発見にSystem32絶対パス候補が追加されたため、真のbare名
+    # フォールバックを検査するにはSystemRootも隔離する必要がある
+    # (test_blender_setup._no_auto_discovery_pwsh_env と同じ隔離)。
     monkeypatch.setenv("PATH", str(tmp_path / "empty"))
     monkeypatch.setenv("ProgramFiles", str(tmp_path / "no_pf_here"))
+    monkeypatch.setenv("SystemRoot", str(tmp_path / "no_such_system_root"))
     assert pr.find_pwsh() == "powershell.exe"
+
+
+def test_find_pwsh_finds_system_powershell_by_absolute_path_even_with_broken_path_env(
+    tmp_path, monkeypatch
+):
+    # 赤→緑の中核(本WP受入条件(1)): pipeline_runner.find_pwsh()経由でも
+    # dev#1242の根治(<SystemRoot>\System32\WindowsPowerShell\v1.0\powershell.exe
+    # への絶対パス発見、PATH非依存)が効くことを直接検査する。共通化前の旧
+    # pipeline_runner.find_pwsh()はPATH+ProgramFilesしか見ておらず、この
+    # ケースではbare名"powershell.exe"を返して壊れたPATH環境下で
+    # WinError2を誘発していた(dev#1242実ユーザー報告と同型の欠陥)。
+    monkeypatch.setenv("PATH", str(tmp_path / "no_such_path_dir"))
+    monkeypatch.setenv("ProgramFiles", str(tmp_path / "no_such_program_files"))
+    # SystemRootは意図的に変更しない(本物の環境変数のまま、実在するWindows
+    # 標準PowerShell 5.1を見つけられることを確認する)。
+
+    result = pr.find_pwsh()
+    assert result != "powershell.exe", (
+        "PATHが壊れていてもbare名フォールバックへ落ちてはならない"
+        "(絶対パス候補が実在するはず)"
+    )
+    assert os.path.isfile(result)
+    assert "WindowsPowerShell" in result
+
+
+def test_find_pwsh_delegates_to_blender_setup_find_pwsh(monkeypatch):
+    # 共通化そのものの直接検査(負の対照込み): pipeline_runner.find_pwsh()が
+    # blender_setup.find_pwsh()を実際に呼んでいること(=重複コードが復活して
+    # いないこと)を、差し替えたスタブが呼ばれたかどうかで確認する。
+    calls = []
+
+    def fake_find_pwsh(app_root="", log=None):
+        calls.append((app_root, log))
+        return "STUBBED_PWSH.exe"
+
+    monkeypatch.setattr(pr.blender_setup, "find_pwsh", fake_find_pwsh)
+    log_lines = []
+    result = pr.find_pwsh("C:\\dummy_app_root", log=log_lines.append)
+    assert result == "STUBBED_PWSH.exe"
+    assert calls == [("C:\\dummy_app_root", log_lines.append)]
 
 
 # ---------------------------------------------------------------------------
@@ -518,6 +735,48 @@ def test_busy_bar_mode_on_marker_is_always_determinate():
     分かっているので、常にdeterminateへ戻す(OnUnityExportDone() L.2686と
     同じ「無条件でContinuousへ」という向き)。"""
     assert pr.busy_bar_mode_on_marker() == pr.BUSY_BAR_MODE_DETERMINATE
+
+
+# ---------------------------------------------------------------------------
+# Unity輸出フェーズの無音解消(dev#602追補、問い合わせZ5S945NP対応)
+# ---------------------------------------------------------------------------
+
+
+def test_should_emit_unity_export_heartbeat_false_before_interval():
+    """まだ間隔未満なら発火しない(既定15秒、受入条件の30秒より短く安全側)。"""
+    assert pr.should_emit_unity_export_heartbeat(0.0) is False
+    assert pr.should_emit_unity_export_heartbeat(14.9) is False
+
+
+def test_should_emit_unity_export_heartbeat_true_at_or_after_interval():
+    """間隔ちょうど、またはそれ以上経過していれば発火する。"""
+    assert pr.should_emit_unity_export_heartbeat(15.0) is True
+    assert pr.should_emit_unity_export_heartbeat(999.0) is True
+
+
+def test_should_emit_unity_export_heartbeat_respects_custom_interval():
+    """interval_sec引数を明示指定した場合はそちらを使う(既定値への
+    ハードコード依存がないことの確認)。"""
+    assert pr.should_emit_unity_export_heartbeat(10.0, interval_sec=5.0) is True
+    assert pr.should_emit_unity_export_heartbeat(3.0, interval_sec=5.0) is False
+
+
+def test_format_elapsed_mmss_basic():
+    assert pr.format_elapsed_mmss(0) == "00:00"
+    assert pr.format_elapsed_mmss(5) == "00:05"
+    assert pr.format_elapsed_mmss(65) == "01:05"
+    assert pr.format_elapsed_mmss(3661) == "61:01"
+
+
+def test_format_elapsed_mmss_truncates_fractional_seconds():
+    """time.monotonic()差分は小数を含むが、表示は整数秒に切り捨てる。"""
+    assert pr.format_elapsed_mmss(12.9) == "00:12"
+
+
+def test_format_elapsed_mmss_negative_clamped_to_zero():
+    """負の対照: 時計の巻き戻り等の異常値でも例外を出さず00:00に丸める
+    (経過時間表示の補助機能が変換本体を巻き込んで死んではならない)。"""
+    assert pr.format_elapsed_mmss(-5) == "00:00"
 
 
 # ---------------------------------------------------------------------------
@@ -618,3 +877,177 @@ def test_process_handle_captures_lines_and_exit_code():
     assert exit_codes == [3]
     assert handle.exit_code == 3
     assert handle.is_running() is False
+
+
+# ---------------------------------------------------------------------------
+# load_previews: dev#1103(実報告TFVNM33V)。従来はMale固定パスしか探さない
+# 実装だった。job.jsonのgenders絞り込み(convert_noue.py)でFemale専用生成
+# された場合、Male側ファイルが存在せず「静かに何も表示しない」症状を招く
+# 構造的弱点があった。GUIに性別選択ウィジェットは無いため、「選択性別」では
+# なく「存在する方」(Male優先、無ければFemaleへフォールバック)を解決する。
+# ---------------------------------------------------------------------------
+
+
+def _write_preview_pair(job_dir: str, gender: str) -> tuple[str, str]:
+    conv = os.path.join(job_dir, "converted")
+    os.makedirs(conv, exist_ok=True)
+    front = os.path.join(conv, f"preview_{gender}_stand.png")
+    side = os.path.join(conv, f"preview_{gender}_stand_side.png")
+    with open(front, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\nfake-front")
+    with open(side, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\nfake-side")
+    return front, side
+
+
+def test_load_previews_male_present_negative_control(tmp_path):
+    """負の対照: Maleのファイルが存在する従来どおりの構成では、Male経路の
+    挙動が変わらないこと(修正の副作用でMale側が壊れていないことの確認)。"""
+    job_dir = str(tmp_path / "job")
+    front, side = _write_preview_pair(job_dir, "male")
+    result = pr.load_previews(job_dir)
+    assert result == {"front": front, "side": side}
+
+
+def test_load_previews_female_only_selects_female_pair(tmp_path):
+    """(a) job.jsonのgendersがFemaleのみ("genders": ["Female"])のような
+    Female専用生成では、preview_male_stand.png が最初から存在しない。
+    修正前はfront/sideとも常にNoneになり(Male固定パスしか見ないため)、
+    実際に生成されたFemale側プレビューが一切GUIへ届かなかった。"""
+    job_dir = str(tmp_path / "job")
+    front, side = _write_preview_pair(job_dir, "female")
+    result = pr.load_previews(job_dir)
+    assert result == {"front": front, "side": side}
+
+
+def test_load_previews_prefers_male_when_both_genders_present(tmp_path):
+    """既定(genders未指定)のGUI標準フローでは両方生成される。frontとsideが
+    異なる性別から混在して選ばれないことの確認(Male優先で一貫)。"""
+    job_dir = str(tmp_path / "job")
+    male_front, male_side = _write_preview_pair(job_dir, "male")
+    _write_preview_pair(job_dir, "female")
+    result = pr.load_previews(job_dir)
+    assert result == {"front": male_front, "side": male_side}
+
+
+def test_load_previews_neither_gender_present_returns_none(tmp_path):
+    """(b) 変換未完了・生成失敗等でどちらの性別のファイルも存在しない場合は
+    従来どおりfront/side共にNone(呼び出し元_apply_previewsのno-opログの
+    入力となる)。"""
+    job_dir = str(tmp_path / "job")
+    os.makedirs(os.path.join(job_dir, "converted"), exist_ok=True)
+    result = pr.load_previews(job_dir)
+    assert result == {"front": None, "side": None}
+
+
+# ---------------------------------------------------------------------------
+# dev#1230(2026-08-08オーナー裁定): ユーザーサイドpreflight非ブロック化。
+# resolve_preflight_result_path()/read_preflight_result()/
+# is_preflight_fail_result() -- main_window.py側はこれらをそのまま呼ぶだけの
+# tkinter配線しか持たない(ロジック本体はここで検査する)。
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_preflight_result_path_is_under_build_dir(tmp_path):
+    job_dir = str(tmp_path / "job")
+    path = pr.resolve_preflight_result_path(job_dir)
+    assert path == os.path.join(job_dir, "build", "preflight_result.json")
+
+
+def test_read_preflight_result_missing_file_returns_none(tmp_path):
+    job_dir = str(tmp_path / "job")
+    assert pr.read_preflight_result(job_dir) is None
+
+
+def test_read_preflight_result_reads_fail_status(tmp_path):
+    job_dir = str(tmp_path / "job")
+    os.makedirs(os.path.join(job_dir, "build"), exist_ok=True)
+    with open(pr.resolve_preflight_result_path(job_dir), "w", encoding="utf-8") as f:
+        json.dump(
+            {"status": "FAIL", "returncode": 1, "failed_gates": ["G13 mismatch"]}, f
+        )
+    result = pr.read_preflight_result(job_dir)
+    assert result == {"status": "FAIL", "returncode": 1, "failed_gates": ["G13 mismatch"]}
+
+
+def test_read_preflight_result_corrupt_json_returns_none(tmp_path):
+    # 負の対照: 壊れたJSON(書き込み途中でクラッシュした等)でも例外を
+    # 外へ漏らさず、Noneとして安全側(=preflight FAIL扱いにしない)へ倒れる。
+    job_dir = str(tmp_path / "job")
+    os.makedirs(os.path.join(job_dir, "build"), exist_ok=True)
+    with open(pr.resolve_preflight_result_path(job_dir), "w", encoding="utf-8") as f:
+        f.write("{not valid json")
+    assert pr.read_preflight_result(job_dir) is None
+
+
+def test_is_preflight_fail_result_true_only_for_fail_status():
+    assert pr.is_preflight_fail_result({"status": "FAIL"}) is True
+    assert pr.is_preflight_fail_result({"status": "PASS"}) is False
+    assert pr.is_preflight_fail_result(None) is False
+    assert pr.is_preflight_fail_result({}) is False
+
+
+# ---------------------------------------------------------------------------
+# dev#19/dev#1370(揺れもの、L1): job["springbones"]の配線
+# ---------------------------------------------------------------------------
+
+REPO_ROOT = os.path.dirname(_APP_PY_DIR)
+_VRM0_ALICIA = os.path.join(REPO_ROOT, "test", "vrm", "AliciaSolid_vrm-0.51.vrm")
+
+
+def test_write_job_omits_springbones_key_when_vrm_has_no_spring_data(tmp_path):
+    """既定不変(負の対照): springBoneデータが読めない/無いVRM(_make_vrmが
+    書く空ファイル)では、job.jsonに"springbones"キー自体が現れない
+    (ラボ憲章④パターン、test_write_job_top_level_keys_match_design_schemaの
+    厳密一致アサーションが暗黙にこれも検査している。本テストは明示化)。"""
+    app_root = _make_app_root(tmp_path, with_blender=True, with_addon=True)
+    job_json_path = pr.write_job(app_root, str(tmp_path / "work"), _make_vrm(tmp_path))
+    with open(job_json_path, encoding="utf-8") as f:
+        job = json.load(f)
+    assert "springbones" not in job
+
+
+def test_write_job_prints_warning_when_vrm_springbone_parse_fails(tmp_path, capsys):
+    """dev#1508 W1b: fail-open+ログ必須(タスク要件)。_make_vrmが書く空
+    ファイルはGLBコンテナとして壊れている(catalog_from_vrm()がok=Falseを
+    返す真の失敗ケース、上のomitsテストと同一入力)——変換は止めない
+    (write_job()は例外を投げずjob.jsonを書き切る)が、警告が標準出力に
+    出ること(fail-open+ログ必須の「ログ」側)を検査する。"""
+    app_root = _make_app_root(tmp_path, with_blender=True, with_addon=True)
+    pr.write_job(app_root, str(tmp_path / "work"), _make_vrm(tmp_path))
+    captured = capsys.readouterr()
+    assert "WARNING" in captured.out
+    assert "SpringBone" in captured.out
+
+
+def test_write_job_skips_spring_parsing_for_prefab_input(tmp_path):
+    """prefab入力(vrm_pathが.prefab)はこの時点でGLBコンテナではない
+    (Unity輸出=Phase -1はconvert.ps1側で後から行われる)ため、
+    vrm_spring_catalogを一切呼ばない——存在しない.prefabパスでも例外なく
+    job.jsonが書ける(呼んでいたら存在しないファイルの読み取りで例外になる)。"""
+    app_root = _make_app_root(tmp_path, with_blender=True, with_addon=True)
+    prefab_path = str(tmp_path / "MyAvatar.prefab")  # 実在しない
+    job_json_path = pr.write_job(app_root, str(tmp_path / "work"), prefab_path)
+    with open(job_json_path, encoding="utf-8") as f:
+        job = json.load(f)
+    assert "springbones" not in job
+    assert job["vrm_path"] == prefab_path
+
+
+@pytest.mark.skipif(not os.path.isfile(_VRM0_ALICIA),
+                     reason="test\\vrm\\AliciaSolid_vrm-0.51.vrm が無い環境"
+                            "(gitignore対象、開発機のローカル資産)")
+def test_write_job_wires_springbones_for_real_vrm0_sample(tmp_path):
+    """実測(scratchpad/inspect_vrm.py、2026-08-16 dev#1508 W1b):
+    AliciaSolid_vrm-0.51.vrmはboneGroups=3件(1boneGroup=1エントリへ再グループ化
+    後の件数、DESIGN.md §2.2)、総chain数(揺れ骨のルート本数)は18のまま——
+    write_job()経由でjob["springbones"]へ搬送される。"""
+    app_root = _make_app_root(tmp_path, with_blender=True, with_addon=True)
+    job_json_path = pr.write_job(app_root, str(tmp_path / "work"), _VRM0_ALICIA)
+    with open(job_json_path, encoding="utf-8") as f:
+        job = json.load(f)
+    assert "springbones" in job
+    assert len(job["springbones"]) == 3
+    assert sum(len(e["chains"]) for e in job["springbones"]) == 18
+    assert all(e["source"] == "vrm0_spring" for e in job["springbones"])
+    assert all(e["type"] == "springbone" for e in job["springbones"])

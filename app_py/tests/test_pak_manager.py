@@ -47,6 +47,66 @@ def test_paks_dir_has_pak_false_when_none_or_nonexistent(tmp_path):
     assert pak_manager.paks_dir_has_pak(str(tmp_path / "nope")) is False
 
 
+# ---------------------------------------------------------------------------
+# dev#229続報: Xbox App/Microsoft Store版(Pal-WinGDK.pak)の候補リスト化
+# (実報告D2WNF224。PR #734はpipeline\py\palworld_locate.pyのみ直しており、
+# GUIの手動選択/適用/解除/warm_startupが通るpak_manager.pyは未対応のまま
+# 残っていた欠陥の修理)。
+# ---------------------------------------------------------------------------
+
+def test_resolve_pak_filename_prefers_steam_name_when_both_present(tmp_path):
+    d = tmp_path / "Paks"
+    d.mkdir()
+    (d / "Pal-Windows.pak").write_bytes(b"steam")
+    (d / "Pal-WinGDK.pak").write_bytes(b"xbox")
+    assert pak_manager.resolve_pak_filename(str(d)) == "Pal-Windows.pak"
+
+
+def test_resolve_pak_filename_finds_xbox_gamepass_name(tmp_path):
+    d = tmp_path / "Paks"
+    d.mkdir()
+    (d / "Pal-WinGDK.pak").write_bytes(b"xbox")
+    assert pak_manager.resolve_pak_filename(str(d)) == "Pal-WinGDK.pak"
+
+
+def test_resolve_pak_filename_none_when_only_unrelated_pak_present(tmp_path):
+    """負の対照: 無関係な.pakが1つあるだけでは解決しない(でたらめな名前を
+    無条件で受理してしまわないこと)。"""
+    d = tmp_path / "Paks"
+    d.mkdir()
+    (d / "SomeOtherMod_P.pak").write_bytes(b"x")
+    assert pak_manager.resolve_pak_filename(str(d)) is None
+    assert pak_manager.paks_dir_has_pak(str(d)) is False
+
+
+def test_paks_dir_has_pak_true_for_xbox_gamepass_pak_name(tmp_path):
+    d = tmp_path / "Paks"
+    d.mkdir()
+    (d / "Pal-WinGDK.pak").write_bytes(b"xbox")
+    assert pak_manager.paks_dir_has_pak(str(d)) is True
+
+
+def test_resolve_paks_dir_manual_selection_accepts_xbox_gamepass_folder(tmp_path, monkeypatch):
+    """dev#229の核心シナリオ: Xbox App版のPaksフォルダ(Pal-WinGDK.pakのみ)を
+    手動選択したとき、以前は単一名決め打ちで無言拒否されていたが、いまは
+    そのまま受理・保存される。"""
+    app_root = tmp_path / "app"
+    app_root.mkdir()
+    monkeypatch.setattr(pak_manager, "auto_discover_paks_dir", lambda log=pak_manager._noop_log: None)
+    xbox_dir = tmp_path / "XboxPaks"
+    xbox_dir.mkdir()
+    (xbox_dir / "Pal-WinGDK.pak").write_bytes(b"xbox")
+    invalid_seen = []
+    result = pak_manager.resolve_paks_dir(
+        str(app_root),
+        ask_manual=lambda: str(xbox_dir),
+        on_invalid=invalid_seen.append,
+    )
+    assert result == str(xbox_dir)
+    assert invalid_seen == []
+    assert settings.load_paksdir(str(app_root)) == str(xbox_dir)
+
+
 def test_distinct_preserve_order_dedups_case_and_trailing_slash():
     items = [r"C:\A\B\\", r"c:\a\b", r"C:\A\B/", r"C:\C", "", None]
     assert pak_manager.distinct_preserve_order(items) == [r"C:\A\B", r"C:\C"]
@@ -273,6 +333,17 @@ def test_count_other_paks_zero_when_only_self_present(tmp_path):
     d = _make_paks_dir(tmp_path)
     (tmp_path / "Paks" / pak_manager.INSTALL_NAME).write_bytes(b"")
     assert pak_manager.count_other_paks(d) == 0
+
+
+def test_count_other_paks_excludes_xbox_gamepass_vanilla_name(tmp_path):
+    """dev#229続報: Pal-WinGDK.pak(Xbox App版バニラ本体)を「他modのpak」と
+    誤カウントしないこと。"""
+    d = tmp_path / "Paks"
+    d.mkdir()
+    (d / "Pal-WinGDK.pak").write_bytes(b"xbox")
+    (d / pak_manager.INSTALL_NAME).write_bytes(b"")
+    (d / "SomeOtherMod_P.pak").write_bytes(b"")
+    assert pak_manager.count_other_paks(str(d)) == 1
 
 
 # ---------------------------------------------------------------------------

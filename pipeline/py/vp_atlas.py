@@ -369,6 +369,51 @@ def parse_solid_color_key(key):
     return tuple(float(x) for x in payload.split(","))
 
 
+# dev#505(実報告CFLSKDWM: 瞳/虹彩が変換後に白飛びする): Unityマテリアルの
+# `_Color`(lilToon等の"Main Color"に相当。unity\DiveToPalworldExporter.cs
+# ExportMaterialsがmaterial_map.jsonの"color"として書き出す)は、従来
+# `texture` が null のスロット(単色マテリアル)の代替塗りつぶしにしか
+# 使われていなかった。トゥーンシェーダでは「白/グレーのマスクテクスチャ」
+# ×「_Colorタイント」で最終色を決める作りが一般的(虹彩は典型例: 白マスクを
+# タイントで着色する)。テクスチャが有る場合にタイントを無視すると、
+# この構造のマテリアルは無彩色(白/グレー)のまま出力される。眼球専用の
+# 特別扱いではなく、テクスチャの有無に関わらず`base_color`を一貫して
+# 乗算する(入口で正規化、CLAUDE.md流儀)。
+TINT_PREFIX = "\x00tint\x00"
+
+# 8bit丸め後に区別がつかない差はアトラスセルを無駄に増やさない
+# (既存アバターの大多数はtint=白なので、ここで弾いてファイル名だけの
+# 同一視を維持する=G4無退行の根拠)。
+WHITE_TINT_TOL = 1.0 / 255.0
+
+
+def is_white_tint(rgba):
+    """base_color(RGBA, 0..1 リニア)が実質白(1,1,1,*)とみなせるか。
+    アルファは可視色に影響しないので判定に含めない。"""
+    return all(abs(float(c) - 1.0) < WHITE_TINT_TOL for c in rgba[:3])
+
+
+def tinted_texture_key(tex_path, rgba):
+    """テクスチャに非白tint(Unity `_Color`等)が乗っている場合の合成キー。
+    同じテクスチャファイルでも異なるtintは別物として扱う(dedupで潰さない=
+    同じ白マスクを違う色にタイントした複数マテリアルが同一セルへ丸め込まれて
+    片方の色が消える、という第2の退行を防ぐ)。"""
+    r, g, b, a = (round(float(x), 5) for x in rgba[:4])
+    return f"{TINT_PREFIX}{r},{g},{b},{a}\x00{tex_path}"
+
+
+def is_tinted_texture_key(key):
+    """`tinted_texture_key()`が作った合成キーかどうか。"""
+    return isinstance(key, str) and key.startswith(TINT_PREFIX)
+
+
+def parse_tinted_texture_key(key):
+    """`tinted_texture_key()`の逆変換。(tex_path, (r,g,b,a)) を返す。"""
+    payload = key[len(TINT_PREFIX):]
+    color_part, tex_path = payload.split("\x00", 1)
+    return tex_path, tuple(float(x) for x in color_part.split(","))
+
+
 def linear_to_srgb(c):
     """Blenderのマテリアル係数(リニア色空間 0..1)を、PNGが期待する
     sRGBガンマ符号化(0..1)へ変換する。
@@ -407,6 +452,31 @@ def solid_color_image(rgba, size=8):
     return img
 
 
+def apply_tint(rgba_u8, tint_rgba):
+    """デコード済みテクスチャ(H,W,4 uint8, sRGB符号化)へ、マテリアルの
+    tint(base_color、リニア0..1)を乗算した(H,W,4 uint8)を返す(dev#505)。
+
+    ゲームエンジンのシェーダーと同じ計算順で行う: テクスチャのRGBサンプルは
+    sRGB符号化されているのでまずリニアへ復号し、リニア色空間のtintと乗算し、
+    最後にPNG用へsRGB再符号化する(`linear_to_srgb`と同じ規約:
+    base_colorは常にリニアとして扱う本ファイルの既定に合わせる)。
+    アルファはリニア量なのでsRGB変換の対象外(`solid_color_image`と同じ扱い)。
+    tint=(1,1,1,1)相当(実質白)なら数値上ほぼ無変化(呼び出し側は
+    `is_white_tint`でこのケースを避けて元ファイルをそのまま使うのが既定)。"""
+    import numpy as np
+    arr = rgba_u8.astype(np.float64) / 255.0
+    rgb = arr[..., :3]
+    lin = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    tint_rgb = np.asarray([float(c) for c in tint_rgba[:3]], dtype=np.float64)
+    lin = np.clip(lin * tint_rgb, 0.0, 1.0)
+    srgb = np.where(lin <= 0.0031308, lin * 12.92, 1.055 * (lin ** (1.0 / 2.4)) - 0.055)
+    out = arr.copy()
+    out[..., :3] = srgb
+    tint_a = float(tint_rgba[3]) if len(tint_rgba) > 3 else 1.0
+    out[..., 3] = np.clip(arr[..., 3] * tint_a, 0.0, 1.0)
+    return np.round(out * 255).astype(np.uint8)
+
+
 # ------------------------------------------------------------ アトラス画像合成
 
 def resize_nearest(rgba, new_w, new_h):
@@ -440,15 +510,43 @@ def build_atlas_from_paths(paths, cell_size=2048, max_canvas=4096):
     """PNGファイルパスのリスト(順序=グリッド配置順)からアトラスを合成する。
 
     要素が`solid_color_key()`で作った合成キー(実ファイルではない)の場合は
-    ファイルを読まず、その場で単色画像を合成する(texture=nullマテリアル用)。"""
+    ファイルを読まず、その場で単色画像を合成する(texture=nullマテリアル用)。
+    要素が`tinted_texture_key()`で作った合成キーの場合は、埋め込まれた実
+    ファイルパスを読んでからtintを乗算する(dev#505、texture有りマテリアルの
+    非白_Colorタイント)。"""
     images = []
     for p in paths:
         if is_solid_color_key(p):
             images.append(solid_color_image(parse_solid_color_key(p)))
+        elif is_tinted_texture_key(p):
+            tex_path, rgba = parse_tinted_texture_key(p)
+            _, _, tex_rgba = vp_tex.decode_png(tex_path)
+            images.append(apply_tint(tex_rgba, rgba))
         else:
             _, _, rgba = vp_tex.decode_png(p)
             images.append(rgba)
     return build_atlas_image(images, cell_size=cell_size, max_canvas=max_canvas)
+
+
+# -------------------------------------------------------- 診断可能な入力エラー
+
+class AvatarMetaError(ValueError):
+    """avatar_meta.json(plan_avatarへの入力)の構造が壊れているときに送出する
+    専用例外(dev#740対策)。
+
+    背景: PR #737がファズ試験で明らかにした通り、`plan_avatar`は専用の例外型を
+    持たず、壊れたmetaに対して裸のAttributeError/TypeError/KeyError/ValueError
+    をそのまま送出していた。ユーザーのアバターは送ってもらえない(有料アセット
+    が大半で再配布不可。届くのは診断ログのみ)ため、「どこで例外が飛んだか」
+    だけを語る裸の例外では原因に到達できない。この例外は「どのslot_id・
+    どのfieldが・どんな値で不正だったか」を保持し、メッセージにも含める。
+    元例外は`raise ... from e`で必ず連鎖させ、Pythonの通常のトレースバックが
+    保持する診断可能性(`__cause__`)を落とさない。"""
+
+    def __init__(self, message, slot_id=None, field=None):
+        self.slot_id = slot_id
+        self.field = field
+        super().__init__(message)
 
 
 # ------------------------------------------------------------ ラベル単位プラン
@@ -469,13 +567,21 @@ def plan_label(texture_order):
     return transforms, rows, cols
 
 
-def plan_avatar(meta):
+def plan_avatar(meta, tex_dir=None):
     """avatar_meta.json(dict、キーは"slots"を含む)から、body/parkaそれぞれの
     アトラスプランを作る。分類は`classify_material()`(モジュール上部、
     dump_avatar_mesh.pyと同期必須)。
 
     PNG以外のテクスチャを参照するスロットは対象から除外する(既存の
     「PNG以外は自動注入をスキップ」制約を踏襲。除外リストを第2戻り値で返す)。
+
+    tex_dir(dev#990): 指定時のみ、拡張子が.pngのテクスチャについて
+    `vp_tex.is_real_png(os.path.join(tex_dir, tex))`でファイル実体の
+    マジックナンバーを検証する(拡張子だけ.pngにリネームされた非PNGが
+    atlas_bakeまで運ばれて後段で落ちる不具合の対策、実報告3JMQWCNS)。
+    検証失敗は`<not-actually-png:filename>`として第2戻り値へ記録し除外する。
+    既定None(未指定)は従来どおり拡張子のみで判定し、実体検証は行わない
+    (単体呼び出し`plan_avatar(meta)`は無改修で通す)。
 
     2026-07-26追加: `texture: null`(テクスチャを持たず単色のみのマテリアル。
     モジュール上部「単色(texture=null)マテリアル」節参照)は、
@@ -498,33 +604,117 @@ def plan_avatar(meta):
       }
       skipped = [(slot_id, texture_filename), ...]  (非PNG除外)
               + [(slot_id, "<no-texture-no-basecolor:orig_name>"), ...]  (真に解決不能)
+              + [(slot_id, "<not-actually-png:filename>"), ...]  (tex_dir指定時のみ:
+                 拡張子は.pngだが実体がPNGでない)
+
+    Raises:
+      AvatarMetaError: metaの構造が壊れていて解釈できない場合(dev#740)。
+        `.slot_id`/`.field`にどこが不正だったかを保持し、元例外を
+        `__cause__`に連鎖させる。健全なmeta(step01_import_vrm.pyが実際に
+        書き出す形)に対しては送出しない。
     """
-    slots = meta.get("slots", {})
+    try:
+        slots = meta.get("slots", {})
+    except AttributeError as e:
+        raise AvatarMetaError(
+            f"avatar_meta must be a dict, got {type(meta).__name__}: {meta!r}",
+            field="<root>") from e
     per_label = {
         0: {"order": [], "seen": set(), "slots": [], "slot_texture": {}, "alpha_mask": False},
         1: {"order": [], "seen": set(), "slots": [], "slot_texture": {}, "alpha_mask": False},
     }
     skipped_non_png = []
-    for slot_id in sorted(slots.keys()):
+    try:
+        sorted_slot_ids = sorted(slots.keys())
+    except AttributeError as e:
+        raise AvatarMetaError(
+            f"avatar_meta['slots'] must be a dict, got "
+            f"{type(slots).__name__}: {slots!r}",
+            field="slots") from e
+    except TypeError as e:
+        raise AvatarMetaError(
+            f"avatar_meta['slots'] has keys of mismatched/unorderable "
+            f"types: {sorted({type(k).__name__ for k in slots.keys()})}",
+            field="slots") from e
+    for slot_id in sorted_slot_ids:
         info = slots[slot_id]
-        tex = info.get("texture")
+        try:
+            tex = info.get("texture")
+        except AttributeError as e:
+            raise AvatarMetaError(
+                f"slot {slot_id!r} must be a dict, got "
+                f"{type(info).__name__}: {info!r}",
+                slot_id=slot_id, field="<slot>") from e
         if not tex:
             base_color = info.get("base_color")
-            if base_color and len(base_color) >= 4:
-                tex = solid_color_key(base_color)
+            if base_color:
+                try:
+                    has_rgba = len(base_color) >= 4
+                except TypeError as e:
+                    raise AvatarMetaError(
+                        f"slot {slot_id!r} field 'base_color' must be a "
+                        f"sequence supporting len(), got "
+                        f"{type(base_color).__name__}: {base_color!r}",
+                        slot_id=slot_id, field="base_color") from e
+            else:
+                has_rgba = False
+            if base_color and has_rgba:
+                try:
+                    tex = solid_color_key(base_color)
+                except (TypeError, ValueError, KeyError) as e:
+                    raise AvatarMetaError(
+                        f"slot {slot_id!r} field 'base_color' is not a "
+                        f"valid RGBA sequence of 4 numbers: {base_color!r}",
+                        slot_id=slot_id, field="base_color") from e
             else:
                 orig_name = info.get("orig_name", "")
                 skipped_non_png.append(
                     (slot_id, f"<no-texture-no-basecolor:{orig_name}>"))
                 continue
-        elif not tex.lower().endswith(".png"):
-            skipped_non_png.append((slot_id, tex))
-            continue
+        else:
+            try:
+                is_non_png = not tex.lower().endswith(".png")
+            except AttributeError as e:
+                raise AvatarMetaError(
+                    f"slot {slot_id!r} field 'texture' must be a string, "
+                    f"got {type(tex).__name__}: {tex!r}",
+                    slot_id=slot_id, field="texture") from e
+            if is_non_png:
+                skipped_non_png.append((slot_id, tex))
+                continue
+            if tex_dir is not None and not vp_tex.is_real_png(os.path.join(tex_dir, tex)):
+                skipped_non_png.append((slot_id, f"<not-actually-png:{tex}>"))
+                continue
+            # dev#505: テクスチャが有るスロットでも、非白の`base_color`
+            # (Unity `_Color`タイント)が付いていればタイント込みのキーへ
+            # 差し替える(モジュール上部`tinted_texture_key`のコメント参照)。
+            # 値が壊れている/欠けている場合は寛容にタイント無し(従来どおり
+            # ファイル名のみ)へフォールバックする——base_colorは本来
+            # 必須ではない補助情報であり、texture=nullケース(必須)ほど
+            # 厳格に扱う理由が無い。
+            base_color = info.get("base_color")
+            if base_color:
+                try:
+                    has_rgba = len(base_color) >= 4
+                    if has_rgba:
+                        [float(c) for c in base_color[:4]]
+                except (TypeError, ValueError, KeyError, IndexError):
+                    has_rgba = False
+                if has_rgba and not is_white_tint(base_color):
+                    tex = tinted_texture_key(tex, base_color)
         label = classify_material(info.get("orig_name", ""))
         bucket = per_label[label]
         bucket["slots"].append(slot_id)
         bucket["slot_texture"][slot_id] = tex
-        if (info.get("alpha_mode") or "").upper() == "MASK":
+        alpha_mode = info.get("alpha_mode")
+        try:
+            is_mask = (alpha_mode or "").upper() == "MASK"
+        except AttributeError as e:
+            raise AvatarMetaError(
+                f"slot {slot_id!r} field 'alpha_mode' must be a string, "
+                f"got {type(alpha_mode).__name__}: {alpha_mode!r}",
+                slot_id=slot_id, field="alpha_mode") from e
+        if is_mask:
             bucket["alpha_mask"] = True
         if tex not in bucket["seen"]:
             bucket["seen"].add(tex)

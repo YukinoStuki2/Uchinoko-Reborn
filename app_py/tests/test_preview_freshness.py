@@ -166,12 +166,16 @@ class _FakeSelfForAutoPreview:
         self._active_handle = active_handle
         self._fresh = fresh
         self.started: list[tuple] = []
+        self.logs: list[str] = []
 
     def _is_preview_fresh(self, _vrm_path: str) -> bool:
         return self._fresh
 
     def _start_pipeline(self, *, preview_only, materials_only, auto=False):
         self.started.append((preview_only, materials_only, auto))
+
+    def _log(self, text: str, **_kwargs) -> None:
+        self.logs.append(text)
 
 
 def test_maybe_auto_preview_skips_when_fresh(tmp_path):
@@ -181,6 +185,9 @@ def test_maybe_auto_preview_skips_when_fresh(tmp_path):
     fake = _FakeSelfForAutoPreview(fresh=True)
     mw.MainWindow._maybe_auto_preview(fake, str(vrm))
     assert fake.started == [], "鮮度が新鮮でも自動プレビューを再実行している(dev#613再発)"
+    # dev#921: 早期return時、問い合わせGU8L26D7のような「静かに止まった」
+    # 状態を診断できるよう理由が1行ログに残ること。
+    assert any("[auto-preview] skip" in line and "preview-fresh" in line for line in fake.logs)
 
 
 def test_maybe_auto_preview_runs_when_stale(tmp_path):
@@ -189,6 +196,9 @@ def test_maybe_auto_preview_runs_when_stale(tmp_path):
     fake = _FakeSelfForAutoPreview(fresh=False)
     mw.MainWindow._maybe_auto_preview(fake, str(vrm))
     assert fake.started == [(True, False, True)]
+    # 実際にプレビューが開始された(=早期returnしていない)場合は
+    # [auto-preview] skip 行を出さない(正常時のログ肥大化を避ける)。
+    assert not any("[auto-preview] skip" in line for line in fake.logs)
 
 
 def test_maybe_auto_preview_still_respects_blender_not_ready(tmp_path):
@@ -197,6 +207,10 @@ def test_maybe_auto_preview_still_respects_blender_not_ready(tmp_path):
     fake = _FakeSelfForAutoPreview(blender_ready=False, fresh=False)
     mw.MainWindow._maybe_auto_preview(fake, str(vrm))
     assert fake.started == []
+    # dev#921 核心のシナリオ(GU8L26D7): Unity輸出成功直後にBlenderがまだ
+    # 準備できておらず自動プレビューが静かに止まるケースを、次回は
+    # ログだけで判定できるようにする。
+    assert any("[auto-preview] skip" in line and "blender-not-ready" in line for line in fake.logs)
 
 
 def test_maybe_auto_preview_still_respects_already_running(tmp_path):
@@ -205,12 +219,30 @@ def test_maybe_auto_preview_still_respects_already_running(tmp_path):
     fake = _FakeSelfForAutoPreview(active_handle=_RunningHandle(), fresh=False)
     mw.MainWindow._maybe_auto_preview(fake, str(vrm))
     assert fake.started == []
+    assert any(
+        "[auto-preview] skip" in line and "other-process-running" in line for line in fake.logs
+    )
 
 
 def test_maybe_auto_preview_missing_file_returns_early(tmp_path):
     fake = _FakeSelfForAutoPreview(fresh=False)
     mw.MainWindow._maybe_auto_preview(fake, str(tmp_path / "missing.vrm"))
     assert fake.started == []
+    assert any("[auto-preview] skip" in line and "file-not-found" in line for line in fake.logs)
+
+
+def test_maybe_auto_preview_negative_control_reason_detection(tmp_path):
+    """負の対照: ログへ理由が出ることの検査自体が、理由の出し分けが壊れて
+    (例えば全部同じ文言になって)いれば検出できることを実測する。"""
+    vrm = tmp_path / "a.vrm"
+    vrm.write_bytes(b"")
+    fake = _FakeSelfForAutoPreview(blender_ready=False, fresh=False)
+    mw.MainWindow._maybe_auto_preview(fake, str(vrm))
+    # blender-not-readyの理由でpreview-fresh用の文言を探すと見つからないはず
+    # (=このアサーション方式が実際に区別できていることの裏付け)
+    assert not any(
+        "[auto-preview] skip" in line and "preview-fresh" in line for line in fake.logs
+    ), "blender-not-readyのケースなのにpreview-fresh理由が誤って記録された"
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +291,9 @@ class _FakeSelfForFreshnessRefresh:
 
     def _is_preview_fresh(self, _vrm_path: str) -> bool:
         return self._fresh
+
+    # dev#897: statusLabel設定がself._set_status()経由に変わったための追加束縛。
+    _set_status = mw.MainWindow._set_status
 
 
 def test_refresh_convert_button_freshness_disables_and_shows_stale(tmp_path):
@@ -355,6 +390,8 @@ def test_finalize_fresh_preview_makes_button_fresh_end_to_end(tmp_path):
         _save_preview_sig = mw.MainWindow._save_preview_sig
         _refresh_convert_button_freshness = mw.MainWindow._refresh_convert_button_freshness
         _finalize_fresh_preview = mw.MainWindow._finalize_fresh_preview
+        # dev#897: statusLabel設定がself._set_status()経由に変わったための追加束縛。
+        _set_status = mw.MainWindow._set_status
 
     fake = _RealishFake()
     # 事前確認: まだsig未保存なのでstale
@@ -365,4 +402,123 @@ def test_finalize_fresh_preview_makes_button_fresh_end_to_end(tmp_path):
     assert fake.widgets["convertButton"].state_calls[-1] == "normal", (
         "SavePreviewSig()後もconvertButtonがdisabledのまま"
         "(dev#617: フル変換ボタンがここで解禁されるはず)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# dev#1239: 再起動後にフル変換ボタンが押せない(プレビューキャッシュfresh
+# 経路でのblenderReady確定後の再結線漏れ)
+#
+# 根因: 起動シーケンスは
+#   __init__: _set_running_ui_state(False) -> _restore_last_vrm_on_startup()
+#             (_blender_readyはまだFalse、Blenderセットアップは未起動)
+#             -> ... -> _ensure_blender_ready_on_startup()(ここで初めて開始)
+# の順(main_window.py __init__ L.625/634/680)。_restore_last_vrm_on_startup()
+# は_set_vrm_path()経由で_refresh_convert_button_freshness()を呼ぶが、
+# その時点の_blender_readyは常にFalseなので即座にdisabledで早期return
+# する(L.2254-2256のblenderReadyガード)。
+#
+# 一方、_maybe_auto_preview()はプレビューキャッシュがfreshだとパイプライン
+# を再実行せず早期returnする(reason=preview-fresh、dev#613)ため、
+# _finalize_fresh_preview()(パイプライン成功時にconvertButtonを解禁する
+# 唯一の経路)も通らない。
+#
+# 残る望みは、Blenderセットアップが非同期に完了した時点
+# (_on_blender_setup_done())でconvertButtonのゲートが再計算されることだが、
+# 同メソッドは_update_button_states()(matsButton/previewButtonのみ担当、
+# convertButtonはスコープ外——L.3312-3315のdocstring参照)しか呼んでおらず、
+# _refresh_convert_button_freshness()を呼び忘れている。結果、キャッシュが
+# freshで押せるべきなのに、blenderReady確定後もconvertButtonが
+# disabledのまま固定される。
+# ---------------------------------------------------------------------------
+
+
+class _FakePlaceableWidget(_FakeWidget):
+    """_FakeWidgetに.place()/.place_forget()を足しただけ
+    (_on_blender_setup_done()がbusyBar/blenderRetryButtonへ触れるための最小限)。"""
+
+    def place(self, **_kwargs) -> None:
+        pass
+
+    def place_forget(self) -> None:
+        pass
+
+
+class _FakeSelfForBlenderReadyTransition(_FakeSelfForFreshnessRefresh):
+    """起動直後(_blender_ready=False)の状態から_on_blender_setup_done()で
+    blenderReadyが確定するまでの一連を再現する。_FakeSelfForFreshnessRefresh
+    を継承し、_on_blender_setup_done()が触れる残りのウィジェット/属性だけ追加する。"""
+
+    def __init__(self, vrm_path: str, fresh: bool):
+        super().__init__(vrm_path, fresh, running=False)
+        self._blender_ready = False  # 復元時点ではまだ未確定(起動順序どおり)
+        self.widgets["busyBar"] = _FakePlaceableWidget()
+        self.widgets["blenderRetryButton"] = _FakePlaceableWidget()
+        self._pending_prefab_drop_path = None
+        self.logs: list[str] = []
+
+    # _on_blender_setup_done()が内部でself._refresh_convert_button_freshness()を
+    # 呼ぶため(dev#1239の修正対象そのもの)、束縛しておく必要がある。
+    _refresh_convert_button_freshness = mw.MainWindow._refresh_convert_button_freshness
+
+    def _log(self, text: str, **_kwargs) -> None:
+        self.logs.append(text)
+
+    def _update_button_states(self) -> None:
+        """matsButton/previewButtonの担当分(本WPのスコープ外)。呼ばれたことだけ
+        記録し、convertButtonには一切触れない(実装と同じ責務分離を模す)。"""
+        self._update_button_states_called = True
+
+    def _warm_startup_after_blender_ready(self) -> None:
+        pass
+
+
+def test_blender_ready_transition_reenables_convert_button_when_cache_fresh(tmp_path):
+    """dev#1239 赤→緑の本丸: 起動時にVRMパスは復元されたがblenderReadyが
+    まだ確定していない間はdisabled(症状の再現)、その後blenderReadyが
+    確定した時点でconvertButtonがnormalへ戻ること
+    (プレビューキャッシュがfreshな場合のみ)。"""
+    vrm = tmp_path / "a.vrm"
+    vrm.write_bytes(b"")
+    fake = _FakeSelfForBlenderReadyTransition(str(vrm), fresh=True)
+
+    # 起動シーケンス相当: _restore_last_vrm_on_startup() -> _set_vrm_path()
+    # -> _refresh_convert_button_freshness()がblenderReady=Falseのまま呼ばれる。
+    mw.MainWindow._refresh_convert_button_freshness(fake)
+    assert fake.widgets["convertButton"].state_calls[-1] == "disabled", (
+        "前提が崩れている: blenderReady確定前はdisabledのはず"
+        "(オーナー報告のスクショ症状と同じ状態を再現できていない)"
+    )
+
+    # Blenderセットアップが非同期に完了する(_on_blender_setup_done)。
+    fake._blender_ready = False  # do_ensure_blender_ready()呼び出し前の状態を維持
+    mw.MainWindow._on_blender_setup_done(
+        fake, True, None, mw.blender_setup.BlenderSetupAction.READY_NO_ACTION
+    )
+
+    assert fake.widgets["convertButton"].state_calls[-1] == "normal", (
+        "dev#1239再発: blenderReady確定後もconvertButtonがdisabledのまま"
+        "(プレビューキャッシュがfreshなのに、再起動後フル変換ボタンが押せないバグ)"
+    )
+
+
+def test_blender_ready_transition_negative_control_stays_disabled_when_stale(tmp_path):
+    """負の対照: プレビューキャッシュがstaleな場合は、blenderReady確定後も
+    disabledのままであること(=単純に「blenderReady確定で無条件にnormalへ
+    する」という誤った修正ではないことの証明)。"""
+    vrm = tmp_path / "a.vrm"
+    vrm.write_bytes(b"")
+    fake = _FakeSelfForBlenderReadyTransition(str(vrm), fresh=False)
+
+    mw.MainWindow._refresh_convert_button_freshness(fake)
+    assert fake.widgets["convertButton"].state_calls[-1] == "disabled"
+
+    fake._blender_ready = False
+    mw.MainWindow._on_blender_setup_done(
+        fake, True, None, mw.blender_setup.BlenderSetupAction.READY_NO_ACTION
+    )
+
+    assert fake.widgets["convertButton"].state_calls[-1] == "disabled", (
+        "staleなのにblenderReady確定だけでconvertButtonがnormalになった"
+        "(修正が鮮度判定を無視している)"
     )

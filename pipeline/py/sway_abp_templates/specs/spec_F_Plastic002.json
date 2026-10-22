@@ -1,0 +1,502 @@
+{
+ "ali": "/Game/Pal/Blueprint/Character/Player/Female/ALI_HumanCloth",
+ "skeleton": "/Game/Pal/Model/Character/Skeleton/Human/SK_PalHuman_Skeleton",
+ "target_abp": "/Game/Pal/Blueprint/Character/Player/Imp_Cloth/ABP_F_Plastic002_Implimentation",
+ "nodes": [
+  {
+   "root_bone": "NPC_SnowBoss_belt_01_l",
+   "dummy_bone_length": 0,
+   "params": {
+    "stiffness": 1.0,
+    "damping": 0.4,
+    "wdl": 0.9,
+    "wdr": 0.9,
+    "limit_angle": 55,
+    "gravity_z": -98,
+    "radius": 6
+   },
+   "curves": {
+    "stiffness": [
+     [
+      0,
+      0.6
+     ],
+     [
+      1,
+      0.08
+     ]
+    ],
+    "wdl": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "wdr": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "limit_angle": [
+     [
+      0,
+      0.4
+     ],
+     [
+      1,
+      1.0
+     ]
+    ]
+   }
+  },
+  {
+   "root_bone": "HeadEquip062_ear_01_l",
+   "dummy_bone_length": 0,
+   "params": {
+    "stiffness": 1.0,
+    "damping": 0.4,
+    "wdl": 0.9,
+    "wdr": 0.9,
+    "limit_angle": 55,
+    "gravity_z": -98,
+    "radius": 6
+   },
+   "curves": {
+    "stiffness": [
+     [
+      0,
+      0.6
+     ],
+     [
+      1,
+      0.08
+     ]
+    ],
+    "wdl": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "wdr": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "limit_angle": [
+     [
+      0,
+      0.4
+     ],
+     [
+      1,
+      1.0
+     ]
+    ]
+   }
+  },
+  {
+   "root_bone": "HeadEquip062_ear_01_r",
+   "dummy_bone_length": 0,
+   "params": {
+    "stiffness": 1.0,
+    "damping": 0.4,
+    "wdl": 0.9,
+    "wdr": 0.9,
+    "limit_angle": 55,
+    "gravity_z": -98,
+    "radius": 6
+   },
+   "curves": {
+    "stiffness": [
+     [
+      0,
+      0.6
+     ],
+     [
+      1,
+      0.08
+     ]
+    ],
+    "wdl": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "wdr": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "limit_angle": [
+     [
+      0,
+      0.4
+     ],
+     [
+      1,
+      1.0
+     ]
+    ]
+   }
+  },
+  {
+   "root_bone": "NPC_SnowBoss_belt_01_r",
+   "dummy_bone_length": 0,
+   "params": {
+    "stiffness": 1.0,
+    "damping": 0.4,
+    "wdl": 0.9,
+    "wdr": 0.9,
+    "limit_angle": 55,
+    "gravity_z": -98,
+    "radius": 6
+   },
+   "curves": {
+    "stiffness": [
+     [
+      0,
+      0.6
+     ],
+     [
+      1,
+      0.08
+     ]
+    ],
+    "wdl": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "wdr": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "limit_angle": [
+     [
+      0,
+      0.4
+     ],
+     [
+      1,
+      1.0
+     ]
+    ]
+   }
+  },
+  {
+   "root_bone": "HeadEquip046_hairA_01_l",
+   "dummy_bone_length": 0,
+   "params": {
+    "stiffness": 1.0,
+    "damping": 0.4,
+    "wdl": 0.9,
+    "wdr": 0.9,
+    "limit_angle": 55,
+    "gravity_z": -98,
+    "radius": 6
+   },
+   "curves": {
+    "stiffness": [
+     [
+      0,
+      0.6
+     ],
+     [
+      1,
+      0.08
+     ]
+    ],
+    "wdl": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "wdr": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "limit_angle": [
+     [
+      0,
+      0.4
+     ],
+     [
+      1,
+      1.0
+     ]
+    ]
+   }
+  },
+  {
+   "root_bone": "HeadEquip046_hairA_01_r",
+   "dummy_bone_length": 0,
+   "params": {
+    "stiffness": 1.0,
+    "damping": 0.4,
+    "wdl": 0.9,
+    "wdr": 0.9,
+    "limit_angle": 55,
+    "gravity_z": -98,
+    "radius": 6
+   },
+   "curves": {
+    "stiffness": [
+     [
+      0,
+      0.6
+     ],
+     [
+      1,
+      0.08
+     ]
+    ],
+    "wdl": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "wdr": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "limit_angle": [
+     [
+      0,
+      0.4
+     ],
+     [
+      1,
+      1.0
+     ]
+    ]
+   }
+  },
+  {
+   "root_bone": "NPC_WorldTreeBoss001_skirtD_01_l",
+   "dummy_bone_length": 0,
+   "params": {
+    "stiffness": 1.0,
+    "damping": 0.4,
+    "wdl": 0.9,
+    "wdr": 0.9,
+    "limit_angle": 55,
+    "gravity_z": -98,
+    "radius": 6
+   },
+   "curves": {
+    "stiffness": [
+     [
+      0,
+      0.6
+     ],
+     [
+      1,
+      0.08
+     ]
+    ],
+    "wdl": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "wdr": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "limit_angle": [
+     [
+      0,
+      0.4
+     ],
+     [
+      1,
+      1.0
+     ]
+    ]
+   }
+  },
+  {
+   "root_bone": "NPC_GrassBoss001_Skin001_hat_cone_01",
+   "dummy_bone_length": 0,
+   "params": {
+    "stiffness": 1.0,
+    "damping": 0.4,
+    "wdl": 0.9,
+    "wdr": 0.9,
+    "limit_angle": 55,
+    "gravity_z": -98,
+    "radius": 6
+   },
+   "curves": {
+    "stiffness": [
+     [
+      0,
+      0.6
+     ],
+     [
+      1,
+      0.08
+     ]
+    ],
+    "wdl": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "wdr": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "limit_angle": [
+     [
+      0,
+      0.4
+     ],
+     [
+      1,
+      1.0
+     ]
+    ]
+   }
+  },
+  {
+   "root_bone": "NPC_GrassBoss001_Skin001_tail_01",
+   "dummy_bone_length": 0,
+   "params": {
+    "stiffness": 1.0,
+    "damping": 0.4,
+    "wdl": 0.9,
+    "wdr": 0.9,
+    "limit_angle": 55,
+    "gravity_z": -98,
+    "radius": 6
+   },
+   "curves": {
+    "stiffness": [
+     [
+      0,
+      0.6
+     ],
+     [
+      1,
+      0.08
+     ]
+    ],
+    "wdl": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "wdr": [
+     [
+      0,
+      0.95
+     ],
+     [
+      1,
+      0.55
+     ]
+    ],
+    "limit_angle": [
+     [
+      0,
+      0.4
+     ],
+     [
+      1,
+      1.0
+     ]
+    ]
+   }
+  }
+ ]
+}

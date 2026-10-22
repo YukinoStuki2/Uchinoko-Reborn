@@ -30,6 +30,50 @@ DEFAULT_PALWORLD_PAK = (
 DEFAULT_UE_ROOT = r"C:\Program Files\Epic Games\UE_5.1"
 
 
+def _win_long_path(path):
+    r"""Windows拡張長パス(`\\?\` 接頭辞)を付与し、MAX_PATH(260)制限を回避する。
+
+    dev#458(live_template.py)・dev#1101(同ファイルの`write_unified_mis()`)・
+    dev#1304(vp_pakwrite.py)に続く、同型の第4の発生箇所(dev#1531、実報告
+    K3UBA8QD)。`vp_core.read_names()`/`vp_core.find_refskeleton()`の生`open()`
+    が、dst_dir配下の可変長パス(uasset_path/uexp_path)で`FileNotFoundError`
+    になった。
+
+    正本は`live_template._win_long_path()`(同名・同実装)。`vp_core.py`は
+    「標準ライブラリのみ使用・Blender同梱Pythonでも動く」共通コアモジュール
+    (本ファイル冒頭docstring参照)であり、live_template.py側からimportされる
+    向きの依存(逆方向のimportは循環/層違反になる)のため、dev#1304の
+    vp_pakwrite.pyと同じ「自己完結の関数としてモジュール内に複製する」形を
+    踏襲する。
+
+    `\\?\` 接頭辞はNTのファイルI/O API自体が昔からサポートする拡張長パス指定で、
+    絶対・正規化済み(区切りは`\`統一、`.`/`..`を含まない)パスにしか使えないため、
+    まず`os.path.abspath()`で正規化する。UNCパス(`\\server\share\...`)は素の
+    `\\?\` 直付けでは機能せず、`\\?\UNC\server\share\...` という別形式が必要
+    (Win32の既知仕様)。既に`\\?\`済みならそのまま返す(冪等)。非Windowsでは
+    パス表現が異なるため何もしない。
+    """
+    if os.name != "nt":
+        return path
+    ap = os.path.abspath(path)
+    if ap.startswith("\\\\?\\"):
+        return ap
+    if ap.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + ap[2:]
+    return "\\\\?\\" + ap
+
+
+def _open_long(path, mode="r", **kwargs):
+    """MAX_PATH対策込みのopen()(dev#458/#1101/#1304/#1531)。
+
+    dev#1531: 個別のopen()呼び出し箇所へ`_win_long_path()`を都度書くのではなく
+    (「入口で正規化」の原則)、この関数へ集約する。本ファイル内の生open()/
+    os.open()は全数この関数経由に統一する(過去3回の再発は「一部だけ対策して
+    別の生open()が残る」パターンだったため、この機会に本ファイル内は根絶する)。
+    """
+    return open(_win_long_path(path), mode, **kwargs)
+
+
 def load_job(job_json_path):
     """ジョブJSONを読み、既定値を補完して返す。job_dirはJSONの置き場所。
 
@@ -43,7 +87,12 @@ def load_job(job_json_path):
     job.jsonに明示指定があれば、それを常に最優先で尊重する(setdefaultなので
     既存の値は上書きしない)。
     """
-    with open(job_json_path, encoding="utf-8") as f:
+    # dev#957: job.jsonはPowerShell 5.1(Desktop Edition)の Out-File -Encoding utf8
+    # が書くとBOM付きUTF-8になる(pwsh/PS7+はBOM無し。convert.ps1のPhase -1が
+    # job.resolved.jsonをこの経路で書く、2026-08-02 dev#702)。素の"utf-8"はBOMを
+    # JSONの一部と誤認しjson.JSONDecodeErrorで落ちる。"utf-8-sig"はBOM有無どちらの
+    # UTF-8も正しく読める(BOM無しに対しても後方互換)。
+    with _open_long(job_json_path, encoding="utf-8-sig") as f:
         job = json.load(f)
     job["job_dir"] = os.path.dirname(os.path.abspath(job_json_path))
     paths = job.setdefault("paths", {})
@@ -72,10 +121,18 @@ def load_job(job_json_path):
     # (OldCloth001_04..07)へ載せ替える。docs\sway_design.md参照
     job.setdefault("sway_cloth_bones", [])
     job.setdefault("unlit", False)
-    # dev#157 / WP-I157(2026-07-30): サイズ可変(スケルトン一様スケール)。
-    # 隠し設定(GUI未露出、CLI/job.json手書き専用)。root不動点で全ボーンの
-    # ローカルTranslationをk倍する(build_avatar_variant.apply_uniform_scale
-    # 参照)。既定1.0は無条件で完全no-op(pakバイト不変)
+    # dev#157/dev#560: サイズ可変。隠し設定(GUI未露出、CLI/job.json手書き
+    # 専用)。**2026-08-07 dev#560で実装方式を根治(L1完結へ移行)**:
+    # dev#157/PR#357のpakレベルUExpスケルトンパッチ(build_avatar_variant.
+    # apply_uniform_scale、root不動点でRefSkeletonのTranslationのみをk倍)
+    # は、2026-07-30ぱん官能検査で「手が大きく崩壊」NGとなり凍結。原因は
+    # スケルトンだけをスケールしメッシュ頂点は無改変のため対応関係が崩れる
+    # こと。現在はBlender工程末尾(pipeline\blender\step02_retarget.py の
+    # apply_output_scale()、chibi_fit_armature()直後)でスケルトンと
+    # メッシュを同時にスケールする方式に置き換え済み(pakレベルの
+    # apply_uniform_scale()自体はコード上残存するが、convert_noue.pyは
+    # もうこの値を--uniform-scaleへ転送しない=常時1.0=恒久no-op)。
+    # 既定1.0は無条件で完全no-op(pakバイト不変)
     job.setdefault("uniform_scale", 1.0)
     # 全マテリアルを強制両面にする(裏面が透けるモデル対策)。
     # 既定ON(2026-07-21ぱん裁定): 透け事故ゼロを優先。負荷増はプレイヤー1体分なので実害なし
@@ -153,7 +210,7 @@ def _read_pak_compression_methods_uncached(path):
     含まれない)。実測(2026-07-23、Pal-Windows.pak): IndexHash(20byte)の直後、
     bEncryptedIndex/EncryptionKeyGuidフィールドは無く、いきなり32byte固定長×
     最大5枠のASCII名(null終端・0パディング)が続く。空枠(先頭byteが0)は無視する。"""
-    with open(path, "rb") as f:
+    with _open_long(path, "rb") as f:
         f.seek(0, 2)
         size = f.tell()
         tail_len = min(4096, size)
@@ -205,7 +262,7 @@ def _read_pak_entries_uncached(path):
     mountはこちらの読み取りからそのまま得れば重複が丸ごと消せる。"""
     # FullDirectoryIndexのencoded entry infoではなく、各エントリのローカルヘッダを
     # 直接読む方が堅い。インデックスを再走査してエントリオフセットを取る
-    with open(path, "rb") as f:
+    with _open_long(path, "rb") as f:
         f.seek(0, 2)
         size = f.tell()
         tail_len = min(4096, size)
@@ -298,7 +355,7 @@ def read_pak_index(path):
 
 def _read_pak_index_uncached(path):
     """pak v11のFullDirectoryIndexを読み (mount, [パス...]) を返す(読み取り専用)。"""
-    with open(path, "rb") as f:
+    with _open_long(path, "rb") as f:
         f.seek(0, 2)
         size = f.tell()
         tail_len = min(4096, size)
@@ -356,7 +413,7 @@ def parse_texture2d(uexp_path_or_bytes):
     if isinstance(uexp_path_or_bytes, (bytes, bytearray)):
         data = bytes(uexp_path_or_bytes)
     else:
-        with open(uexp_path_or_bytes, "rb") as f:
+        with _open_long(uexp_path_or_bytes, "rb") as f:
             data = f.read()
 
     # PF_文字列(FStringのlen整合で実物だけ採用)
@@ -422,6 +479,90 @@ def parse_texture2d(uexp_path_or_bytes):
         raise RuntimeError("uexp tail is not PACKAGE_FILE_TAG (parse offset may be wrong)")
     return {"pixel_format": pf, "size_x": size_x, "size_y": size_y,
             "uasset_size": uasset_size, "mips": mips}
+
+
+def parse_texture2d_mixed(uexp_path_or_bytes):
+    """dev#1170 WP-A: parse_texture2d()の一般化版。全ミップinline
+    (BULKDATA_ForceInlinePayload=0x40)を前提とする既存parse_texture2d()と
+    異なり、非inlineミップ(ubulkファイルへ分離、実測: PayloadInSeperateFile
+    =0x100が立ち、offsetはubulkファイル先頭からの直接バイトオフセット
+    ——work\\rd_1170_mesh\\FINDINGS.md 2節・work\\rd_1170_mesh\\scripts\\
+    build_experiment_pak.py::parse_mip_table()で実証済み)も許容する。
+    既存parse_texture2d()は無改変(この関数は新規追加のみ、④無退行の根拠:
+    既存呼び出し元は一切呼び先を変えていない)。
+
+    返り値: {"pixel_format","size_x","size_y","mips":[
+        {"inline": bool, "offset": uexp内ローカルoffset(inline時のみ有効),
+         "abs_off": ubulkファイル内絶対offset(非inline時のみ有効),
+         "size","w","h"}, ...]}
+    全ミップがinlineの場合(t00/t01等)、返り値のmips構造はparse_texture2d()の
+    ものと等価な情報を持つ(offsetキーの意味が同じ)。"""
+    if isinstance(uexp_path_or_bytes, (bytes, bytearray)):
+        data = bytes(uexp_path_or_bytes)
+    else:
+        with _open_long(uexp_path_or_bytes, "rb") as f:
+            data = f.read()
+
+    pf_off = -1
+    i = data.find(b"PF_")
+    while i >= 0:
+        end = data.find(b"\x00", i)
+        if i >= 4 and end > i:
+            (slen,) = struct.unpack_from("<i", data, i - 4)
+            if slen == end - i + 1:
+                pf_off = i
+                break
+        i = data.find(b"PF_", end)
+    if pf_off < 0:
+        raise RuntimeError("PF_ string not found (not a Texture2D uexp?)")
+    pf = data[pf_off:data.find(b"\x00", pf_off)].decode("ascii")
+    size_x, size_y = struct.unpack_from("<ii", data, pf_off - 16)
+
+    pos = data.find(b"\x00", pf_off) + 1
+    first_mip, num_mips = struct.unpack_from("<ii", data, pos)
+    pos += 8
+    if not (0 <= first_mip <= 16 and 1 <= num_mips <= 20):
+        raise RuntimeError(f"invalid mip count: first={first_mip} num={num_mips}")
+
+    mips = []
+    for mi in range(num_mips):
+        (flags,) = struct.unpack_from("<I", data, pos)
+        pos += 4
+        if flags & 0x2000:  # BULKDATA_Size64Bit
+            count, size_on_disk = struct.unpack_from("<qq", data, pos)
+            pos += 16
+        else:
+            count, size_on_disk = struct.unpack_from("<ii", data, pos)
+            pos += 8
+        (abs_off,) = struct.unpack_from("<q", data, pos)
+        pos += 8
+        inline = bool(flags & 0x40)
+        if count != size_on_disk or count <= 0:
+            raise RuntimeError(f"mip{mi}: size mismatch count={count} size={size_on_disk}")
+        if inline:
+            if pos + count > len(data):
+                raise RuntimeError(f"mip{mi}: inline payload exceeds uexp length")
+            local = pos
+            pos += count
+        else:
+            local = None
+        w, h, z = struct.unpack_from("<iii", data, pos)
+        pos += 12
+        if z != 1 or not (1 <= w <= 16384 and 1 <= h <= 16384):
+            raise RuntimeError(f"mip{mi}: invalid dimensions {w}x{h}x{z}")
+        if pf in TEX_FORMATS:
+            bs = TEX_FORMATS[pf][1]
+            expected = ((w + 3) // 4) * ((h + 3) // 4) * bs
+            if expected != count:
+                raise RuntimeError(
+                    f"mip{mi}: {pf} expected size {expected} != actual {count} ({w}x{h})")
+        mips.append({"inline": inline, "offset": local, "abs_off": abs_off,
+                     "size": count, "w": w, "h": h})
+
+    (tag,) = struct.unpack_from("<I", data, len(data) - 4)
+    if tag != PACKAGE_FILE_TAG:
+        raise RuntimeError("uexp tail is not PACKAGE_FILE_TAG (parse offset may be wrong)")
+    return {"pixel_format": pf, "size_x": size_x, "size_y": size_y, "mips": mips}
 
 
 # ------------------------------------------------ cooked SkeletalMesh vertex buffers
@@ -536,7 +677,7 @@ def parse_skeletalmesh_buffers(uexp_path_or_bytes):
     if isinstance(uexp_path_or_bytes, (bytes, bytearray)):
         data = bytes(uexp_path_or_bytes)
     else:
-        with open(uexp_path_or_bytes, "rb") as f:
+        with _open_long(uexp_path_or_bytes, "rb") as f:
             data = f.read()
 
     candidates = _find_sk_index_buffer_candidates(data)
@@ -634,7 +775,7 @@ def _parse_skeletalmesh_buffers_with_index(data, index_buffer_candidate):
 
 def read_names(uasset_path):
     """cooked uassetのNameMapを読む。"""
-    with open(uasset_path, "rb") as f:
+    with _open_long(uasset_path, "rb") as f:
         data = f.read()
     if struct.unpack_from("<I", data, 0)[0] != 0x9E2A83C1:
         raise RuntimeError("uasset magic mismatch")
@@ -678,7 +819,7 @@ def find_refskeleton(uexp_path, names, with_offset=False, min_bones=40):
     返り値: (bones[(name,parent_idx)], transforms[10要素], tsize)
     with_offset=True なら (data, bones名のみ, transform先頭オフセット) も返す。
     min_bones: 髪など小骨格のメッシュは下げる(既定40=プレイヤー衣装向け)。"""
-    with open(uexp_path, "rb") as f:
+    with _open_long(uexp_path, "rb") as f:
         data = f.read()
     n_names = len(names)
 
@@ -752,6 +893,49 @@ def die(tag, msg):
     sys.exit(1)
 
 
+# --------------------------------------------------- Blender保存失敗の翻訳(dev#472)
+# 2026-07-31 ぱん実機(v2.2.11): Phase 1(step01)の保存が失敗し、Blenderの内部
+# 保存処理(既存ファイルを.blend1へリネームしてから新規保存する"version backup"
+# 機構)の例外が生のままユーザーへ露出した:
+#   RuntimeError: Error: Unable to make version backup
+# オーナー評「僕がとんでもなく困惑したから、エンドユーザーもそうだろう」。
+# 同一ログのPhase 0に「別の変換プロセスが並走していた」証跡があり、
+# 「保存先の既存.blendの置き換えリネームが他プロセスのロックで失敗した」が
+# 有力仮説(このロックの発生経路自体の特定はdev#472の対象外、別建て調査)。
+#
+# 構造対策の本体は呼び出し側(pipeline\\blender\\vp_bl.py::save_mainfile_or_die)が
+# save_version=0を設定してバックアップ用リネーム自体を起こさないこと。
+# この関数はそれでもなお保存が失敗した場合の最後の翻訳層で、bpyに依存しない
+# 純関数(Blenderを起動せず単体試験できる)。
+_SAVE_ERROR_PATTERNS = ("version backup",)
+
+
+def translate_save_error(exc):
+    """bpy.ops.wm.save_as_mainfile失敗の例外を、ユーザー向けメッセージへ翻訳する。
+
+    保存失敗と無関係な例外にはNoneを返す(呼び出し側はNoneならそのまま
+    re-raise し、握りつぶさない — 何にでも同じ文言をかぶせる実装を避けるため)。
+    """
+    msg = str(exc)
+    low = msg.lower()
+    if not any(p in low for p in _SAVE_ERROR_PATTERNS):
+        return None
+    return (
+        "Output file save failed: the destination appears to be in use by "
+        "another process. Please check whether the conversion was started "
+        "twice, then wait a moment and try again."
+    )
+
+
+def format_exception_for_log(exc):
+    """診断ログ用に例外の型+原文を1行へ整形する(bpyに依存しない純関数)。
+
+    translate_save_errorがユーザー向けに丸めたメッセージへ差し替えても、
+    元の例外(英語原文・型名)は必ずこちらでログ側に残す
+    (呼び出し側=vp_bl.save_mainfile_or_dieが die() の直前にprintする)。"""
+    return f"{type(exc).__name__}: {exc}"
+
+
 # ============================================================================
 # U54 WP-B(2026-07-27): マシン共有キャッシュ(バニラ準備/ライブテンプレート)
 # ----------------------------------------------------------------------------
@@ -800,7 +984,7 @@ def sha256_file(path):
     クリーン都度環境でのキャッシュ鮮度判定が原理的に成立しない。内容の
     sha256は展開位置・タイミングに一切依存せず安定する。"""
     h = hashlib.sha256()
-    with open(path, "rb") as f:
+    with _open_long(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
@@ -829,7 +1013,7 @@ def acquire_cache_lock(cache_dir, poll_interval=2.0, stale_seconds=CACHE_LOCK_ST
     waited = False
     while True:
         try:
-            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            fd = os.open(_win_long_path(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump({"pid": os.getpid(), "time": time.time()}, f)
             if waited:
@@ -838,7 +1022,7 @@ def acquire_cache_lock(cache_dir, poll_interval=2.0, stale_seconds=CACHE_LOCK_ST
         except FileExistsError:
             age = stale_seconds + 1  # 読めない/壊れたロックはstale扱い(安全側: 奪取)
             try:
-                with open(lock_path, encoding="utf-8") as f:
+                with _open_long(lock_path, encoding="utf-8") as f:
                     info = json.load(f)
                 age = time.time() - float(info.get("time", 0))
             except (OSError, ValueError, TypeError):
@@ -925,6 +1109,36 @@ def rmtree_robust(path, ignore_errors=False):
         shutil.rmtree(path, onexc=_retry)
     else:
         shutil.rmtree(path, onerror=_retry)
+
+
+def remove_path_robust(path, ignore_errors=False):
+    """rmtree_robustのファイル/ディレクトリ両対応版(dev#1636)。
+
+    devtools\\disk_guard.pyの年齢規則(work直下削除)はディレクトリと素の
+    ファイル(*_progress.md等)の両方を同じ削除関数に渡す。rmtree_robustは
+    shutil.rmtreeベースでディレクトリ専用のため、ファイルに適用すると
+    NotADirectoryError(WinError 267)で必ず失敗していた(delete_failed
+    708件超、v2.12.2リリース1回だけで109件)。
+
+    path種別で分岐し、ファイルならos.remove(read-only解除つきで1回だけ
+    再試行)、ディレクトリなら従来どおりrmtree_robustへ委譲する。"""
+    if not os.path.exists(path):
+        return
+    if not os.path.isdir(path):
+        try:
+            os.remove(path)
+        except OSError:
+            try:
+                os.chmod(path, stat.S_IWRITE)
+            except OSError:
+                pass
+            try:
+                os.remove(path)
+            except OSError:
+                if not ignore_errors:
+                    raise
+        return
+    rmtree_robust(path, ignore_errors=ignore_errors)
 
 
 def cache_tmp_dir(final_dir):

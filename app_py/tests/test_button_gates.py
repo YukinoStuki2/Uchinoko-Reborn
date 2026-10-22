@@ -1,4 +1,4 @@
-# test_button_gates.py -- dev#639/#640受入条件。
+# test_button_gates.py -- dev#639/#640/#648受入条件。
 #
 # 対象issue:
 #   - dev#639: UpdateButtonStates()のblenderReadyゲート
@@ -9,6 +9,11 @@
 #   - dev#640: KillBlenderSetupProcess()(同cs L.1339-1353)未移植。
 #     app_py\blender_setup.py に子プロセス参照+kill APIを追加し、
 #     GUI終了時(WM_DELETE_WINDOW)から黙って始末する配線ができたことの試験。
+#   - dev#648: matsButtonの有効化条件からHasNoueFullBuild()
+#     (同cs L.2452-2466)が抜け落ちていた(#639/PR #647統合時点のギャップ)。
+#     noue_full_build.has_noue_full_build()を追加し、matsButtonにのみ
+#     ゲートしたこと(previewButtonは対象外の非対称)の配線試験。
+#     判定ロジック自体の単体試験はtest_noue_full_build.py側。
 #
 # 方針(共通契約どおり、tkの実ウィンドウは一切開かない):
 # test_main_window_diagnostics_wiring.py と同じ「フェイクself + 束縛前
@@ -17,15 +22,31 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 
 _APP_PY_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _APP_PY_DIR not in sys.path:
     sys.path.insert(0, _APP_PY_DIR)
 
 import blender_setup  # noqa: E402
+import noue_full_build  # noqa: E402
 from ui import main_window as mw  # noqa: E402
+
+
+def _make_full_build(work_root: str, vrm_path: str) -> None:
+    """dev#648: has_noue_full_build()がTrueを返す最小構成を作る
+    (test_noue_full_build.pyの同名ヘルパーと同じ組み立て)。"""
+    build = noue_full_build.build_dir_path(work_root, vrm_path)
+    os.makedirs(os.path.join(build, "noue_work", "variant"), exist_ok=True)
+    os.makedirs(os.path.join(build, "atlas"), exist_ok=True)
+    os.makedirs(os.path.join(build, "noue_mat_override"), exist_ok=True)
+    with open(
+        os.path.join(build, "build_provenance.json"), "w", encoding="utf-8"
+    ) as fh:
+        fh.write("{}")
 
 
 # ---------------------------------------------------------------------------
@@ -84,20 +105,41 @@ class _FakeSelfForGates:
     (実在するvrm_pathを指すvrmBox)・_work_root_failed=Falseにしておき、
     本ファイルの本来の関心事(blenderReady/busyゲート)を検査する既存テスト群が
     このガード追加で意図せず壊れないようにする(hasVrm/workRootFailed単体の
-    ガードはtest_preview_freshness.py/test_guard_dialogs.pyの担当)。"""
+    ガードはtest_preview_freshness.py/test_guard_dialogs.pyの担当)。
+
+    2026-08-02 dev#648統合: _update_button_states()がmatsButtonの有効化に
+    noue_full_build.has_noue_full_build(self.work_root, vrm_path)も見るように
+    なったため、self.work_rootを保持する(既定はtempfile.mkdtemp()、
+    呼び出し側で明示指定も可)。full_build=True(既定)かつvrm_pathが
+    与えられていれば、has_noue_full_build()がTrueになる最小構成を自動で
+    作る——本ファイルの他テスト群(blenderReady/busy/hasVrmゲートが関心事)を
+    このガード追加で意図せず壊さないため。matsButton単体のフルビルドゲートは
+    full_build=Falseを明示する専用テスト群(dev#648セクション)が担当する。"""
 
     _update_button_states = mw.MainWindow._update_button_states
     _set_running_ui_state = mw.MainWindow._set_running_ui_state
     _refresh_convert_button_freshness = mw.MainWindow._refresh_convert_button_freshness
     _set_busy_bar_mode = mw.MainWindow._set_busy_bar_mode
+    # dev#897: statusLabel設定がself._set_status()経由に変わったための追加束縛。
+    _set_status = mw.MainWindow._set_status
 
-    def __init__(self, *, vrm_path: str = "", fresh: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        vrm_path: str = "",
+        fresh: bool = True,
+        work_root: str = "",
+        full_build: bool = True,
+    ) -> None:
         self._is_pipeline_running = False
         self._blender_ready = False
         self._work_root_failed = False
         self._active_handle = None
         self._fresh = fresh
         self._busy_bar_geometry = {"x": 330, "y": 46, "width": 740, "height": 12}
+        self.work_root = work_root or tempfile.mkdtemp(prefix="d2p_gate_test_")
+        if full_build and vrm_path.strip():
+            _make_full_build(self.work_root, vrm_path)
         self.widgets = {
             "convertButton": _FakeButton(),
             "matsButton": _FakeButton(),
@@ -212,6 +254,57 @@ def test_set_running_ui_state_false_enables_when_blender_ready(tmp_path):
     mw.MainWindow._set_running_ui_state(fake_self, False)
     for key in ("convertButton", "matsButton", "previewButton"):
         assert fake_self.widgets[key].state == "normal", key
+
+
+# ===========================================================================
+# dev#648: matsButtonのHasNoueFullBuild()ゲート(previewButtonは対象外)
+# ===========================================================================
+
+
+def test_mats_button_disabled_without_noue_full_build_even_when_other_gates_pass(
+    tmp_path,
+):
+    # 受入条件本体: busy/blenderReady/hasVrm/workRootFailedが全て条件を満たして
+    # いても、フルビルド成果物(noue_work/variant, atlas, noue_mat_override,
+    # build_provenance.json)が無ければmatsButtonは無効のまま。
+    # previewButtonはC#版どおりHasNoueFullBuild()の対象外なので有効になる
+    # (非対称であることの確認)。
+    vrm = tmp_path / "a.vrm"
+    vrm.write_bytes(b"")
+    fake_self = _FakeSelfForGates(vrm_path=str(vrm), full_build=False)
+    fake_self._blender_ready = True
+    fake_self._is_pipeline_running = False
+    mw.MainWindow._update_button_states(fake_self)
+    assert fake_self.widgets["matsButton"].state == "disabled"
+    assert fake_self.widgets["previewButton"].state == "normal"
+
+
+def test_mats_button_enabled_when_noue_full_build_present(tmp_path):
+    # 正の対照: フルビルド成果物一式が揃っていれば、他のゲートを満たす限り
+    # matsButtonも有効になる。
+    vrm = tmp_path / "a.vrm"
+    vrm.write_bytes(b"")
+    fake_self = _FakeSelfForGates(vrm_path=str(vrm), full_build=True)
+    fake_self._blender_ready = True
+    fake_self._is_pipeline_running = False
+    mw.MainWindow._update_button_states(fake_self)
+    assert fake_self.widgets["matsButton"].state == "normal"
+    assert fake_self.widgets["previewButton"].state == "normal"
+
+
+def test_mats_button_disabled_when_full_build_becomes_incomplete(tmp_path):
+    # 負の対照: 一度揃っていたフルビルド成果物のうち1ディレクトリだけ
+    # 消えた(=中断した再変換の残骸を模擬)場合もmatsButtonは無効へ戻る。
+    vrm = tmp_path / "a.vrm"
+    vrm.write_bytes(b"")
+    fake_self = _FakeSelfForGates(vrm_path=str(vrm), full_build=True)
+    fake_self._blender_ready = True
+    fake_self._is_pipeline_running = False
+    build = noue_full_build.build_dir_path(fake_self.work_root, str(vrm))
+    shutil.rmtree(os.path.join(build, "atlas"))
+    mw.MainWindow._update_button_states(fake_self)
+    assert fake_self.widgets["matsButton"].state == "disabled"
+    assert fake_self.widgets["previewButton"].state == "normal"
 
 
 # ===========================================================================

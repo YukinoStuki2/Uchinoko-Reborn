@@ -83,6 +83,147 @@ $env:PYTHONUTF8 = "1"
 # 独立した別目的の設定。この行を消してもcp932対策には影響しないが、消さないこと)。
 $env:PYTHONUNBUFFERED = "1"
 
+# 2026-07-26: .Path はUNCパスに対してプロバイダ修飾形("Microsoft.PowerShell.Core\FileSystem::\\...")
+# を返し後段のパス操作を壊す(export_from_unity.ps1で見つかった同型の不具合)。.ProviderPathを使う。
+#
+# dev#702(第3弾、WP-2): この初期化ブロック($Job/$JobDir/$Here/$Pipeline/$cfg)は
+# 元々Mutex取得ブロックの後(旧111-121行目)にあったが、下のPhase -1(prefab解決)が
+# $cfg.vrm_pathを読む必要があり、かつUnity輸出(数十秒〜数分)の間はBlender専用Mutexを
+# 握ったままにしたくない(他の変換を不要にブロックするため)ため、Mutex取得より前へ
+# 繰り上げた(内容は不変、位置のみ。PROPOSAL WP-2手順1、work\rd_702\PROPOSAL.md根拠E)。
+$Job = (Resolve-Path $Job).ProviderPath
+$JobDir = Split-Path $Job -Parent
+$Here = $PSScriptRoot
+$Pipeline = Split-Path $Here -Parent
+
+# 2026-07-28(起票案1): job.jsonはGUIがUTF-8(BOMなし)で書く。PS5.1のGet-Contentは
+# 既定がANSI(日本語Windowsではcp932)のため、非ASCIIパスを含むjob.jsonをcp932誤読
+# するとエスケープ対「\\」の前半バイトがSJIS2バイト文字に食われて裸の「\」が残り、
+# ConvertFrom-Jsonが「認識できないエスケープ」で必ず落ちる(独立2件の実報告)。
+# job.jsonの読取は必ず -Encoding UTF8 を明示する(BOM有無どちらのUTF-8も正しく読める)。
+$cfg = Get-Content $Job -Raw -Encoding UTF8 | ConvertFrom-Json
+
+# =====================================================================
+# Phase -1: prefab入力の解決(dev#702 第3弾、WP-2)。
+#
+# job.jsonのvrm_pathが.prefabの場合、Unity輸出(prefab->FBX一式)を解決してから
+# 本来の変換フローへ入る。ロジックは全てapp_py\lu_export.py(Python、実体は
+# 元devtools\lu_export.py。devtoolsは配布物に含まれないため、出荷される
+# convert.ps1/GUIが依存できるよう本WPでapp_py側へ移設した。devtools側は
+# 後方互換の薄いshim)側に置き、本ps1はサブプロセス呼び出しの殻に留める
+# (CLAUDE.md言語方針「ps1に新しいロジックを書かない」)。
+#
+# Mutex取得より前に置く理由: Unity輸出は重い処理(数十秒〜数分)であり、
+# Blender専用Mutexをその間ずっと握ったままにすると他の変換を不要にブロックする
+# ため(このMutexはBlenderの共有ユーザープロファイル上のVRMアドオンを守るためのもので、
+# Unity輸出そのものとは無関係)。
+#
+# 既存のfbx+humanoid.json直接入力(vrm_pathが.prefabでない場合)はこのif分岐に
+# 一切入らない(負の対照: 既存relgate fixtureの経路は無変更のまま)。
+if ($cfg.vrm_path -like "*.prefab") {
+    $AppRootForLu = Split-Path $Pipeline -Parent
+    # dev/dist両対応: devリポジトリでは"app_py"、配布物では"app"にリネームされる
+    # (app_py\build.py L.494/508、devtools\deploy.py WHITELIST_DIRS)。両方試す
+    # (CLAUDE.md「外部依存パスの原則」: 自動発見は候補を複数試し、判定をログへ残す)。
+    $LuExportPy = $null
+    foreach ($candidateDirName in @("app", "app_py")) {
+        $candidate = Join-Path (Join-Path $AppRootForLu $candidateDirName) "lu_export.py"
+        if (Test-Path $candidate) { $LuExportPy = $candidate; break }
+    }
+    if (-not $LuExportPy) {
+        Write-Error "lu_export.py not found under $AppRootForLu\app or $AppRootForLu\app_py [D2P_LU_EXPORT_NOT_FOUND]"
+        exit 1
+    }
+
+    # Pythonの解決: export_from_unity.ps1のFind-D2PPython(L.56-68)と同じ探索の
+    # 意図的な複製(この時点ではBlender同梱python($BPython)は未解決——Blender準備
+    # 自体がこの後のPhase 0で行われるため使えない。export_from_unity.ps1側の
+    # コメントが明記する「dot-sourceによる共有はトップレベル一気通貫スクリプト
+    # 同士では素直に組めないため、複製時はどちらかを変更したらもう一方も追随
+    # させる」という既存の合意事項をそのまま踏襲する)。
+    function Find-D2PPythonForConvert {
+        param([string]$Root)
+        foreach ($pat in @("assets\tools\*\*\python\bin\python.exe",
+                           "tools\*\*\python\bin\python.exe")) {
+            $hit = Get-ChildItem (Join-Path $Root $pat) -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            if ($hit) { return $hit.FullName }
+        }
+        $cmd = Get-Command python -ErrorAction SilentlyContinue
+        if ($cmd -and $cmd.Source -and ($cmd.Source -notmatch "WindowsApps")) { return $cmd.Source }
+        return $null
+    }
+    $LuPython = Find-D2PPythonForConvert -Root $AppRootForLu
+    if (-not $LuPython) {
+        Write-Error "No Python runtime found to resolve prefab input [D2P_LU_NO_PYTHON]"
+        exit 1
+    }
+
+    $WorkRootForLu = Split-Path $JobDir -Parent
+    $ExportScriptForLu = Join-Path $Pipeline "cli\export_from_unity.ps1"
+    $LuResultPath = Join-Path $JobDir "lu_resolve_result.json"
+    Write-Host "[Phase -1] Resolving prefab input via Unity export: $($cfg.vrm_path)"
+    # 前任実測バグ(PowerShell関数内で`&`呼び出しの標準出力を握りつぶさないと
+    # 戻り値ストリームに混入する)の再発防止として、JSON結果はstdout経由で
+    # パースせず専用の一時ファイル(--result-json)経由で受け渡す。stdout/stderrは
+    # 他の子プロセス呼び出しと同様2>&1でログへ素通りさせるだけ(パース対象にしない)。
+    & $LuPython $LuExportPy resolve --prefab $cfg.vrm_path --work-root $WorkRootForLu `
+        --export-script $ExportScriptForLu --result-json $LuResultPath 2>&1 |
+        ForEach-Object { Write-Host $_ }
+    $LuExitCode = $LASTEXITCODE
+    if (-not (Test-Path $LuResultPath)) {
+        Write-Error "lu_export.py did not produce a result file [D2P_LU_NO_RESULT]"
+        exit 1
+    }
+    $LuJson = Get-Content $LuResultPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    Remove-Item $LuResultPath -ErrorAction SilentlyContinue
+    if ($LuExitCode -ne 0 -or -not $LuJson.ok) {
+        $LuReason = if ($LuJson -and $LuJson.reason) { $LuJson.reason } else { "(no reason provided)" }
+        Write-Error "Prefab resolution failed: $LuReason [D2P_LU_RESOLVE_FAILED]"
+        exit 1
+    }
+    Write-Host "[Phase -1] fresh=$($LuJson.fresh) exported=$($LuJson.exported) fbx=$($LuJson.fbx)"
+
+    # 解決済みfbxへ差し替えたjob設定をjob.resolved.jsonとして保存し、以降は
+    # そちらを本来のjob.jsonとして扱う。元のjob.json(vrm_path=prefab)自体は
+    # 変更しない(GUI側の再実行・表示はprefabパスを保つ設計、WP-3節)。
+    $cfg.vrm_path = $LuJson.fbx
+    if ($LuJson.humanoid_json) {
+        if ($cfg.PSObject.Properties.Match("humanoid_json").Count -gt 0) {
+            $cfg.humanoid_json = $LuJson.humanoid_json
+        } else {
+            $cfg | Add-Member -NotePropertyName "humanoid_json" -NotePropertyValue $LuJson.humanoid_json -Force
+        }
+    }
+    # dev#19 R3統合(dev#1375、2026-08-11): humanoid_jsonと同じマージパターンで
+    # physbones_json(dev#1356サイドカー、prefab側PhysBoneチェーン搬送)も
+    # job.resolved.jsonへ載せる。従来はLuJsonの結果に含まれていた
+    # (app_py\lu_export.py resolve_prefab_to_fbx()の戻り値キー)にもかかわらず、
+    # この結線が無かったため揺れもの自動割当エンジン(pipeline\py\sway_assign.py)
+    # がprefab入力のPhysBoneデータへ一切到達できなかった(既知ギャップ、
+    # work\rd_19_ears\PROPOSAL.md)。physbones.jsonが無い/PhysBone非搭載の
+    # アバターではLuJson.physbones_jsonがnullのままなのでこの分岐に入らず、
+    # job.resolved.jsonにキー自体が付かない(既定=未実装状態と同一、無退行)。
+    if ($LuJson.physbones_json) {
+        if ($cfg.PSObject.Properties.Match("physbones_json").Count -gt 0) {
+            $cfg.physbones_json = $LuJson.physbones_json
+        } else {
+            $cfg | Add-Member -NotePropertyName "physbones_json" -NotePropertyValue $LuJson.physbones_json -Force
+        }
+    }
+    $ResolvedJobPath = Join-Path $JobDir "job.resolved.json"
+    # dev#957: PS5.1(Desktop Edition)の "Out-File -Encoding utf8" は必ずBOM付き
+    # UTF-8で書く(pwsh/PS7+はBOM無し。実装時の確認がpwshで行われ再現しなかった
+    # 模様)。PS5.1には -Encoding utf8NoBOM が無いため、.NETのUTF8Encoding($false)
+    # (BOM抑止)を直接使ってBOM無しUTF-8で書く。読み側(vp_core.load_job)も
+    # utf-8-sig化済みでBOM有無どちらも読めるが、書き側もBOM無しへ揃えて再発を防ぐ。
+    $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($ResolvedJobPath, ($cfg | ConvertTo-Json -Depth 20), $Utf8NoBom)
+    $Job = (Resolve-Path $ResolvedJobPath).ProviderPath
+    $JobDir = Split-Path $Job -Parent
+    $cfg = Get-Content $Job -Raw -Encoding UTF8 | ConvertFrom-Json
+}
+
 # パイプライン全体の排他ロック。Blender(共有のユーザープロファイル上のVRMアドオン)は
 # 同時実行に耐えない。2026-07-21に並列実行でアドオン書き換え衝突
 # →インポート即死の実害を確認(flatv3事件)。プロセス終了時に自動解放される
@@ -106,19 +247,6 @@ if (-not $acquired) {
     exit 1
 }
 
-# 2026-07-26: .Path はUNCパスに対してプロバイダ修飾形("Microsoft.PowerShell.Core\FileSystem::\\...")
-# を返し後段のパス操作を壊す(export_from_unity.ps1で見つかった同型の不具合)。.ProviderPathを使う。
-$Job = (Resolve-Path $Job).ProviderPath
-$JobDir = Split-Path $Job -Parent
-$Here = $PSScriptRoot
-$Pipeline = Split-Path $Here -Parent
-
-# 2026-07-28(起票案1): job.jsonはGUIがUTF-8(BOMなし)で書く。PS5.1のGet-Contentは
-# 既定がANSI(日本語Windowsではcp932)のため、非ASCIIパスを含むjob.jsonをcp932誤読
-# するとエスケープ対「\\」の前半バイトがSJIS2バイト文字に食われて裸の「\」が残り、
-# ConvertFrom-Jsonが「認識できないエスケープ」で必ず落ちる(独立2件の実報告)。
-# job.jsonの読取は必ず -Encoding UTF8 を明示する(BOM有無どちらのUTF-8も正しく読める)。
-$cfg = Get-Content $Job -Raw -Encoding UTF8 | ConvertFrom-Json
 $Blender = $cfg.paths.blender_exe
 # u54(2026-07-27): Blenderポータブルの同梱を廃止した。配布物(_internal\pipeline\cli
 # の位置から辿るAppRoot=_internal直下にassets\がある構成)では、
@@ -232,14 +360,45 @@ function Format-FreeSpaceGB([string]$Path) {
 
 # マスクで潰れる情報を、個人を特定しない派生事実として残す。CLAUDE.mdが挙げる
 # 「他PCでだけ起きる」典型要因(非ASCII/空白/OneDrive配下/UNC/パス長)そのもの
+#
+# dev#372: 従来はlen/nonAscii/hasSpace/UNC/underOneDriveのみで、実ユーザー報告
+# HMZ87QGE(v2.2.11)のように`GetPathRoot`が例外を起こした当のパスが「なぜ不正な
+# 形式だったか」を診断する手がかり(root種別・引用符・不正文字混入・未展開%VAR%・
+# 末尾の空白/ドット)が無かった。最小事実集合の定義は pipeline\py\path_privacy.py
+# (path_facts()のdocstring)を正とし、ここはPowerShell実装として同じ項目を独立に
+# 揃える(app_py\inquiry.py の factify_generic_path も同様)。すべて純文字列解析で、
+# 外部プロセス呼び出し・ファイルシステムアクセスは一切しない(この関数はBlender
+# 同梱Pythonの起動診断でも使われるため、壊れたパスがここで例外を誘発してはならない)。
 function Get-PathFacts([string]$P) {
     if (-not $P) { return "(no path)" }
     $nonAscii = ($P.ToCharArray() | Where-Object { [int]$_ -gt 127 }).Count -gt 0
     $hasSpace = $P.Contains(" ")
-    $isUnc = $P.StartsWith("\\")
+    $isExtended = $P.StartsWith("\\?\") -or $P.StartsWith("\\.\")
+    $isUnc = $P.StartsWith("\\") -and -not $isExtended
     $oneDrive = Get-SafeValue { $env:OneDrive } ""
     $underOneDrive = ($oneDrive -and $oneDrive -ne "(failed to retrieve)" -and $P.StartsWith($oneDrive, [System.StringComparison]::OrdinalIgnoreCase))
-    return "len=$($P.Length) nonAscii=$nonAscii hasSpace=$hasSpace UNC=$isUnc underOneDrive=$underOneDrive"
+
+    $isBlank = $P.Trim().Length -eq 0
+    $root = "relative"
+    if ($isBlank) { $root = "none" }
+    elseif ($isExtended) { $root = "extended" }
+    elseif ($isUnc) { $root = "unc" }
+    elseif ($P -match '^[A-Za-z]:[\\/]') { $root = "drive" }
+    elseif ($P -match '^[A-Za-z]:') { $root = "driveRelative" }
+    elseif ($P.StartsWith("\") -or $P.StartsWith("/")) { $root = "rootRelative" }
+
+    $segs = @($P -split '[\\/]+' | Where-Object { $_.Length -gt 0 }).Count
+    $quote = $P.Contains('"')
+    $envVar = [bool]($P -match '%[A-Za-z_][A-Za-z0-9_()]*%')
+    $trailWs = [bool]($P.Length -gt 0 -and [char]::IsWhiteSpace($P[$P.Length - 1]))
+    $trailDot = [bool]($P.Length -gt 0 -and $P[$P.Length - 1] -eq '.')
+    $invalidSet = [System.IO.Path]::GetInvalidPathChars() + [char[]]"<>|?*"
+    $hasInvalid = $false
+    foreach ($ch in $P.ToCharArray()) { if ($invalidSet -contains $ch) { $hasInvalid = $true; break } }
+
+    return "len=$($P.Length) nonAscii=$nonAscii hasSpace=$hasSpace UNC=$isUnc underOneDrive=$underOneDrive " +
+        "segments=$segs root=$root quote=$quote invalidChars=$hasInvalid unexpandedEnvVar=$envVar " +
+        "trailingWhitespace=$trailWs trailingDot=$trailDot"
 }
 
 # dev#7: 旧`Mask-Path`(%USERPROFILE%の完全一致プレフィックスしか扱えなかった)を引退。
@@ -502,7 +661,19 @@ try {
     Write-Host ("Input path characteristics: " + (Get-PathFacts $avatarPath))
     Write-Host ("JobDir characteristics: " + (Get-PathFacts $JobDir))
     Write-Host ("Execution mode (EngineMode): $Mode")
-    $gitHash = Get-SafeValue { $repoRootForHeader = Split-Path $Pipeline -Parent; (& git -C $repoRootForHeader rev-parse --short HEAD 2>&1 | Select-Object -First 1) } "(no git / distribution build)"
+    # dev#886: 配布ビルド(展開先に.gitが無い)では、gitコマンドの実行自体を
+    # 試みてはならない(オーナー裁定: 「gitが認識されません」というエラー文言が
+    # ノイズなのではなく、配布ユーザーの環境で不要な・pushの疑いを招きかねない
+    # 処理が走ろうとすること自体が問題)。.gitディレクトリの有無で
+    # 開発チェックアウトかどうかを判定し、配布ビルドではgit実行そのものを
+    # 黙ってスキップする(devtools\deploy.pyがEXCLUDE_TOPで.gitを配布物から
+    # 常に除外しているため、この判定は信頼できる)。
+    $repoRootForHeader = Split-Path $Pipeline -Parent
+    if (Test-Path (Join-Path $repoRootForHeader ".git")) {
+        $gitHash = Get-SafeValue { (& git -C $repoRootForHeader rev-parse --short HEAD 2>&1 | Select-Object -First 1) } "(unavailable)"
+    } else {
+        $gitHash = "(no git / distribution build)"
+    }
     Write-Host ("git commit: $gitHash")
     Write-Host "======================="
 } catch {
@@ -841,7 +1012,9 @@ $Step01IgnoredKeys = @(
     # マテリアル工程(Blenderより後段)の設定
     "unlit", "shadow_lift", "force_two_sided",
     # 実行環境・出力先・GUIの記憶用。step01の出力内容を変えない
-    "paths", "genders", "engine_mode", "license_confirmed"
+    # (preflight_nonblocking: dev#1230(2026-08-08)、Phase4の判定にしか
+    # 使わず、Blender工程=step01の出力を一切変えない)
+    "paths", "genders", "engine_mode", "license_confirmed", "preflight_nonblocking"
 )
 $Step01SigFile = Join-Path $JobDir "converted\step01_clean.sig"
 

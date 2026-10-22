@@ -1,1306 +1,2720 @@
 {
-  "LabelLanguage": {
-    "ja": "Language",
-    "en": "Language",
-    "ko": "Language",
-    "zhTW": "Language",
-    "zhCN": "Language"
-  },
-  "TipLanguageSwitch": {
-    "ja": "表示言語を切り替えます(すぐに反映されます)",
-    "en": "Switch the display language (applies immediately)",
-    "ko": "표시 언어를 전환합니다(즉시 적용됩니다)",
-    "zhTW": "切換顯示語言(立即套用)",
-    "zhCN": "切换显示语言(立即生效)"
-  },
-  "TitleSubtitle": {
-    "ja": "あなたのアバターをパルワールドへ",
-    "en": "Bring your avatar into Palworld",
-    "ko": "당신의 아바타를 팰월드로",
-    "zhTW": "讓你的角色模型登入幻獸帕魯",
-    "zhCN": "让你的角色模型登入幻兽帕鲁"
-  },
-  "LabelAvatar": {
-    "ja": "アバター:",
-    "en": "Avatar:",
-    "ko": "아바타:",
-    "zhTW": "角色模型:",
-    "zhCN": "角色模型:"
-  },
-  "BtnBrowse": {
-    "ja": "参照...",
-    "en": "Browse...",
-    "ko": "찾아보기...",
-    "zhTW": "瀏覽...",
-    "zhCN": "浏览..."
-  },
-  "FileFilterAvatar": {
-    "ja": "アバター (*.vrm;*.fbx;*.prefab)|*.vrm;*.fbx;*.prefab",
-    "en": "Avatar (*.vrm;*.fbx;*.prefab)|*.vrm;*.fbx;*.prefab",
-    "ko": "아바타 (*.vrm;*.fbx;*.prefab)|*.vrm;*.fbx;*.prefab",
-    "zhTW": "角色模型 (*.vrm;*.fbx;*.prefab)|*.vrm;*.fbx;*.prefab",
-    "zhCN": "角色模型 (*.vrm;*.fbx;*.prefab)|*.vrm;*.fbx;*.prefab"
-  },
-  "DlgTitleChooseAvatarFile": {
-    "ja": "アバターのファイルを選んでください",
-    "en": "Select an avatar file",
-    "ko": "아바타 파일을 선택하세요",
-    "zhTW": "請選擇角色模型檔案",
-    "zhCN": "请选择角色模型文件"
-  },
-  "HintDragDrop": {
-    "ja": "(D&DでもOK)",
-    "en": "(drag & drop OK)",
-    "ko": "(드래그 앤 드롭 가능)",
-    "zhTW": "(可拖放檔案)",
-    "zhCN": "(可拖放文件)"
-  },
-  "BtnFullConvert": {
-    "ja": "フル変換(MOD作成)",
-    "en": "Full Convert (Create MOD)",
-    "ko": "전체 변환(모드 생성)",
-    "zhTW": "完整轉換(建立 MOD)",
-    "zhCN": "完整转换(创建 MOD)"
-  },
-  "BtnCancelConvert": {
-    "ja": "変換を中止",
-    "en": "Cancel Conversion",
-    "ko": "변환 중지",
-    "zhTW": "中止轉換",
-    "zhCN": "中止转换"
-  },
-  "TitleConfirm": {
-    "ja": "確認",
-    "en": "Confirm",
-    "ko": "확인",
-    "zhTW": "確認",
-    "zhCN": "确认"
-  },
-  "ConfirmCancelConvertBody": {
-    "ja": "実行中の変換を中止しますか?",
-    "en": "Cancel the running conversion?",
-    "ko": "실행 중인 변환을 중지하시겠습니까?",
-    "zhTW": "要中止正在執行的轉換嗎?",
-    "zhCN": "要中止正在进行的转换吗?"
-  },
-  "StatusPromptVrm": {
-    "ja": "prefab または VRM ファイルを入れてください",
-    "en": "Please add a prefab or VRM file",
-    "ko": "prefab 또는 VRM 파일을 넣어주세요",
-    "zhTW": "請放入 prefab 或 VRM 檔案",
-    "zhCN": "请放入 prefab 或 VRM 文件"
-  },
-  "BtnBlenderRetry": {
-    "ja": "Blenderを再取得",
-    "en": "Retry Blender Setup",
-    "ko": "Blender 다시 받기",
-    "zhTW": "重新取得 Blender",
-    "zhCN": "重新获取 Blender"
-  },
-  "TipBlenderRetry": {
-    "ja": "Blenderの初回セットアップをもう一度試みます",
-    "en": "Retries the first-time Blender setup",
-    "ko": "Blender 초기 설정을 다시 시도합니다",
-    "zhTW": "重新嘗試 Blender 的首次設定",
-    "zhCN": "重新尝试 Blender 的首次设置"
-  },
-  "LabelKodawari": {
-    "ja": "こだわり設定",
-    "en": "Advanced Settings",
-    "ko": "세부 설정",
-    "zhTW": "進階設定",
-    "zhCN": "高级设置"
-  },
-  "LabelShadowStrength": {
-    "ja": "影の濃さ:",
-    "en": "Shadow Strength:",
-    "ko": "그림자 농도:",
-    "zhTW": "陰影濃度:",
-    "zhCN": "阴影浓度:"
-  },
-  "TipShadowBar": {
-    "ja": "100%=ふつうの影 / 下げるほど影の中でも明るく見えます(既定30%)。\n反映は「フル変換」または「影のみ更新」の後、ゲーム内で確認できます",
-    "en": "100% = normal shadow / the lower the value, the brighter shadows appear (default 30%).\nCheck the result in-game after \"Full Convert\" or \"Update Shadow Only\".",
-    "ko": "100%=일반 그림자 / 낮출수록 그림자 안도 밝게 보입니다(기본값 30%).\n적용 결과는 「전체 변환」 또는 「그림자만 업데이트」 후 게임에서 확인할 수 있습니다",
-    "zhTW": "100%=一般陰影 / 數值越低,陰影內也會顯示得越亮(預設 30%)。\n套用後請在「完整轉換」或「僅更新陰影」執行後於遊戲內確認",
-    "zhCN": "100%=一般阴影 / 数值越低,阴影内也会显示得越亮(默认 30%)。\n应用后请在「完整转换」或「仅更新阴影」执行后在游戏内确认"
-  },
-  "BtnMatsOnly": {
-    "ja": "影のみ更新(高速)",
-    "en": "Update Shadow Only (Fast)",
-    "ko": "그림자만 업데이트(빠름)",
-    "zhTW": "僅更新陰影(快速)",
-    "zhCN": "仅更新阴影(快速)"
-  },
-  "TipMatsButton": {
-    "ja": "影の濃さだけを変えてMODを作り直します(1分ほど。フル変換は6分ほど)。\nこのアバターを一度「フル変換」してあることが前提です(していないと押せません)。\n影の濃さ以外(削除ボーンなど)を変えた場合は反映できないので「フル変換」を押してください",
-    "en": "Rebuilds the MOD changing only shadow strength (about 1 minute; Full Convert takes about 6 minutes).\nRequires that this avatar has already been through \"Full Convert\" once (otherwise this button is disabled).\nIf you changed anything other than shadow strength (e.g. drop bones), use \"Full Convert\" instead.",
-    "ko": "그림자 농도만 변경하여 모드를 다시 만듭니다(약 1분. 전체 변환은 약 6분).\n이 아바타를 한 번 「전체 변환」한 것이 전제입니다(하지 않았으면 누를 수 없습니다).\n그림자 농도 이외(삭제 본 등)를 변경한 경우에는 반영되지 않으므로 「전체 변환」을 눌러주세요",
-    "zhTW": "僅變更陰影濃度並重新建立 MOD(約 1 分鐘。完整轉換約需 6 分鐘)。\n前提是這個角色模型已經執行過一次「完整轉換」(未執行過則無法按下此按鈕)。\n若變更了陰影濃度以外的設定(如刪除骨骼等),請改按「完整轉換」",
-    "zhCN": "仅更改阴影浓度并重新生成 MOD(约 1 分钟。完整转换约需 6 分钟)。\n前提是该角色模型已执行过一次「完整转换」(未执行则无法点击此按钮)。\n如果更改了阴影浓度以外的设置(如删除骨骼等),请改为点击「完整转换」"
-  },
-  "LabelDropBones": {
-    "ja": "削除ボーン(上級):",
-    "en": "Drop Bones (Advanced):",
-    "ko": "삭제할 본(고급):",
-    "zhTW": "刪除骨骼(進階):",
-    "zhCN": "删除骨骼(高级):"
-  },
-  "TipDropBones": {
-    "ja": "カンマ区切りでボーン名を指定すると、そのボーン(と子孫)に付いたパーツを削除します。\nボーン名の一覧はプレビュー生成後の work\\<名前>\\converted\\avatar_meta.json の \"bones\" を参照",
-    "en": "Enter bone names separated by commas to remove parts attached to those bones (and their descendants).\nSee the \"bones\" list in work\\<name>\\converted\\avatar_meta.json after a preview has been generated.",
-    "ko": "쉼표로 구분하여 본 이름을 지정하면 해당 본(및 자식)에 붙은 파츠를 삭제합니다.\n본 이름 목록은 미리보기 생성 후 work\\<이름>\\converted\\avatar_meta.json의 \"bones\"를 참조하세요",
-    "zhTW": "以逗號分隔輸入骨骼名稱,即可刪除附加在該骨骼(及其子代)上的部件。\n骨骼名稱清單請參閱產生預覽後的 work\\<名稱>\\converted\\avatar_meta.json 中的 \"bones\"",
-    "zhCN": "以逗号分隔输入骨骼名称,即可删除附加在该骨骼(及其子级)上的部件。\n骨骼名称列表请参见生成预览后的 work\\<名称>\\converted\\avatar_meta.json 中的 \"bones\""
-  },
-  "HintDropBonesEmpty": {
-    "ja": "(通常は空欄でOK)",
-    "en": "(usually fine to leave blank)",
-    "ko": "(보통 비워둬도 됩니다)",
-    "zhTW": "(通常留空即可)",
-    "zhCN": "(通常留空即可)"
-  },
-  "BtnPreviewUpdate": {
-    "ja": "プレビュー更新",
-    "en": "Update Preview",
-    "ko": "미리보기 업데이트",
-    "zhTW": "更新預覽",
-    "zhCN": "更新预览"
-  },
-  "TipPreviewButton": {
-    "ja": "プレビュー画像を再生成します(削除ボーン設定の反映)",
-    "en": "Regenerates the preview image (reflects drop bone settings)",
-    "ko": "미리보기 이미지를 다시 생성합니다(삭제 본 설정 반영)",
-    "zhTW": "重新產生預覽圖(套用刪除骨骼設定)",
-    "zhCN": "重新生成预览图(应用删除骨骼设置)"
-  },
-  "LabelPakList": {
-    "ja": "作成済みMOD一覧:",
-    "en": "Created MODs:",
-    "ko": "생성된 모드 목록:",
-    "zhTW": "已建立的 MOD 清單:",
-    "zhCN": "已创建的 MOD 列表:"
-  },
-  "AppliedStatusChecking": {
-    "ja": "適用中: (確認中)",
-    "en": "Applied: (checking...)",
-    "ko": "적용 중: (확인 중)",
-    "zhTW": "套用中: (確認中)",
-    "zhCN": "应用中: (确认中)"
-  },
-  "AppliedStatusNoPaksDir": {
-    "ja": "適用中: (Paksフォルダ未設定)",
-    "en": "Applied: (Paks folder not set)",
-    "ko": "적용 중: (Paks 폴더 미설정)",
-    "zhTW": "套用中: (尚未設定 Paks 資料夾)",
-    "zhCN": "应用中: (尚未设置 Paks 文件夹)"
-  },
-  "AppliedStatusNone": {
-    "ja": "適用中: なし(元のパルワールド)",
-    "en": "Applied: none (original Palworld)",
-    "ko": "적용 중: 없음(원본 팰월드)",
-    "zhTW": "套用中: 無(原版幻獸帕魯)",
-    "zhCN": "应用中: 无(原版幻兽帕鲁)"
-  },
-  "AppliedStatusUnknownMod": {
-    "ja": "適用中: 内容不明のMODが入っています",
-    "en": "Applied: an unknown MOD is installed",
-    "ko": "적용 중: 알 수 없는 모드가 설치되어 있습니다",
-    "zhTW": "套用中: 已安裝內容不明的 MOD",
-    "zhCN": "应用中: 已安装内容不明的 MOD"
-  },
-  "AppliedStatusCheckFailed": {
-    "ja": "適用中: (確認できませんでした)",
-    "en": "Applied: (could not verify)",
-    "ko": "적용 중: (확인할 수 없었습니다)",
-    "zhTW": "套用中: (無法確認)",
-    "zhCN": "应用中: (无法确认)"
-  },
-  "AppliedStatusNamedFormat": {
-    "ja": "適用中: {0}",
-    "en": "Applied: {0}",
-    "ko": "적용 중: {0}",
-    "zhTW": "套用中: {0}",
-    "zhCN": "应用中: {0}"
-  },
-  "ColAvatar": {
-    "ja": "アバター",
-    "en": "Avatar",
-    "ko": "아바타",
-    "zhTW": "角色模型",
-    "zhCN": "角色模型"
-  },
-  "ColFile": {
-    "ja": "ファイル",
-    "en": "File",
-    "ko": "파일",
-    "zhTW": "檔案",
-    "zhCN": "文件"
-  },
-  "ColSize": {
-    "ja": "サイズ",
-    "en": "Size",
-    "ko": "크기",
-    "zhTW": "大小",
-    "zhCN": "大小"
-  },
-  "ColCreatedAt": {
-    "ja": "作成日時",
-    "en": "Created",
-    "ko": "생성 일시",
-    "zhTW": "建立時間",
-    "zhCN": "创建时间"
-  },
-  "BtnApply": {
-    "ja": "Palworldに適用",
-    "en": "Apply to Palworld",
-    "ko": "팰월드에 적용",
-    "zhTW": "套用至幻獸帕魯",
-    "zhCN": "应用到幻兽帕鲁"
-  },
-  "BtnRemoveMod": {
-    "ja": "MODを解除",
-    "en": "Remove MOD",
-    "ko": "모드 해제",
-    "zhTW": "解除 MOD",
-    "zhCN": "解除 MOD"
-  },
-  "BtnRefreshList": {
-    "ja": "一覧を更新",
-    "en": "Refresh List",
-    "ko": "목록 새로고침",
-    "zhTW": "重新整理清單",
-    "zhCN": "刷新列表"
-  },
-  "BtnDeleteResult": {
-    "ja": "変換結果を削除",
-    "en": "Delete Conversion Result",
-    "ko": "변환 결과 삭제",
-    "zhTW": "刪除轉換結果",
-    "zhCN": "删除转换结果"
-  },
-  "BtnReport": {
-    "ja": "問合せ",
-    "en": "Contact",
-    "ko": "문의하기",
-    "zhTW": "問題回報",
-    "zhCN": "问题反馈"
-  },
-  "TipApply": {
-    "ja": "選んだMODをPalworldへ入れます(同時に入るのは常に1体だけ)",
-    "en": "Installs the selected MOD into Palworld (only one can be installed at a time)",
-    "ko": "선택한 모드를 팰월드에 설치합니다(동시에 하나만 적용 가능)",
-    "zhTW": "將選取的 MOD 套用至幻獸帕魯(同一時間僅能套用一個)",
-    "zhCN": "将选中的 MOD 应用到幻兽帕鲁(同一时间只能应用一个)"
-  },
-  "TipRemove": {
-    "ja": "MODを外して元のパルワールドに戻します",
-    "en": "Removes the MOD and restores the original Palworld",
-    "ko": "모드를 제거하고 원본 팰월드로 되돌립니다",
-    "zhTW": "移除 MOD 並還原成原版幻獸帕魯",
-    "zhCN": "移除 MOD 并还原为原版幻兽帕鲁"
-  },
-  "TipDelete": {
-    "ja": "選んだアバターのMODファイルと変換用プロジェクトを削除してディスクを空けます",
-    "en": "Deletes the selected avatar's MOD file and conversion project to free disk space",
-    "ko": "선택한 아바타의 모드 파일과 변환용 프로젝트를 삭제하여 디스크 공간을 확보합니다",
-    "zhTW": "刪除選取角色模型的 MOD 檔案與轉換用專案,以釋放磁碟空間",
-    "zhCN": "删除选中角色模型的 MOD 文件与转换用工程,以释放磁盘空间"
-  },
-  "TipReport": {
-    "ja": "不具合の報告・お問い合わせはこちら(診断ログを送信します)",
-    "en": "Report a problem or ask a question here (sends diagnostic logs)",
-    "ko": "문제 신고나 문의는 여기서(진단 로그를 전송합니다)",
-    "zhTW": "回報問題或洽詢請按此(將傳送診斷紀錄)",
-    "zhCN": "反馈问题或咨询请点此(将发送诊断日志)"
-  },
-  "CheckAutoApply": {
-    "ja": "変換完了後に自動でPalworldへ適用",
-    "en": "Automatically apply to Palworld after conversion",
-    "ko": "변환 완료 후 자동으로 팰월드에 적용",
-    "zhTW": "轉換完成後自動套用至幻獸帕魯",
-    "zhCN": "转换完成后自动应用到幻兽帕鲁"
-  },
-  "TipAutoApply": {
-    "ja": "変換が終わったら自動でPalworldに適用します",
-    "en": "Automatically applies to Palworld once conversion finishes",
-    "ko": "변환이 끝나면 자동으로 팰월드에 적용합니다",
-    "zhTW": "轉換結束後會自動套用至幻獸帕魯",
-    "zhCN": "转换结束后会自动应用到幻兽帕鲁"
-  },
-  "TipUpdateLabel": {
-    "ja": "クリックすると入手先ページ(BOOTH)をブラウザで開きます",
-    "en": "Click to open the download page (BOOTH) in your browser",
-    "ko": "클릭하면 다운로드 페이지(BOOTH)를 브라우저에서 엽니다",
-    "zhTW": "點擊後會在瀏覽器開啟下載頁面(BOOTH)",
-    "zhCN": "点击后会在浏览器中打开下载页面(BOOTH)"
-  },
-  "ConfirmExitWhileRunningBody": {
-    "ja": "変換が実行中です。中止して閉じますか?",
-    "en": "A conversion is running. Cancel it and close?",
-    "ko": "변환이 실행 중입니다. 중지하고 닫으시겠습니까?",
-    "zhTW": "轉換正在執行中。要中止並關閉嗎?",
-    "zhCN": "转换正在进行中。要中止并关闭吗?"
-  },
-  "WhatAvatarLoad": {
-    "ja": "アバターの読み込み",
-    "en": "Avatar loading",
-    "ko": "아바타 불러오기",
-    "zhTW": "讀取角色模型",
-    "zhCN": "读取角色模型"
-  },
-  "WhatScreenUpdate": {
-    "ja": "画面の更新",
-    "en": "Screen update",
-    "ko": "화면 업데이트",
-    "zhTW": "更新畫面",
-    "zhCN": "更新画面"
-  },
-  "WhatPalworldVersionCheck": {
-    "ja": "パルワールドのバージョン確認",
-    "en": "Palworld version check",
-    "ko": "팰월드 버전 확인",
-    "zhTW": "確認幻獸帕魯版本",
-    "zhCN": "确认幻兽帕鲁版本"
-  },
-  "WhatAppliedModCheck": {
-    "ja": "適用中のMODの確認",
-    "en": "Applied MOD check",
-    "ko": "적용 중인 모드 확인",
-    "zhTW": "確認目前套用的 MOD",
-    "zhCN": "确认目前应用的 MOD"
-  },
-  "ErrFailedFormat": {
-    "ja": "{0}に失敗しました: {1}",
-    "en": "{0} failed: {1}",
-    "ko": "{0}에 실패했습니다: {1}",
-    "zhTW": "{0}失敗: {1}",
-    "zhCN": "{0}失败: {1}"
-  },
-  "MsgDropVrmOrPrefab": {
-    "ja": ".prefab / .vrm ファイルをドロップしてください",
-    "en": "Please drop a .prefab or .vrm file",
-    "ko": ".prefab / .vrm 파일을 놓아주세요",
-    "zhTW": "請拖放 .prefab 或 .vrm 檔案",
-    "zhCN": "请拖放 .prefab 或 .vrm 文件"
-  },
-  "MsgHumanoidJsonNeededBody": {
-    "ja": "FBXを使うには、ボーン対応表(humanoid.json)がFBXと同じフォルダに必要です。\n\n作り方:\n1. ツールの unity\\HumanoidMapExporter.cs を\n   Unityプロジェクトの Assets\\Editor\\ に入れる\n2. アバターを選択して メニュー Tools > DiveToPalworld >\n   Export Humanoid Map を実行\n3. 出てきた humanoid.json をFBXと同じフォルダに置く",
-    "en": "To use an FBX file, a bone mapping file (humanoid.json) is required in the same folder as the FBX.\n\nHow to create it:\n1. Put the tool's unity\\HumanoidMapExporter.cs into\n   Assets\\Editor\\ in your Unity project\n2. Select the avatar and run menu Tools > DiveToPalworld >\n   Export Humanoid Map\n3. Place the resulting humanoid.json in the same folder as the FBX",
-    "ko": "FBX를 사용하려면 본 대응표(humanoid.json)가 FBX와 같은 폴더에 있어야 합니다.\n\n만드는 방법:\n1. 툴의 unity\\HumanoidMapExporter.cs를\n   Unity 프로젝트의 Assets\\Editor\\ 에 넣기\n2. 아바타를 선택하고 메뉴 Tools > DiveToPalworld >\n   Export Humanoid Map 실행\n3. 생성된 humanoid.json을 FBX와 같은 폴더에 배치",
-    "zhTW": "若要使用 FBX,需要在與 FBX 相同的資料夾中放置骨骼對應表(humanoid.json)。\n\n製作方式:\n1. 將工具內的 unity\\HumanoidMapExporter.cs\n   放入 Unity 專案的 Assets\\Editor\\ 中\n2. 選取角色模型後執行選單 Tools > DiveToPalworld >\n   Export Humanoid Map\n3. 將產生的 humanoid.json 放到與 FBX 相同的資料夾",
-    "zhCN": "若要使用 FBX,需要在与 FBX 相同的文件夹中放置骨骼对应表(humanoid.json)。\n\n制作方式:\n1. 将工具内的 unity\\HumanoidMapExporter.cs\n   放入 Unity 工程的 Assets\\Editor\\ 中\n2. 选中角色模型后执行菜单 Tools > DiveToPalworld >\n   Export Humanoid Map\n3. 将生成的 humanoid.json 放到与 FBX 相同的文件夹"
-  },
-  "TitleHumanoidJsonNeeded": {
-    "ja": "humanoid.json が必要です",
-    "en": "humanoid.json Required",
-    "ko": "humanoid.json이 필요합니다",
-    "zhTW": "需要 humanoid.json",
-    "zhCN": "需要 humanoid.json"
-  },
-  "DlgDescPaksFolder": {
-    "ja": "PalworldのPaksフォルダを選んでください (<Palworld>\\Pal\\Content\\Paks)",
-    "en": "Select Palworld's Paks folder (<Palworld>\\Pal\\Content\\Paks)",
-    "ko": "팰월드의 Paks 폴더를 선택하세요 (<Palworld>\\Pal\\Content\\Paks)",
-    "zhTW": "請選擇幻獸帕魯的 Paks 資料夾 (<Palworld>\\Pal\\Content\\Paks)",
-    "zhCN": "请选择幻兽帕鲁的 Paks 文件夹 (<Palworld>\\Pal\\Content\\Paks)"
-  },
-  "MsgPaksNotFoundFormat": {
-    "ja": "選んだフォルダに {0} が見つかりません:\n{1}\n\n正しい Paks フォルダ(<Palworld>\\Pal\\Content\\Paks)を選び直してください。",
-    "en": "{0} was not found in the selected folder:\n{1}\n\nPlease select the correct Paks folder (<Palworld>\\Pal\\Content\\Paks) again.",
-    "ko": "선택한 폴더에서 {0}을(를) 찾을 수 없습니다:\n{1}\n\n올바른 Paks 폴더(<Palworld>\\Pal\\Content\\Paks)를 다시 선택해주세요.",
-    "zhTW": "在選取的資料夾中找不到 {0}:\n{1}\n\n請重新選擇正確的 Paks 資料夾(<Palworld>\\Pal\\Content\\Paks)。",
-    "zhCN": "在选中的文件夹中找不到 {0}:\n{1}\n\n请重新选择正确的 Paks 文件夹(<Palworld>\\Pal\\Content\\Paks)。"
-  },
-  "TitlePalworldNotFound": {
-    "ja": "Palworldが見つかりません",
-    "en": "Palworld Not Found",
-    "ko": "팰월드를 찾을 수 없습니다",
-    "zhTW": "找不到幻獸帕魯",
-    "zhCN": "找不到幻兽帕鲁"
-  },
-  "TitlePalworldVersionCheck": {
-    "ja": "パルワールドのバージョン確認",
-    "en": "Palworld Version Check",
-    "ko": "팰월드 버전 확인",
-    "zhTW": "幻獸帕魯版本確認",
-    "zhCN": "幻兽帕鲁版本确认"
-  },
-  "TitleOtherModsDetected": {
-    "ja": "他のMODを検出しました",
-    "en": "Other Mods Detected",
-    "ko": "다른 모드를 감지했습니다",
-    "zhTW": "偵測到其他 MOD",
-    "zhCN": "检测到其他 MOD"
-  },
-  "MsgOtherModsDetectedFormat": {
-    "ja": "Paksフォルダに、このツール以外の.pakファイルが {0} 件見つかりました。\n\nUchinoko for Palworldは他のMODとの併用に対応していません。\n見た目が崩れる・MODが反映されない等の問題が起きることがあります。\n問題が起きた場合は他のMODを一旦外してからお試しください。",
-    "en": "Found {0} other .pak file(s) in the Paks folder besides this tool's own.\n\nUchinoko for Palworld does not support running alongside other mods.\nThis can cause broken appearance, the MOD not applying, and similar issues.\nIf you run into problems, please remove the other mods and try again.",
-    "ko": "Paks 폴더에서 이 도구 외의 .pak 파일 {0}개를 발견했습니다.\n\nUchinoko for Palworld는 다른 모드와의 병용을 지원하지 않습니다.\n외형이 깨지거나 모드가 반영되지 않는 등의 문제가 발생할 수 있습니다.\n문제가 발생하면 다른 모드를 제거한 후 다시 시도해주세요.",
-    "zhTW": "在 Paks 資料夾中發現除本工具外的 {0} 個 .pak 檔案。\n\nUchinoko for Palworld 不支援與其他 MOD 併用。\n可能發生外觀損壞、MOD 未套用等問題。\n若發生問題,請先移除其他 MOD 後再試一次。",
-    "zhCN": "在 Paks 文件夹中发现除本工具外的 {0} 个 .pak 文件。\n\nUchinoko for Palworld 不支持与其他 MOD 并用。\n可能发生外观损坏、MOD 未生效等问题。\n若发生问题,请先移除其他 MOD 后再试一次。"
-  },
-  "MsgPalworldVersionMismatchFormat": {
-    "ja": "お使いのパルワールドは、このツールが動作確認したバージョンと異なります。\n  動作確認済み: {0}\n  お使いのもの: {1}\n\nそのまま使えることも多いですが、パルワールドの更新後は変換したMODが\nうまく動かない場合があります。おかしくなったら「MODを解除」してください。",
-    "en": "Your Palworld version differs from the ones this tool was verified against.\n  Verified: {0}\n  Yours: {1}\n\nIt often still works, but after a Palworld update the converted MOD\nmay not work correctly. If something looks wrong, use \"Remove MOD\".",
-    "ko": "사용 중인 팰월드가 이 도구가 동작 확인한 버전과 다릅니다.\n  동작 확인 완료: {0}\n  사용 중인 버전: {1}\n\n그대로 사용할 수 있는 경우도 많지만, 팰월드 업데이트 후에는 변환한 모드가\n제대로 작동하지 않을 수 있습니다. 이상이 있으면 「모드 해제」를 눌러주세요.",
-    "zhTW": "您使用的幻獸帕魯版本,與本工具已驗證的版本不同。\n  已驗證: {0}\n  您使用的版本: {1}\n\n多數情況下仍可正常使用,但幻獸帕魯更新後,轉換出的 MOD\n可能無法正常運作。若出現異常,請按「解除 MOD」。",
-    "zhCN": "您使用的幻兽帕鲁版本,与本工具已验证的版本不同。\n  已验证: {0}\n  您使用的版本: {1}\n\n多数情况下仍可正常使用,但幻兽帕鲁更新后,转换出的 MOD\n可能无法正常运作。若出现异常,请点击「解除 MOD」。"
-  },
-  "UpdateNoticeFormat": {
-    "ja": "新しいバージョン {0} があります(クリックで入手先を開く)",
-    "en": "A new version {0} is available (click to open the download page)",
-    "ko": "새 버전 {0}이(가) 있습니다(클릭하면 다운로드 페이지가 열립니다)",
-    "zhTW": "有新版本 {0}(點擊開啟下載頁面)",
-    "zhCN": "有新版本 {0}(点击打开下载页面)"
-  },
-  "BtnUpdateNow": {
-    "ja": "最新版を入手",
-    "en": "Get Latest Version",
-    "ko": "최신 버전 받기",
-    "zhTW": "取得最新版本",
-    "zhCN": "获取最新版本"
-  },
-  "TipUpdateNow": {
-    "ja": "最新版の入手先ページ(BOOTH等)をブラウザで開きます",
-    "en": "Opens the page (BOOTH, etc.) to get the latest version in your browser",
-    "ko": "브라우저에서 최신 버전을 받을 수 있는 페이지(BOOTH 등)를 엽니다",
-    "zhTW": "在瀏覽器中開啟取得最新版本的頁面(BOOTH 等)",
-    "zhCN": "在浏览器中打开获取最新版本的页面(BOOTH 等)"
-  },
-  "CauseNoWritePermission": {
-    "ja": "書き込み権限がありません",
-    "en": "No write permission",
-    "ko": "쓰기 권한이 없습니다",
-    "zhTW": "沒有寫入權限",
-    "zhCN": "没有写入权限"
-  },
-  "ActionNoWritePermission": {
-    "ja": "Palworldを終了してから再試行するか、Uchinoko.batを右クリック→「管理者として実行」でお試しください",
-    "en": "Close Palworld and try again, or right-click Uchinoko.bat and choose \"Run as administrator\"",
-    "ko": "팰월드를 종료한 후 다시 시도하거나, Uchinoko.bat를 우클릭하여 「관리자 권한으로 실행」을 시도해보세요",
-    "zhTW": "請先關閉幻獸帕魯後再試一次,或在 Uchinoko.bat 上按右鍵選擇「以系統管理員身分執行」",
-    "zhCN": "请先关闭幻兽帕鲁后再试一次,或在 Uchinoko.bat 上单击右键选择「以管理员身份运行」"
-  },
-  "CauseDiskFull": {
-    "ja": "ディスクの空き容量が不足しています",
-    "en": "Not enough free disk space",
-    "ko": "디스크 여유 공간이 부족합니다",
-    "zhTW": "磁碟可用空間不足",
-    "zhCN": "磁盘可用空间不足"
-  },
-  "ActionDiskFull": {
-    "ja": "適用先ドライブの空き容量を確保してから再試行してください",
-    "en": "Free up space on the target drive and try again",
-    "ko": "적용 대상 드라이브의 여유 공간을 확보한 후 다시 시도해주세요",
-    "zhTW": "請先確保目標磁碟有足夠可用空間後再試一次",
-    "zhCN": "请先确保目标磁盘有足够可用空间后再试一次"
-  },
-  "CauseFileInUse": {
-    "ja": "ファイルが他のプログラムに使われている可能性があります",
-    "en": "The file may be in use by another program",
-    "ko": "파일이 다른 프로그램에서 사용 중일 수 있습니다",
-    "zhTW": "檔案可能正被其他程式使用",
-    "zhCN": "文件可能正被其他程序占用"
-  },
-  "ActionFileInUse": {
-    "ja": "Palworldやウイルス対策ソフトを終了/一時停止してから再試行してください",
-    "en": "Close Palworld or pause your antivirus software, then try again",
-    "ko": "팰월드나 백신 프로그램을 종료/일시중지한 후 다시 시도해주세요",
-    "zhTW": "請結束幻獸帕魯或暫停防毒軟體後再試一次",
-    "zhCN": "请关闭幻兽帕鲁或暂停杀毒软件后再试一次"
-  },
-  "CauseTargetFolderNotFound": {
-    "ja": "適用先フォルダが見つかりません(Palworldの場所の設定が古い可能性)",
-    "en": "The target folder could not be found (the saved Palworld location may be outdated)",
-    "ko": "적용 대상 폴더를 찾을 수 없습니다(팰월드 위치 설정이 오래되었을 수 있습니다)",
-    "zhTW": "找不到目標資料夾(幻獸帕魯的位置設定可能已過期)",
-    "zhCN": "找不到目标文件夹(幻兽帕鲁的位置设置可能已过期)"
-  },
-  "ActionTargetFolderNotFound": {
-    "ja": "「こだわり設定」でPaksフォルダの場所を設定し直してください",
-    "en": "Reset the Paks folder location in \"Advanced Settings\"",
-    "ko": "「세부 설정」에서 Paks 폴더 위치를 다시 설정해주세요",
-    "zhTW": "請在「進階設定」中重新設定 Paks 資料夾位置",
-    "zhCN": "请在「高级设置」中重新设置 Paks 文件夹位置"
-  },
-  "CauseUnexpected": {
-    "ja": "予期しないエラーです",
-    "en": "An unexpected error occurred",
-    "ko": "예기치 않은 오류입니다",
-    "zhTW": "發生非預期的錯誤",
-    "zhCN": "发生非预期的错误"
-  },
-  "ActionUnexpected": {
-    "ja": "「問合せ」ボタンから診断ログを送信してご連絡ください",
-    "en": "Please send us the diagnostic log via the \"Contact\" button",
-    "ko": "「문의하기」 버튼으로 진단 로그를 보내주세요",
-    "zhTW": "請透過「問題回報」按鈕傳送診斷紀錄與我們聯絡",
-    "zhCN": "请通过「问题反馈」按钮发送诊断日志与我们联系"
-  },
-  "LabelApply": {
-    "ja": "適用",
-    "en": "Apply",
-    "ko": "적용",
-    "zhTW": "套用",
-    "zhCN": "应用"
-  },
-  "LabelRemove": {
-    "ja": "解除",
-    "en": "Remove",
-    "ko": "해제",
-    "zhTW": "解除",
-    "zhCN": "解除"
-  },
-  "MsgApplyFailureBodyFormat": {
-    "ja": "{0}に失敗しました。\n\n原因: {1}\n対処: {2}\n\n適用先: {3}\n詳しい内容は右のログ欄から確認できます。",
-    "en": "{0} failed.\n\nCause: {1}\nWhat to do: {2}\n\nTarget: {3}\nSee the log panel on the right for details.",
-    "ko": "{0}에 실패했습니다.\n\n원인: {1}\n대처: {2}\n\n대상: {3}\n자세한 내용은 오른쪽 로그란에서 확인할 수 있습니다.",
-    "zhTW": "{0}失敗。\n\n原因: {1}\n處理方式: {2}\n\n目標位置: {3}\n詳細內容請參閱右側的紀錄欄。",
-    "zhCN": "{0}失败。\n\n原因: {1}\n处理方式: {2}\n\n目标位置: {3}\n详细内容请参见右侧的日志栏。"
-  },
-  "MsgApplyFailureTitleFormat": {
-    "ja": "{0}エラー",
-    "en": "{0} Error",
-    "ko": "{0} 오류",
-    "zhTW": "{0}錯誤",
-    "zhCN": "{0}错误"
-  },
-  "MsgSelectModFromList": {
-    "ja": "一覧から適用するMODを選んでください",
-    "en": "Please select a MOD to apply from the list",
-    "ko": "목록에서 적용할 모드를 선택해주세요",
-    "zhTW": "請從清單中選擇要套用的 MOD",
-    "zhCN": "请从列表中选择要应用的 MOD"
-  },
-  "MsgGameRunningApply": {
-    "ja": "パルワールドが起動中です。ゲームを終了してから適用してください。",
-    "en": "Palworld is currently running. Please close the game before applying.",
-    "ko": "팰월드가 실행 중입니다. 게임을 종료한 후 적용해주세요.",
-    "zhTW": "幻獸帕魯正在執行中。請先結束遊戲後再套用。",
-    "zhCN": "幻兽帕鲁正在运行中。请先关闭游戏后再应用。"
-  },
-  "MsgModFileNotFoundFormat": {
-    "ja": "MODファイルが見つかりません: {0}",
-    "en": "MOD file not found: {0}",
-    "ko": "모드 파일을 찾을 수 없습니다: {0}",
-    "zhTW": "找不到 MOD 檔案: {0}",
-    "zhCN": "找不到 MOD 文件: {0}"
-  },
-  "StatusAppliedFormat": {
-    "ja": "適用しました: {0}",
-    "en": "Applied: {0}",
-    "ko": "적용했습니다: {0}",
-    "zhTW": "已套用: {0}",
-    "zhCN": "已应用: {0}"
-  },
-  "MsgApplySuccessFormat": {
-    "ja": "{0} を適用しました!\nゲームを起動して確認してください。",
-    "en": "{0} has been applied!\nStart the game to check the result.",
-    "ko": "{0}을(를) 적용했습니다!\n게임을 실행하여 확인해주세요.",
-    "zhTW": "已套用 {0}!\n請啟動遊戲確認結果。",
-    "zhCN": "已应用 {0}!\n请启动游戏确认效果。"
-  },
-  "TitleApplySuccess": {
-    "ja": "適用完了",
-    "en": "Applied Successfully",
-    "ko": "적용 완료",
-    "zhTW": "套用完成",
-    "zhCN": "应用完成"
-  },
-  "ConfirmDeleteHeaderFormat": {
-    "ja": "{0} について、このツールが作ったものをすべて削除しますか?",
-    "en": "Delete everything this tool created for {0}?",
-    "ko": "{0}에 대해 이 도구가 만든 모든 것을 삭제하시겠습니까?",
-    "zhTW": "是否要刪除本工具為 {0} 建立的所有內容?",
-    "zhCN": "是否要删除本工具为 {0} 创建的所有内容?"
-  },
-  "LineModFileFormat": {
-    "ja": "・MODファイル: {0}",
-    "en": "- MOD file: {0}",
-    "ko": "· 모드 파일: {0}",
-    "zhTW": "‧MOD 檔案: {0}",
-    "zhCN": "‧MOD 文件: {0}"
-  },
-  "LineWorkFolderFormat": {
-    "ja": "・設定・プレビュー等の作業フォルダ: {0}",
-    "en": "- Work folder (settings, previews, etc.): {0}",
-    "ko": "· 설정·미리보기 등의 작업 폴더: {0}",
-    "zhTW": "‧設定、預覽等工作資料夾: {0}",
-    "zhCN": "‧设置、预览等工作文件夹: {0}"
-  },
-  "LineUeProjectFormat": {
-    "ja": "・変換用UEプロジェクト: {0}",
-    "en": "- Conversion UE project: {0}",
-    "ko": "· 변환용 UE 프로젝트: {0}",
-    "zhTW": "‧轉換用 UE 專案: {0}",
-    "zhCN": "‧转换用 UE 工程: {0}"
-  },
-  "NoteVrmNotDeleted": {
-    "ja": "元のprefab または VRM ファイルは削除されません。",
-    "en": "The original prefab or VRM file will not be deleted.",
-    "ko": "원본 prefab 또는 VRM 파일은 삭제되지 않습니다.",
-    "zhTW": "原始的 prefab 或 VRM 檔案不會被刪除。",
-    "zhCN": "原始的 prefab 或 VRM 文件不会被删除。"
-  },
-  "NoteReloadVrmToRedo": {
-    "ja": "また使う時はprefab または VRMを入れ直して最初からやり直しです。",
-    "en": "To use it again, you'll need to re-add the prefab or VRM and start over.",
-    "ko": "다시 사용할 때는 prefab 또는 VRM을 다시 넣고 처음부터 다시 진행해야 합니다.",
-    "zhTW": "若之後要再次使用,需要重新放入 prefab 或 VRM 並從頭開始。",
-    "zhCN": "若之后要再次使用,需要重新放入 prefab 或 VRM 并从头开始。"
-  },
-  "TitleConfirmDelete": {
-    "ja": "削除の確認",
-    "en": "Confirm Deletion",
-    "ko": "삭제 확인",
-    "zhTW": "確認刪除",
-    "zhCN": "确认删除"
-  },
-  "MsgDeleteFailedFormat": {
-    "ja": "削除に失敗しました:\n{0}\n(変換が実行中でないか、エクスプローラ等で開いていないか確認してください)",
-    "en": "Deletion failed:\n{0}\n(Check that a conversion isn't running and that the folder isn't open in Explorer or elsewhere)",
-    "ko": "삭제에 실패했습니다:\n{0}\n(변환이 실행 중이지 않은지, 탐색기 등에서 열려 있지 않은지 확인해주세요)",
-    "zhTW": "刪除失敗:\n{0}\n(請確認轉換是否正在執行,或該資料夾是否在檔案總管等程式中開啟)",
-    "zhCN": "删除失败:\n{0}\n(请确认转换是否正在进行,或该文件夹是否在资源管理器等程序中打开)"
-  },
-  "StatusDeletedFormat": {
-    "ja": "{0} の生成物をすべて削除しました",
-    "en": "All generated files for {0} have been deleted",
-    "ko": "{0}의 생성물을 모두 삭제했습니다",
-    "zhTW": "已刪除 {0} 的所有產生內容",
-    "zhCN": "已删除 {0} 的所有生成内容"
-  },
-  "SupportStage1Info": {
-    "ja": "下のボタンを押すと問合せフォームを開きます。そのさい、ログが送信されます。\nログの送信に際して、利用者は開発者(大崎商会)に全面的な利用権を\n委託したものとします。",
-    "en": "Pressing the button below opens the contact form; your log will be sent at that time.\nBy sending the log, you grant the developer (Osaki Shokai) full rights to use it.",
-    "ko": "아래 버튼을 누르면 문의 양식이 열립니다. 이때 로그가 전송됩니다.\n로그 전송 시, 이용자는 개발자(오사키상회)에게 로그의 전면적인\n이용 권한을 위임한 것으로 간주합니다.",
-    "zhTW": "按下方按鈕即會開啟問題回報表單,此時將會傳送紀錄。\n傳送紀錄時,視同使用者已將該紀錄的完整使用權\n委託給開發者(大崎商會)。",
-    "zhCN": "点击下方按钮即会打开问题反馈表单,此时将会发送日志。\n发送日志时,视同用户已将该日志的完整使用权\n委托给开发者(大崎商会)。"
-  },
-  "BtnOpenInquiryForm": {
-    "ja": "問い合わせフォームを開く",
-    "en": "Open Contact Form",
-    "ko": "문의 양식 열기",
-    "zhTW": "開啟問題回報表單",
-    "zhCN": "打开问题反馈表单"
-  },
-  "BtnOk": {
-    "ja": "OK",
-    "en": "OK",
-    "ko": "OK",
-    "zhTW": "OK",
-    "zhCN": "OK"
-  },
-  "SupportChangedNotice": {
-    "ja": "前回の報告以降にログが変わっています。再送してください。\n",
-    "en": "The log has changed since your last report. Please resend it.\n",
-    "ko": "이전 보고 이후 로그가 변경되었습니다. 다시 전송해주세요.\n",
-    "zhTW": "自上次回報後紀錄已有變動,請重新傳送。\n",
-    "zhCN": "自上次反馈后日志已有变化,请重新发送。\n"
-  },
-  "SupportConfirmAppendBody": {
-    "ja": "次の内容が、前回と同じ問い合わせスレッドへ追記されます。よろしいですか?\n(問題のある内容があれば、編集してください)",
-    "en": "The following content will be added to the same inquiry thread as before. Continue?\n(Edit below if anything looks wrong.)",
-    "ko": "다음 내용이 이전과 동일한 문의 스레드에 추가됩니다. 계속하시겠습니까?\n(문제가 있는 내용이 있으면 수정해주세요)",
-    "zhTW": "以下內容將會附加到與上次相同的問題回報串。是否繼續?\n(如有不便公開的內容請自行編輯)",
-    "zhCN": "以下内容将会附加到与上次相同的问题反馈串中。是否继续?\n(如有不便公开的内容请自行编辑)"
-  },
-  "SupportConfirmNewBody": {
-    "ja": "次の内容のログが送信されます。本当によろしいですか?\n(問題のある内容があれば、編集してください)",
-    "en": "The following log will be sent. Are you sure?\n(Edit below if anything looks wrong.)",
-    "ko": "다음 내용의 로그가 전송됩니다. 정말 계속하시겠습니까?\n(문제가 있는 내용이 있으면 수정해주세요)",
-    "zhTW": "將會傳送以下內容的紀錄。確定要繼續嗎?\n(如有不便公開的內容請自行編輯)",
-    "zhCN": "将会发送以下内容的日志。确定要继续吗?\n(如有不便公开的内容请自行编辑)"
-  },
-  "SupportSendFailedUseManualCopy": {
-    "ja": "送信できませんでした。「ログを手動でコピー」をお使いください。",
-    "en": "Sending failed. Please use \"Copy Log Manually\" instead.",
-    "ko": "전송하지 못했습니다. 「로그 수동 복사」를 이용해주세요.",
-    "zhTW": "傳送失敗。請改用「手動複製紀錄」。",
-    "zhCN": "发送失败。请改用「手动复制日志」。"
-  },
-  "SupportSending": {
-    "ja": "送信中...",
-    "en": "Sending...",
-    "ko": "전송 중...",
-    "zhTW": "傳送中...",
-    "zhCN": "发送中..."
-  },
-  "SupportSendFailedOffline": {
-    "ja": "送信できませんでした(オフライン、または接続先の都合)。\n「ログを手動でコピー」もお使いいただけます。",
-    "en": "Sending failed (offline, or a problem with the server).\nYou can also use \"Copy Log Manually\".",
-    "ko": "전송하지 못했습니다(오프라인이거나 서버 문제).\n「로그 수동 복사」도 이용하실 수 있습니다.",
-    "zhTW": "傳送失敗(可能是離線或伺服器端問題)。\n您也可以使用「手動複製紀錄」。",
-    "zhCN": "发送失败(可能是离线或服务器端问题)。\n您也可以使用「手动复制日志」。"
-  },
-  "SupportSentLabelFormat": {
-    "ja": "送信済みです(報告ID: {0})。\n対応状況・開発者からの返信は、下のページでいつでも確認できます:",
-    "en": "Already sent (Report ID: {0}).\nYou can check the status and any developer replies on the page below at any time:",
-    "ko": "전송 완료(보고 ID: {0}).\n대응 현황과 개발자의 답변은 아래 페이지에서 언제든지 확인할 수 있습니다:",
-    "zhTW": "已傳送(回報編號: {0})。\n處理進度與開發者的回覆,可隨時於下方頁面確認:",
-    "zhCN": "已发送(反馈编号: {0})。\n处理进度与开发者的回复,可随时在下方页面查看:"
-  },
-  "BtnOpenSamePlace": {
-    "ja": "同じ場所を開く",
-    "en": "Open Same Page",
-    "ko": "같은 페이지 열기",
-    "zhTW": "開啟相同頁面",
-    "zhCN": "打开相同页面"
-  },
-  "BtnResendLog": {
-    "ja": "ログを再送",
-    "en": "Resend Log",
-    "ko": "로그 다시 전송",
-    "zhTW": "重新傳送紀錄",
-    "zhCN": "重新发送日志"
-  },
-  "BtnCopyLogManually": {
-    "ja": "ログを手動でコピー",
-    "en": "Copy Log Manually",
-    "ko": "로그 수동 복사",
-    "zhTW": "手動複製紀錄",
-    "zhCN": "手动复制日志"
-  },
-  "BtnClose": {
-    "ja": "閉じる",
-    "en": "Close",
-    "ko": "닫기",
-    "zhTW": "關閉",
-    "zhCN": "关闭"
-  },
-  "MsgLogCopiedBody": {
-    "ja": "ログをコピーしました。\n必要な場所に貼り付けてください。\n\nログにはファイルパスなど個人情報が含まれていることがあります。送付・公開前によく確認してください",
-    "en": "The log has been copied.\nPaste it wherever needed.\n\nThe log may contain personal information such as file paths. Please review it carefully before sending or posting it publicly.",
-    "ko": "로그를 복사했습니다.\n필요한 곳에 붙여넣어 주세요.\n\n로그에는 파일 경로 등 개인정보가 포함될 수 있습니다. 전송·공개 전에 잘 확인해주세요",
-    "zhTW": "已複製紀錄。\n請貼到需要的地方。\n\n紀錄中可能包含檔案路徑等個人資訊。傳送或公開前請務必仔細確認",
-    "zhCN": "已复制日志。\n请粘贴到需要的地方。\n\n日志中可能包含文件路径等个人信息。发送或公开前请务必仔细确认"
-  },
-  "TitleLogCopied": {
-    "ja": "ログをコピー",
-    "en": "Log Copied",
-    "ko": "로그 복사",
-    "zhTW": "複製紀錄",
-    "zhCN": "复制日志"
-  },
-  "MsgCopyFailedFormat": {
-    "ja": "コピーに失敗しました: {0}",
-    "en": "Copy failed: {0}",
-    "ko": "복사에 실패했습니다: {0}",
-    "zhTW": "複製失敗: {0}",
-    "zhCN": "复制失败: {0}"
-  },
-  "MsgGameRunningRemove": {
-    "ja": "パルワールドが起動中です。ゲームを終了してから解除してください。",
-    "en": "Palworld is currently running. Please close the game before removing it.",
-    "ko": "팰월드가 실행 중입니다. 게임을 종료한 후 해제해주세요.",
-    "zhTW": "幻獸帕魯正在執行中。請先結束遊戲後再解除。",
-    "zhCN": "幻兽帕鲁正在运行中。请先关闭游戏后再解除。"
-  },
-  "StatusNoModApplied": {
-    "ja": "MODは入っていません(すでに元の状態)",
-    "en": "No MOD is applied (already in original state)",
-    "ko": "모드가 설치되어 있지 않습니다(이미 원본 상태)",
-    "zhTW": "未套用任何 MOD(已是原始狀態)",
-    "zhCN": "未应用任何 MOD(已是原始状态)"
-  },
-  "StatusModRemoved": {
-    "ja": "MODを解除しました(元のパルワールドに戻りました)",
-    "en": "MOD removed (restored to original Palworld)",
-    "ko": "모드를 해제했습니다(원본 팰월드로 되돌아갔습니다)",
-    "zhTW": "已解除 MOD(已還原成原版幻獸帕魯)",
-    "zhCN": "已解除 MOD(已还原为原版幻兽帕鲁)"
-  },
-  "MsgAlreadyRunning": {
-    "ja": "実行中です",
-    "en": "Already running",
-    "ko": "실행 중입니다",
-    "zhTW": "執行中",
-    "zhCN": "正在运行"
-  },
-  "MsgSpecifyVrmFile": {
-    "ja": "prefab または VRM ファイルを指定してください",
-    "en": "Please specify a prefab or VRM file",
-    "ko": "prefab 또는 VRM 파일을 지정해주세요",
-    "zhTW": "請指定 prefab 或 VRM 檔案",
-    "zhCN": "请指定 prefab 或 VRM 文件"
-  },
-  "StatusPreviewGenerating": {
-    "ja": "プレビュー生成中...",
-    "en": "Generating preview...",
-    "ko": "미리보기 생성 중...",
-    "zhTW": "產生預覽中...",
-    "zhCN": "生成预览中..."
-  },
-  "StatusMaterialsApplying": {
-    "ja": "影の濃さを反映中(1分ほど)...",
-    "en": "Applying shadow strength (about 1 minute)...",
-    "ko": "그림자 농도 적용 중(약 1분)...",
-    "zhTW": "套用陰影濃度中(約 1 分鐘)...",
-    "zhCN": "应用阴影浓度中(约 1 分钟)..."
-  },
-  "StatusFullConverting": {
-    "ja": "フル変換中(時間がかかります)...",
-    "en": "Full conversion in progress (this takes a while)...",
-    "ko": "전체 변환 중(시간이 걸립니다)...",
-    "zhTW": "完整轉換中(需要一些時間)...",
-    "zhCN": "完整转换中(需要一些时间)..."
-  },
-  "MsgOtherProcessRunning": {
-    "ja": "他の処理を実行中です。完了してからもう一度お試しください。",
-    "en": "Another process is running. Please try again once it finishes.",
-    "ko": "다른 작업이 실행 중입니다. 완료 후 다시 시도해주세요.",
-    "zhTW": "有其他作業正在執行中。請等待完成後再試一次。",
-    "zhCN": "有其他操作正在进行中。请等待完成后再试一次。"
-  },
-  "MsgSpecifyPrefabFile": {
-    "ja": ".prefab ファイルを指定してください",
-    "en": "Please specify a .prefab file",
-    "ko": ".prefab 파일을 지정해주세요",
-    "zhTW": "請指定 .prefab 檔案",
-    "zhCN": "请指定 .prefab 文件"
-  },
-  "MsgExportScriptNotFoundFormat": {
-    "ja": "エクスポートスクリプトが見つかりません:\n{0}",
-    "en": "Export script not found:\n{0}",
-    "ko": "내보내기 스크립트를 찾을 수 없습니다:\n{0}",
-    "zhTW": "找不到匯出腳本:\n{0}",
-    "zhCN": "找不到导出脚本:\n{0}"
-  },
-  "StatusUnityExporting": {
-    "ja": "Unityプロジェクトからエクスポート中(数十秒〜。初回はパッケージ導入で数分かかることがあります)...",
-    "en": "Exporting from the Unity project (tens of seconds or more; the first time may take a few minutes for package setup)...",
-    "ko": "Unity 프로젝트에서 내보내는 중(수십 초~. 처음에는 패키지 설치로 몇 분 걸릴 수 있습니다)...",
-    "zhTW": "正在從 Unity 專案匯出中(數十秒以上;首次執行可能因套件安裝需數分鐘)...",
-    "zhCN": "正在从 Unity 工程导出中(数十秒以上;首次执行可能因包安装需数分钟)..."
-  },
-  "StatusUnityExportFailed": {
-    "ja": "Unityエクスポートに失敗しました(右のログ参照)",
-    "en": "Unity export failed (see the log on the right)",
-    "ko": "Unity 내보내기에 실패했습니다(오른쪽 로그 참조)",
-    "zhTW": "Unity 匯出失敗(請參閱右側紀錄)",
-    "zhCN": "Unity 导出失败(请参见右侧日志)"
-  },
-  "MsgUnityExportErrorBody": {
-    "ja": "Unityプロジェクトからのエクスポートに失敗しました。\n\nよくある原因:\n・指定したのがAssets配下のprefabではない\n・そのUnityプロジェクトが今Unity Editorで開かれている\n  (Unity Editorを閉じてからもう一度お試しください)\n・プロジェクトに合うバージョンのUnity Editorが見つからない\n\n詳しい内容は右のログ欄から確認できます。\n解決しない場合は、Unityのメニュー Tools > DiveToPalworld > Export Avatar で\n手動エクスポートし、出てきたFBXをこの画面へD&Dしてください。",
-    "en": "Export from the Unity project failed.\n\nCommon causes:\n- The file specified is not a prefab under Assets\n- The Unity project is currently open in Unity Editor\n  (close Unity Editor and try again)\n- No matching version of Unity Editor could be found for the project\n\nSee the log panel on the right for details.\nIf the problem persists, use the Unity menu Tools > DiveToPalworld > Export Avatar to\nexport manually, then drag & drop the resulting FBX onto this window.",
-    "ko": "Unity 프로젝트에서 내보내기에 실패했습니다.\n\n일반적인 원인:\n· 지정한 것이 Assets 아래의 prefab이 아님\n· 해당 Unity 프로젝트가 현재 Unity Editor에서 열려 있음\n  (Unity Editor를 닫은 후 다시 시도해주세요)\n· 프로젝트에 맞는 버전의 Unity Editor를 찾을 수 없음\n\n자세한 내용은 오른쪽 로그란에서 확인할 수 있습니다.\n해결되지 않으면 Unity 메뉴 Tools > DiveToPalworld > Export Avatar에서\n수동으로 내보낸 후, 생성된 FBX를 이 화면으로 드래그 앤 드롭 해주세요.",
-    "zhTW": "從 Unity 專案匯出失敗。\n\n常見原因:\n‧指定的檔案並非 Assets 底下的 prefab\n‧該 Unity 專案目前正在 Unity Editor 中開啟\n  (請先關閉 Unity Editor 後再試一次)\n‧找不到符合該專案的 Unity Editor 版本\n\n詳細內容請參閱右側的紀錄欄。\n若問題持續發生,請透過 Unity 選單 Tools > DiveToPalworld > Export Avatar\n手動匯出,再將產生的 FBX 拖放到此畫面。",
-    "zhCN": "从 Unity 工程导出失败。\n\n常见原因:\n‧指定的文件并非 Assets 下的 prefab\n‧该 Unity 工程目前正在 Unity Editor 中打开\n  (请先关闭 Unity Editor 后再试一次)\n‧找不到符合该工程的 Unity Editor 版本\n\n详细内容请参见右侧的日志栏。\n若问题持续存在,请通过 Unity 菜单 Tools > DiveToPalworld > Export Avatar\n手动导出,再将生成的 FBX 拖放到此界面。"
-  },
-  "TitleUnityExportError": {
-    "ja": "Unityエクスポートエラー",
-    "en": "Unity Export Error",
-    "ko": "Unity 내보내기 오류",
-    "zhTW": "Unity 匯出錯誤",
-    "zhCN": "Unity 导出错误"
-  },
-  "StatusUnityExportNoFbx": {
-    "ja": "エクスポートは完了しましたがFBXが見つかりませんでした",
-    "en": "Export finished but no FBX file was found",
-    "ko": "내보내기는 완료되었지만 FBX 파일을 찾을 수 없습니다",
-    "zhTW": "匯出已完成,但找不到 FBX 檔案",
-    "zhCN": "导出已完成,但找不到 FBX 文件"
-  },
-  "MsgUnityExportNoFbxFormat": {
-    "ja": "Unityからのエクスポートは完了しましたが、出力フォルダにFBXが見つかりませんでした:\n{0}",
-    "en": "Export from Unity finished, but no FBX file was found in the output folder:\n{0}",
-    "ko": "Unity에서의 내보내기는 완료되었지만, 출력 폴더에서 FBX 파일을 찾을 수 없습니다:\n{0}",
-    "zhTW": "已從 Unity 完成匯出,但在輸出資料夾中找不到 FBX 檔案:\n{0}",
-    "zhCN": "已从 Unity 完成导出,但在输出文件夹中找不到 FBX 文件:\n{0}"
-  },
-  "TitleUnityExport": {
-    "ja": "Unityエクスポート",
-    "en": "Unity Export",
-    "ko": "Unity 내보내기",
-    "zhTW": "Unity 匯出",
-    "zhCN": "Unity 导出"
-  },
-  "StatusUnityExportDone": {
-    "ja": "Unityエクスポートが完了しました。アバターを取り込みます...",
-    "en": "Unity export finished. Loading the avatar...",
-    "ko": "Unity 내보내기가 완료되었습니다. 아바타를 불러오는 중...",
-    "zhTW": "Unity 匯出已完成,正在載入角色模型...",
-    "zhCN": "Unity 导出已完成,正在加载角色模型..."
-  },
-  "StatusFailedOrCancelled": {
-    "ja": "失敗または中止されました(右のログ参照)",
-    "en": "Failed or cancelled (see the log on the right)",
-    "ko": "실패했거나 중지되었습니다(오른쪽 로그 참조)",
-    "zhTW": "已失敗或已中止(請參閱右側紀錄)",
-    "zhCN": "已失败或已中止(请参见右侧日志)"
-  },
-  "MsgConvertDoneWithWarningsFormat": {
-    "ja": "変換は完了しましたが、注意事項があります:\n\n{0}",
-    "en": "Conversion finished, but there are some notes:\n\n{0}",
-    "ko": "변환은 완료되었지만, 주의 사항이 있습니다:\n\n{0}",
-    "zhTW": "轉換已完成,但有以下注意事項:\n\n{0}",
-    "zhCN": "转换已完成,但有以下注意事项:\n\n{0}"
-  },
-  "TitleConvertDoneWithWarnings": {
-    "ja": "変換完了(注意事項あり)",
-    "en": "Conversion Complete (with Notes)",
-    "ko": "변환 완료(주의 사항 있음)",
-    "zhTW": "轉換完成(有注意事項)",
-    "zhCN": "转换完成(有注意事项)"
-  },
-  "StatusPreviewDone": {
-    "ja": "プレビュー更新完了。フル変換できます",
-    "en": "Preview updated. Ready for full conversion",
-    "ko": "미리보기 업데이트 완료. 전체 변환이 가능합니다",
-    "zhTW": "預覽更新完成,可以進行完整轉換",
-    "zhCN": "预览更新完成,可以进行完整转换"
-  },
-  "MsgPreviewDoneBody": {
-    "ja": "プレビューを更新しました。\n見た目(特に腕まわり)を確認して、問題なければ「フル変換」へ進んでください。",
-    "en": "The preview has been updated.\nCheck the appearance (especially around the arms), and if it looks fine, proceed to \"Full Convert\".",
-    "ko": "미리보기를 업데이트했습니다.\n외형(특히 팔 주변)을 확인하고, 문제가 없으면 「전체 변환」으로 진행해주세요.",
-    "zhTW": "已更新預覽。\n請確認外觀(尤其是手臂周圍),若沒問題請繼續進行「完整轉換」。",
-    "zhCN": "已更新预览。\n请确认外观(尤其是手臂周围),若没问题请继续进行「完整转换」。"
-  },
-  "TitlePreviewDone": {
-    "ja": "プレビュー完了",
-    "en": "Preview Complete",
-    "ko": "미리보기 완료",
-    "zhTW": "預覽完成",
-    "zhCN": "预览完成"
-  },
-  "StatusConvertDone": {
-    "ja": "変換完了!",
-    "en": "Conversion complete!",
-    "ko": "변환 완료!",
-    "zhTW": "轉換完成!",
-    "zhCN": "转换完成!"
-  },
-  "MsgConvertDoneBody": {
-    "ja": "MODが完成しました!\n\n【使用方法】\nPalworldを起動していたら、閉じてください。\n「作成済みMOD一覧」から選んで「Palworldに適用」を押して下さい。\n\n【解除方法】\n「MODを解除」を押して下さい。",
-    "en": "The MOD is complete!\n\n[How to use]\nIf Palworld is running, please close it.\nSelect it from \"Created MODs\" and press \"Apply to Palworld\".\n\n[How to remove]\nPress \"Remove MOD\".",
-    "ko": "모드가 완성되었습니다!\n\n【사용 방법】\n팰월드가 실행 중이라면 종료해주세요.\n「생성된 모드 목록」에서 선택하고 「팰월드에 적용」을 눌러주세요.\n\n【해제 방법】\n「모드 해제」를 눌러주세요.",
-    "zhTW": "MOD 已完成!\n\n【使用方法】\n若幻獸帕魯正在執行,請先關閉。\n從「已建立的 MOD 清單」中選擇後按下「套用至幻獸帕魯」。\n\n【解除方法】\n請按下「解除 MOD」。",
-    "zhCN": "MOD 已完成!\n\n【使用方法】\n若幻兽帕鲁正在运行,请先关闭。\n从「已创建的 MOD 列表」中选择后点击「应用到幻兽帕鲁」。\n\n【解除方法】\n请点击「解除 MOD」。"
-  },
-  "TitleConvertDone": {
-    "ja": "変換完了",
-    "en": "Conversion Complete",
-    "ko": "변환 완료",
-    "zhTW": "轉換完成",
-    "zhCN": "转换完成"
-  },
-  "StatusAvatarLoading": {
-    "ja": "アバターを読み込み中...",
-    "en": "Loading avatar...",
-    "ko": "아바타 불러오는 중...",
-    "zhTW": "正在載入角色模型...",
-    "zhCN": "正在加载角色模型..."
-  },
-  "StatusPromptVrmDnd": {
-    "ja": "prefab または VRM ファイルを入れてください(D&DでOK)",
-    "en": "Please add a prefab or VRM file (drag & drop OK)",
-    "ko": "prefab 또는 VRM 파일을 넣어주세요(드래그 앤 드롭 가능)",
-    "zhTW": "請放入 prefab 或 VRM 檔案(可拖放)",
-    "zhCN": "请放入 prefab 或 VRM 文件(可拖放)"
-  },
-  "StatusPreviewStale": {
-    "ja": "プレビューが古い状態です。「プレビュー更新」を押すか、prefab または VRMを入れ直してください(反映後にフル変換が押せます)",
-    "en": "The preview is out of date. Press \"Update Preview\" or re-add the prefab or VRM (Full Convert will be enabled once updated)",
-    "ko": "미리보기가 오래된 상태입니다. 「미리보기 업데이트」를 누르거나 prefab 또는 VRM을 다시 넣어주세요(반영 후 전체 변환이 가능합니다)",
-    "zhTW": "預覽已過期。請按「更新預覽」或重新放入 prefab 或 VRM(套用後即可進行完整轉換)",
-    "zhCN": "预览已过期。请点击「更新预览」或重新放入 prefab 或 VRM(应用后即可进行完整转换)"
-  },
-  "StatusReadyToConvert": {
-    "ja": "フル変換できます",
-    "en": "Ready for full conversion",
-    "ko": "전체 변환이 가능합니다",
-    "zhTW": "可以進行完整轉換",
-    "zhCN": "可以进行完整转换"
-  },
-  "StatusBlenderSetupNeeded": {
-    "ja": "Blenderのセットアップが必要です(「Blenderを再取得」を押してください)",
-    "en": "Blender setup is required (press \"Retry Blender Setup\")",
-    "ko": "Blender 설정이 필요합니다(「Blender 다시 받기」를 눌러주세요)",
-    "zhTW": "需要設定 Blender(請按「重新取得 Blender」)",
-    "zhCN": "需要设置 Blender(请点击「重新获取 Blender」)"
-  },
-  "HintNeedFullConvertFirst": {
-    "ja": "(先に「フル変換」が必要です)",
-    "en": "(requires \"Full Convert\" first)",
-    "ko": "(먼저 「전체 변환」이 필요합니다)",
-    "zhTW": "(需先執行「完整轉換」)",
-    "zhCN": "(需先执行「完整转换」)"
-  },
-  "MsgLicenseConfirmBody": {
-    "ja": "このアバターの利用規約は確認しましたか?\n\n・改変してよいこと\n・ゲーム内(MOD)で使用してよいこと\n\n確認と遵守は利用者の責任です。確認済みなら「はい」を押してください。\n(このアバターについて次回からは聞きません)\n\n---\n\nまた、Palworld側の利用条件についてもご確認ください。\n\n本ツールはシングルプレイ専用のクライアント側MODです。\nPalworldの規約はファイル改変を禁じる条項を含みますが、\n開発元は公式にMODを歓迎しており、\n明確な禁止はマルチプレイでの使用のみです。\nマルチプレイでは使用せず、セーブデータのバックアップを取った上で、\n自己責任でご利用ください。\n\n上記すべてに同意し、確認済みなら「はい」を押してください。",
-    "en": "Have you checked this avatar's terms of use?\n\n- That modification is allowed\n- That in-game (MOD) use is allowed\n\nChecking and complying with them is the user's responsibility. If you have confirmed this, press \"Yes\".\n(You won't be asked again for this avatar.)\n\n---\n\nPlease also check Palworld's own terms of use.\n\nThis tool is a single-player-only client-side MOD.\nPalworld's terms include a clause prohibiting file modification,\nbut the developer officially welcomes MODs;\nthe only explicit prohibition is use in multiplayer.\nDo not use it in multiplayer, back up your save data,\nand use it at your own risk.\n\nIf you agree to all of the above and have confirmed it, press \"Yes\".",
-    "ko": "이 아바타의 이용약관을 확인하셨습니까?\n\n· 개조해도 되는지\n· 게임 내(모드)에서 사용해도 되는지\n\n확인과 준수는 이용자의 책임입니다. 확인했다면 「예」를 눌러주세요.\n(이 아바타에 대해서는 다음부터 묻지 않습니다)\n\n---\n\n또한 팰월드 측의 이용 조건도 확인해주세요.\n\n본 도구는 싱글 플레이 전용 클라이언트 측 모드입니다.\n팰월드의 약관에는 파일 개조를 금지하는 조항이 있지만,\n개발사는 공식적으로 모드를 환영하고 있으며,\n명확히 금지하는 것은 멀티플레이에서의 사용뿐입니다.\n멀티플레이에서는 사용하지 말고, 세이브 데이터를 백업한 후\n자기 책임 하에 이용해주세요.\n\n위 사항 모두에 동의하고 확인했다면 「예」를 눌러주세요.",
-    "zhTW": "您是否已確認過這個角色模型的使用條款?\n\n‧是否允許進行改造\n‧是否允許在遊戲內(MOD)使用\n\n確認與遵守是使用者的責任。若已確認,請按「是」。\n(關於這個角色模型,下次將不會再次詢問)\n\n---\n\n此外,也請確認幻獸帕魯本身的使用條件。\n\n本工具是僅限單人遊玩的客戶端 MOD。\n幻獸帕魯的條款雖包含禁止修改檔案的條文,\n但開發商官方表示歡迎 MOD,\n明確禁止的僅限於多人遊戲中的使用。\n請勿在多人遊戲中使用,並在備份存檔資料後,\n自行承擔風險使用。\n\n若同意以上所有內容且已確認,請按「是」。",
-    "zhCN": "您是否已确认过这个角色模型的使用条款?\n\n‧是否允许进行改造\n‧是否允许在游戏内(MOD)使用\n\n确认与遵守是用户的责任。若已确认,请点击「是」。\n(关于这个角色模型,下次将不再询问)\n\n---\n\n此外,也请确认幻兽帕鲁本身的使用条件。\n\n本工具是仅限单人游玩的客户端 MOD。\n幻兽帕鲁的条款虽包含禁止修改文件的条文,\n但开发商官方表示欢迎 MOD,\n明确禁止的仅限于多人游戏中的使用。\n请勿在多人游戏中使用,并在备份存档数据后,\n自行承担风险使用。\n\n若同意以上所有内容且已确认,请点击「是」。"
-  },
-  "TitleLicenseConfirm": {
-    "ja": "利用規約・使用条件の確認",
-    "en": "Confirm Terms of Use",
-    "ko": "이용약관·사용 조건 확인",
-    "zhTW": "確認使用條款與條件",
-    "zhCN": "确认使用条款与条件"
-  },
-  "ErrBlenderSetupStartFailedFormat": {
-    "ja": "Blenderセットアップの起動に失敗しました: {0}",
-    "en": "Failed to start Blender setup: {0}",
-    "ko": "Blender 설정 시작에 실패했습니다: {0}",
-    "zhTW": "啟動 Blender 設定失敗: {0}",
-    "zhCN": "启动 Blender 设置失败: {0}"
-  },
-  "MsgBlenderNotFoundDevFormat": {
-    "ja": "Blenderが見つかりません({0})。開発環境の場合は tools\\ の配置を確認してください。",
-    "en": "Blender was not found ({0}). If this is a development environment, check the layout under tools\\.",
-    "ko": "Blender를 찾을 수 없습니다({0}). 개발 환경인 경우 tools\\ 배치를 확인해주세요.",
-    "zhTW": "找不到 Blender({0})。若為開發環境,請確認 tools\\ 目錄的配置。",
-    "zhCN": "找不到 Blender({0})。若为开发环境,请确认 tools\\ 目录的配置。"
-  },
-  "MsgBlenderSetupFailedShort": {
-    "ja": "Blenderのセットアップに失敗しました(「Blenderを再取得」を押すとやり直せます)",
-    "en": "Blender setup failed (press \"Retry Blender Setup\" to try again)",
-    "ko": "Blender 설정에 실패했습니다(「Blender 다시 받기」를 누르면 다시 시도할 수 있습니다)",
-    "zhTW": "Blender 設定失敗(按「重新取得 Blender」可再試一次)",
-    "zhCN": "Blender 设置失败(点击「重新获取 Blender」可再试一次)"
-  },
-  "StatusBlenderChecking": {
-    "ja": "Blenderの状態を確認しています…",
-    "en": "Checking Blender setup...",
-    "ko": "Blender 상태를 확인하고 있습니다…",
-    "zhTW": "正在確認 Blender 狀態…",
-    "zhCN": "正在确认 Blender 状态…"
-  },
-  "StatusBlenderSettingUpFormat": {
-    "ja": "Blenderを準備中: {0} ({1}%)",
-    "en": "Setting up Blender: {0} ({1}%)",
-    "ko": "Blender 준비 중: {0} ({1}%)",
-    "zhTW": "正在準備 Blender: {0} ({1}%)",
-    "zhCN": "正在准备 Blender: {0} ({1}%)"
-  },
-  "WhatBlenderSetup": {
-    "ja": "Blenderのセットアップ",
-    "en": "Blender setup",
-    "ko": "Blender 설정",
-    "zhTW": "Blender 設定",
-    "zhCN": "Blender 设置"
-  },
-  "TitlePathHealthWarning": {
-    "ja": "環境チェック: 注意",
-    "en": "Environment Check: Warning",
-    "ko": "환경 점검: 주의",
-    "zhTW": "環境檢查: 注意",
-    "zhCN": "环境检查: 注意"
-  },
-  "MsgPathHealthRiskFormat": {
-    "ja": "インストール先または作業先のフォルダに、変換が失敗しやすくなる要因が見つかりました。\n\n{0}\n\n詳細(サポートへの問い合わせ時にも記録されます):\n{1}",
-    "en": "Found factor(s) in the install or work folder that can make conversion more likely to fail.\n\n{0}\n\nDetails (also recorded when contacting support):\n{1}",
-    "ko": "설치 위치 또는 작업 폴더에서 변환이 실패하기 쉬워지는 요인을 발견했습니다.\n\n{0}\n\n상세 내용(문의 시에도 기록됩니다):\n{1}",
-    "zhTW": "在安裝位置或工作資料夾中,發現可能導致轉換容易失敗的因素。\n\n{0}\n\n詳細內容(問題回報時也會一併記錄):\n{1}",
-    "zhCN": "在安装位置或工作文件夹中,发现可能导致转换容易失败的因素。\n\n{0}\n\n详细内容(问题反馈时也会一并记录):\n{1}"
-  },
-  "CausePathTooLong": {
-    "ja": "インストール先または作業先のパスが長すぎます(Windowsの制限に近づいています)",
-    "en": "The install or work location's path is too long (close to Windows' path length limit)",
-    "ko": "설치 위치 또는 작업 위치의 경로가 너무 깁니다(Windows 제한에 근접)",
-    "zhTW": "安裝位置或工作資料夾的路徑過長(接近 Windows 的限制)",
-    "zhCN": "安装位置或工作文件夹的路径过长(接近 Windows 的限制)"
-  },
-  "ActionPathTooLong": {
-    "ja": "より短いパス(例: C:\\Uchinoko)へ移動してください",
-    "en": "Move it to a shorter path (e.g. C:\\Uchinoko)",
-    "ko": "더 짧은 경로(예: C:\\Uchinoko)로 이동해주세요",
-    "zhTW": "請移動到較短的路徑(例如 C:\\Uchinoko)",
-    "zhCN": "请移动到较短的路径(例如 C:\\Uchinoko)"
-  },
-  "CausePathUnc": {
-    "ja": "インストール先または作業先がネットワークパス(UNC)です",
-    "en": "The install or work location is a network (UNC) path",
-    "ko": "설치 위치 또는 작업 위치가 네트워크 경로(UNC)입니다",
-    "zhTW": "安裝位置或工作資料夾為網路路徑(UNC)",
-    "zhCN": "安装位置或工作文件夹为网络路径(UNC)"
-  },
-  "ActionPathUnc": {
-    "ja": "ローカルドライブへコピーしてから使ってください",
-    "en": "Copy it to a local drive before using it",
-    "ko": "로컬 드라이브로 복사한 후 사용해주세요",
-    "zhTW": "請先複製到本機磁碟後再使用",
-    "zhCN": "请先复制到本机磁盘后再使用"
-  },
-  "CausePathOneDrive": {
-    "ja": "インストール先または作業先がOneDriveの同期フォルダ内です",
-    "en": "The install or work location is inside a OneDrive-synced folder",
-    "ko": "설치 위치 또는 작업 위치가 OneDrive 동기화 폴더 안에 있습니다",
-    "zhTW": "安裝位置或工作資料夾位於 OneDrive 同步資料夾內",
-    "zhCN": "安装位置或工作文件夹位于 OneDrive 同步文件夹内"
-  },
-  "ActionPathOneDrive": {
-    "ja": "OneDriveの同期を一時停止するか、OneDrive外へ移動してください",
-    "en": "Pause OneDrive sync, or move it outside the OneDrive folder",
-    "ko": "OneDrive 동기화를 일시중지하거나 OneDrive 밖으로 이동해주세요",
-    "zhTW": "請暫停 OneDrive 同步,或移動到 OneDrive 資料夾外",
-    "zhCN": "请暂停 OneDrive 同步,或移动到 OneDrive 文件夹外"
-  },
-  "TitleWorkRootUnwritable": {
-    "ja": "作業フォルダを作成できません",
-    "en": "Cannot create a work folder",
-    "ko": "작업 폴더를 만들 수 없습니다",
-    "zhTW": "無法建立工作資料夾",
-    "zhCN": "无法创建工作文件夹"
-  },
-  "MsgWorkRootUnwritableFormat": {
-    "ja": "作業用フォルダをどこにも作成できませんでした。\n\n試した場所:\n・{0}\n・{1}\n\nどちらも書き込み権限がないようです。管理者権限が必要な場所(C:\\Program Files 等)にインストールされている場合は、C:\\Uchinoko のような書き込み可能な場所へ移動して再度お試しください。",
-    "en": "Could not create a work folder anywhere.\n\nLocations tried:\n- {0}\n- {1}\n\nNeither location appears to be writable. If installed under a location that requires administrator rights (e.g. C:\\Program Files), please move it to a writable location such as C:\\Uchinoko and try again.",
-    "ko": "작업 폴더를 어디에도 만들 수 없었습니다.\n\n시도한 위치:\n· {0}\n· {1}\n\n두 위치 모두 쓰기 권한이 없는 것 같습니다. 관리자 권한이 필요한 위치(C:\\Program Files 등)에 설치된 경우, C:\\Uchinoko 같은 쓰기 가능한 위치로 이동한 후 다시 시도해주세요.",
-    "zhTW": "無法在任何位置建立工作資料夾。\n\n已嘗試的位置:\n‧{0}\n‧{1}\n\n這兩個位置似乎都沒有寫入權限。如果安裝在需要管理員權限的位置(例如 C:\\Program Files),請移動到可寫入的位置(例如 C:\\Uchinoko)後再試一次。",
-    "zhCN": "无法在任何位置创建工作文件夹。\n\n已尝试的位置:\n‧{0}\n‧{1}\n\n这两个位置似乎都没有写入权限。如果安装在需要管理员权限的位置(例如 C:\\Program Files),请移动到可写入的位置(例如 C:\\Uchinoko)后再试一次。"
-  },
-  "LabelPreviewPlaceholderFront": {
-    "ja": "(プレビュー:正面)",
-    "en": "(preview front)",
-    "ko": "(미리보기: 정면)",
-    "zhTW": "(預覽:正面)",
-    "zhCN": "(预览:正面)"
-  },
-  "LabelPreviewPlaceholderSide": {
-    "ja": "(プレビュー:側面)",
-    "en": "(preview side)",
-    "ko": "(미리보기: 측면)",
-    "zhTW": "(預覽:側面)",
-    "zhCN": "(预览:侧面)"
-  },
-  "_progress_labels": {
-    "Preparing": {
-      "ja": "準備中",
-      "en": "Preparing",
-      "ko": "준비 중",
-      "zhTW": "準備中",
-      "zhCN": "准备中"
-    },
-    "Fetching game data": {
-      "ja": "ゲームデータを取得中",
-      "en": "Fetching game data",
-      "ko": "게임 데이터 가져오는 중",
-      "zhTW": "正在取得遊戲資料",
-      "zhCN": "正在获取游戏数据"
-    },
-    "Loading avatar": {
-      "ja": "アバターを読み込み中",
-      "en": "Loading avatar",
-      "ko": "아바타 불러오는 중",
-      "zhTW": "正在載入角色模型",
-      "zhCN": "正在加载角色模型"
-    },
-    "Retargeting skeleton": {
-      "ja": "スケルトンをリターゲット中",
-      "en": "Retargeting skeleton",
-      "ko": "스켈레톤 리타겟 중",
-      "zhTW": "正在重新定位骨架",
-      "zhCN": "正在重新定位骨架"
-    },
-    "Generating preview image": {
-      "ja": "プレビュー画像を生成中",
-      "en": "Generating preview image",
-      "ko": "미리보기 이미지 생성 중",
-      "zhTW": "正在產生預覽圖",
-      "zhCN": "正在生成预览图"
-    },
-    "Skeleton + preview complete (parallel)": {
-      "ja": "スケルトン+プレビュー完了(並列)",
-      "en": "Skeleton + preview complete (parallel)",
-      "ko": "스켈레톤+미리보기 완료(병렬)",
-      "zhTW": "骨架+預覽完成(平行)",
-      "zhCN": "骨架+预览完成(并行)"
-    },
-    "Generating MOD files": {
-      "ja": "MODファイルを生成中",
-      "en": "Generating MOD files",
-      "ko": "모드 파일 생성 중",
-      "zhTW": "正在產生 MOD 檔案",
-      "zhCN": "正在生成 MOD 文件"
-    },
-    "Packaging complete, verifying result": {
-      "ja": "パッケージ化完了、結果を確認中",
-      "en": "Packaging complete, verifying result",
-      "ko": "패키징 완료, 결과 확인 중",
-      "zhTW": "封裝完成,正在確認結果",
-      "zhCN": "打包完成,正在确认结果"
-    },
-    "Done": {
-      "ja": "完了",
-      "en": "Done",
-      "ko": "완료",
-      "zhTW": "完成",
-      "zhCN": "完成"
-    },
-    "Checking previous conversion results": {
-      "ja": "前回の変換結果を確認中",
-      "en": "Checking previous conversion results",
-      "ko": "이전 변환 결과 확인 중",
-      "zhTW": "正在確認先前的轉換結果",
-      "zhCN": "正在确认先前的转换结果"
-    },
-    "Final check": {
-      "ja": "最終確認中",
-      "en": "Final check",
-      "ko": "최종 확인 중",
-      "zhTW": "最終確認中",
-      "zhCN": "最终确认中"
-    },
-    "Preparing template assets": {
-      "ja": "テンプレート素材を準備中",
-      "en": "Preparing template assets",
-      "ko": "템플릿 자산 준비 중",
-      "zhTW": "正在準備範本素材",
-      "zhCN": "正在准备模板素材"
-    },
-    "Baking texture atlas": {
-      "ja": "テクスチャアトラスを生成中",
-      "en": "Baking texture atlas",
-      "ko": "텍스처 아틀라스 생성 중",
-      "zhTW": "正在產生紋理圖集",
-      "zhCN": "正在生成纹理图集"
-    },
-    "Preparing material overrides": {
-      "ja": "マテリアルの上書きを準備中",
-      "en": "Preparing material overrides",
-      "ko": "머티리얼 오버라이드 준비 중",
-      "zhTW": "正在準備材質覆寫",
-      "zhCN": "正在准备材质覆盖"
-    },
-    "Reading avatar data": {
-      "ja": "アバターデータを読み込み中",
-      "en": "Reading avatar data",
-      "ko": "아바타 데이터 읽는 중",
-      "zhTW": "正在讀取角色模型資料",
-      "zhCN": "正在读取角色模型数据"
-    },
-    "Injecting avatar into outfit items": {
-      "ja": "アバターを衣装アイテムへ組み込み中",
-      "en": "Injecting avatar into outfit items",
-      "ko": "아바타를 의상 아이템에 적용 중",
-      "zhTW": "正在將角色模型套用到服裝項目",
-      "zhCN": "正在将角色模型应用到服装项目"
-    },
-    "Compressing textures": {
-      "ja": "テクスチャを圧縮中",
-      "en": "Compressing textures",
-      "ko": "텍스처 압축 중",
-      "zhTW": "正在壓縮紋理",
-      "zhCN": "正在压缩纹理"
-    },
-    "Building pak file": {
-      "ja": "pakファイルを構築中",
-      "en": "Building pak file",
-      "ko": "pak 파일 빌드 중",
-      "zhTW": "正在建立 pak 檔案",
-      "zhCN": "正在构建 pak 文件"
-    },
-    "Running preflight checks": {
-      "ja": "事前検査を実行中",
-      "en": "Running preflight checks",
-      "ko": "사전 점검 실행 중",
-      "zhTW": "正在執行預檢",
-      "zhCN": "正在执行预检查"
-    }
+ "LabelLanguage": {
+  "ja": "Language",
+  "en": "Language",
+  "ko": "Language",
+  "zhTW": "Language",
+  "zhCN": "Language"
+ },
+ "TipLanguageSwitch": {
+  "ja": "表示言語を切り替えます(すぐに反映されます)",
+  "en": "Switch the display language (applies immediately)",
+  "ko": "표시 언어를 전환합니다(즉시 적용됩니다)",
+  "zhTW": "切換顯示語言(立即套用)",
+  "zhCN": "切换显示语言(立即生效)"
+ },
+ "TitleSubtitle": {
+  "ja": "あなたのアバターをパルワールドへ",
+  "en": "Bring your avatar into Palworld",
+  "ko": "당신의 아바타를 팰월드로",
+  "zhTW": "讓你的角色模型登入幻獸帕魯",
+  "zhCN": "让你的角色模型登入幻兽帕鲁"
+ },
+ "LabelAvatar": {
+  "ja": "アバター:",
+  "en": "Avatar:",
+  "ko": "아바타:",
+  "zhTW": "角色模型:",
+  "zhCN": "角色模型:"
+ },
+ "BtnBrowse": {
+  "ja": "参照...",
+  "en": "Browse...",
+  "ko": "찾아보기...",
+  "zhTW": "瀏覽...",
+  "zhCN": "浏览..."
+ },
+ "FileFilterAvatar": {
+  "ja": "アバター (*.prefab;*.vrm;*.fbx)|*.prefab;*.vrm;*.fbx",
+  "en": "Avatar (*.prefab;*.vrm;*.fbx)|*.prefab;*.vrm;*.fbx",
+  "ko": "아바타 (*.prefab;*.vrm;*.fbx)|*.prefab;*.vrm;*.fbx",
+  "zhTW": "角色模型 (*.prefab;*.vrm;*.fbx)|*.prefab;*.vrm;*.fbx",
+  "zhCN": "角色模型 (*.prefab;*.vrm;*.fbx)|*.prefab;*.vrm;*.fbx"
+ },
+ "DlgTitleChooseAvatarFile": {
+  "ja": "アバターのファイルを選んでください",
+  "en": "Select an avatar file",
+  "ko": "아바타 파일을 선택하세요",
+  "zhTW": "請選擇角色模型檔案",
+  "zhCN": "请选择角色模型文件"
+ },
+ "HintDragDrop": {
+  "ja": "(D&DでもOK)",
+  "en": "(drag & drop OK)",
+  "ko": "(드래그 앤 드롭 가능)",
+  "zhTW": "(可拖放檔案)",
+  "zhCN": "(可拖放文件)"
+ },
+ "BtnFullConvert": {
+  "ja": "フル変換(MOD作成)",
+  "en": "Full Convert (Create MOD)",
+  "ko": "전체 변환(모드 생성)",
+  "zhTW": "完整轉換(建立 MOD)",
+  "zhCN": "完整转换(创建 MOD)"
+ },
+ "BtnCancelConvert": {
+  "ja": "変換を中止",
+  "en": "Cancel Conversion",
+  "ko": "변환 중지",
+  "zhTW": "中止轉換",
+  "zhCN": "中止转换"
+ },
+ "TitleConfirm": {
+  "ja": "確認",
+  "en": "Confirm",
+  "ko": "확인",
+  "zhTW": "確認",
+  "zhCN": "确认"
+ },
+ "ConfirmCancelConvertBody": {
+  "ja": "実行中の変換を中止しますか?",
+  "en": "Cancel the running conversion?",
+  "ko": "실행 중인 변환을 중지하시겠습니까?",
+  "zhTW": "要中止正在執行的轉換嗎?",
+  "zhCN": "要中止正在进行的转换吗?"
+ },
+ "StatusPromptVrm": {
+  "ja": "prefab または VRM ファイルを入れてください",
+  "en": "Please add a prefab or VRM file",
+  "ko": "prefab 또는 VRM 파일을 넣어주세요",
+  "zhTW": "請放入 prefab 或 VRM 檔案",
+  "zhCN": "请放入 prefab 或 VRM 文件"
+ },
+ "BtnBlenderRetry": {
+  "ja": "Blenderを再取得",
+  "en": "Retry Blender Setup",
+  "ko": "Blender 다시 받기",
+  "zhTW": "重新取得 Blender",
+  "zhCN": "重新获取 Blender"
+ },
+ "TipBlenderRetry": {
+  "ja": "Blenderの初回セットアップをもう一度試みます",
+  "en": "Retries the first-time Blender setup",
+  "ko": "Blender 초기 설정을 다시 시도합니다",
+  "zhTW": "重新嘗試 Blender 的首次設定",
+  "zhCN": "重新尝试 Blender 的首次设置"
+ },
+ "LabelKodawari": {
+  "ja": "こだわり設定",
+  "en": "Advanced Settings",
+  "ko": "세부 설정",
+  "zhTW": "進階設定",
+  "zhCN": "高级设置"
+ },
+ "LabelShadowStrength": {
+  "ja": "影の濃さ:",
+  "en": "Shadow Strength:",
+  "ko": "그림자 농도:",
+  "zhTW": "陰影濃度:",
+  "zhCN": "阴影浓度:"
+ },
+ "TipShadowBar": {
+  "ja": "100%=ふつうの影 / 下げるほど影の中でも明るく見えます(既定30%)。\n反映は「フル変換」または「影のみ更新」の後、ゲーム内で確認できます",
+  "en": "100% = normal shadow / the lower the value, the brighter shadows appear (default 30%).\nCheck the result in-game after \"Full Convert\" or \"Update Shadow Only\".",
+  "ko": "100%=일반 그림자 / 낮출수록 그림자 안도 밝게 보입니다(기본값 30%).\n적용 결과는 「전체 변환」 또는 「그림자만 업데이트」 후 게임에서 확인할 수 있습니다",
+  "zhTW": "100%=一般陰影 / 數值越低,陰影內也會顯示得越亮(預設 30%)。\n套用後請在「完整轉換」或「僅更新陰影」執行後於遊戲內確認",
+  "zhCN": "100%=一般阴影 / 数值越低,阴影内也会显示得越亮(默认 30%)。\n应用后请在「完整转换」或「仅更新阴影」执行后在游戏内确认"
+ },
+ "BtnMatsOnly": {
+  "ja": "影のみ更新(高速)",
+  "en": "Update Shadow Only (Fast)",
+  "ko": "그림자만 업데이트(빠름)",
+  "zhTW": "僅更新陰影(快速)",
+  "zhCN": "仅更新阴影(快速)"
+ },
+ "TipMatsButton": {
+  "ja": "影の濃さだけを変えてMODを作り直します(1分ほど。フル変換は6分ほど)。\nこのアバターを一度「フル変換」してあることが前提です(していないと押せません)。\n影の濃さ以外(削除ボーンなど)を変えた場合は反映できないので「フル変換」を押してください",
+  "en": "Rebuilds the MOD changing only shadow strength (about 1 minute; Full Convert takes about 6 minutes).\nRequires that this avatar has already been through \"Full Convert\" once (otherwise this button is disabled).\nIf you changed anything other than shadow strength (e.g. drop bones), use \"Full Convert\" instead.",
+  "ko": "그림자 농도만 변경하여 모드를 다시 만듭니다(약 1분. 전체 변환은 약 6분).\n이 아바타를 한 번 「전체 변환」한 것이 전제입니다(하지 않았으면 누를 수 없습니다).\n그림자 농도 이외(삭제 본 등)를 변경한 경우에는 반영되지 않으므로 「전체 변환」을 눌러주세요",
+  "zhTW": "僅變更陰影濃度並重新建立 MOD(約 1 分鐘。完整轉換約需 6 分鐘)。\n前提是這個角色模型已經執行過一次「完整轉換」(未執行過則無法按下此按鈕)。\n若變更了陰影濃度以外的設定(如刪除骨骼等),請改按「完整轉換」",
+  "zhCN": "仅更改阴影浓度并重新生成 MOD(约 1 分钟。完整转换约需 6 分钟)。\n前提是该角色模型已执行过一次「完整转换」(未执行则无法点击此按钮)。\n如果更改了阴影浓度以外的设置(如删除骨骼等),请改为点击「完整转换」"
+ },
+ "LabelHeightScale": {
+  "ja": "身長:",
+  "en": "Height:",
+  "ko": "키:",
+  "zhTW": "身高:",
+  "zhCN": "身高:"
+ },
+ "TipHeightScale": {
+  "ja": "100%=そのままの身長 / 50%〜200%の範囲で全体の大きさを調整します(既定100%)。\n反映は「フル変換」の後、ゲーム内で確認できます",
+  "en": "100% = original height / adjusts overall size from 50% to 200% (default 100%).\nCheck the result in-game after \"Full Convert\".",
+  "ko": "100%=원래 키 / 50%〜200% 범위에서 전체 크기를 조정합니다(기본값 100%).\n적용 결과는 「전체 변환」 후 게임에서 확인할 수 있습니다",
+  "zhTW": "100%=原始身高 / 可在 50%〜200% 範圍內調整整體大小(預設 100%)。\n套用後請在「完整轉換」執行後於遊戲內確認",
+  "zhCN": "100%=原始身高 / 可在 50%〜200% 范围内调整整体大小(默认 100%)。\n应用后请在「完整转换」执行后在游戏内确认"
+ },
+ "BtnResetHeightScale": {
+  "ja": "リセット",
+  "en": "Reset",
+  "ko": "초기화",
+  "zhTW": "重設",
+  "zhCN": "重置"
+ },
+ "TipResetHeightScale": {
+  "ja": "身長を既定(100%)に戻します",
+  "en": "Resets height to the default (100%)",
+  "ko": "키를 기본값(100%)으로 되돌립니다",
+  "zhTW": "將身高重設為預設值(100%)",
+  "zhCN": "将身高重置为默认值(100%)"
+ },
+ "LabDropBonesHint": {
+  "ja": "特定ボーンに紐づくメッシュを削除します。削除したいボーンにチェックを入れてください。",
+  "en": "Removes the mesh attached to specific bones. Check the bones you want to remove.",
+  "ko": "특정 본에 연결된 메시를 삭제합니다. 삭제할 본에 체크하세요.",
+  "zhTW": "刪除連接到特定骨骼的網格。請勾選要刪除的骨骼。",
+  "zhCN": "删除连接到特定骨骼的网格。请勾选要删除的骨骼。"
+ },
+ "LabelDropBones": {
+  "ja": "削除ボーン(上級):",
+  "en": "Drop Bones (Advanced):",
+  "ko": "삭제할 본(고급):",
+  "zhTW": "刪除骨骼(進階):",
+  "zhCN": "删除骨骼(高级):"
+ },
+ "TipDropBones": {
+  "ja": "カンマ区切りでボーン名を指定すると、そのボーン(と子孫)に付いたパーツを削除します。\nボーン名の一覧はプレビュー生成後の work\\<名前>\\converted\\avatar_meta.json の \"bones\" を参照",
+  "en": "Enter bone names separated by commas to remove parts attached to those bones (and their descendants).\nSee the \"bones\" list in work\\<name>\\converted\\avatar_meta.json after a preview has been generated.",
+  "ko": "쉼표로 구분하여 본 이름을 지정하면 해당 본(및 자식)에 붙은 파츠를 삭제합니다.\n본 이름 목록은 미리보기 생성 후 work\\<이름>\\converted\\avatar_meta.json의 \"bones\"를 참조하세요",
+  "zhTW": "以逗號分隔輸入骨骼名稱,即可刪除附加在該骨骼(及其子代)上的部件。\n骨骼名稱清單請參閱產生預覽後的 work\\<名稱>\\converted\\avatar_meta.json 中的 \"bones\"",
+  "zhCN": "以逗号分隔输入骨骼名称,即可删除附加在该骨骼(及其子级)上的部件。\n骨骼名称列表请参见生成预览后的 work\\<名称>\\converted\\avatar_meta.json 中的 \"bones\""
+ },
+ "HintDropBonesEmpty": {
+  "ja": "(通常は空欄でOK)",
+  "en": "(usually fine to leave blank)",
+  "ko": "(보통 비워둬도 됩니다)",
+  "zhTW": "(通常留空即可)",
+  "zhCN": "(通常留空即可)"
+ },
+ "BtnPreviewUpdate": {
+  "ja": "プレビュー更新",
+  "en": "Update Preview",
+  "ko": "미리보기 업데이트",
+  "zhTW": "更新預覽",
+  "zhCN": "更新预览"
+ },
+ "TipPreviewButton": {
+  "ja": "プレビュー画像を再生成します(削除ボーン設定の反映)",
+  "en": "Regenerates the preview image (reflects drop bone settings)",
+  "ko": "미리보기 이미지를 다시 생성합니다(삭제 본 설정 반영)",
+  "zhTW": "重新產生預覽圖(套用刪除骨骼設定)",
+  "zhCN": "重新生成预览图(应用删除骨骼设置)"
+ },
+ "LabelPakList": {
+  "ja": "作成済みMOD一覧:",
+  "en": "Created MODs:",
+  "ko": "생성된 모드 목록:",
+  "zhTW": "已建立的 MOD 清單:",
+  "zhCN": "已创建的 MOD 列表:"
+ },
+ "AppliedStatusChecking": {
+  "ja": "適用中: (確認中)",
+  "en": "Applied: (checking...)",
+  "ko": "적용 중: (확인 중)",
+  "zhTW": "套用中: (確認中)",
+  "zhCN": "应用中: (确认中)"
+ },
+ "AppliedStatusNoPaksDir": {
+  "ja": "適用中: (Paksフォルダ未設定)",
+  "en": "Applied: (Paks folder not set)",
+  "ko": "적용 중: (Paks 폴더 미설정)",
+  "zhTW": "套用中: (尚未設定 Paks 資料夾)",
+  "zhCN": "应用中: (尚未设置 Paks 文件夹)"
+ },
+ "AppliedStatusNone": {
+  "ja": "適用中: なし(元のパルワールド)",
+  "en": "Applied: none (original Palworld)",
+  "ko": "적용 중: 없음(원본 팰월드)",
+  "zhTW": "套用中: 無(原版幻獸帕魯)",
+  "zhCN": "应用中: 无(原版幻兽帕鲁)"
+ },
+ "AppliedStatusUnknownMod": {
+  "ja": "適用中: 内容不明のMODが入っています",
+  "en": "Applied: an unknown MOD is installed",
+  "ko": "적용 중: 알 수 없는 모드가 설치되어 있습니다",
+  "zhTW": "套用中: 已安裝內容不明的 MOD",
+  "zhCN": "应用中: 已安装内容不明的 MOD"
+ },
+ "AppliedStatusCheckFailed": {
+  "ja": "適用中: (確認できませんでした)",
+  "en": "Applied: (could not verify)",
+  "ko": "적용 중: (확인할 수 없었습니다)",
+  "zhTW": "套用中: (無法確認)",
+  "zhCN": "应用中: (无法确认)"
+ },
+ "AppliedStatusNamedFormat": {
+  "ja": "適用中: {0}",
+  "en": "Applied: {0}",
+  "ko": "적용 중: {0}",
+  "zhTW": "套用中: {0}",
+  "zhCN": "应用中: {0}"
+ },
+ "ColAvatar": {
+  "ja": "アバター",
+  "en": "Avatar",
+  "ko": "아바타",
+  "zhTW": "角色模型",
+  "zhCN": "角色模型"
+ },
+ "ColFile": {
+  "ja": "ファイル",
+  "en": "File",
+  "ko": "파일",
+  "zhTW": "檔案",
+  "zhCN": "文件"
+ },
+ "ColSize": {
+  "ja": "サイズ",
+  "en": "Size",
+  "ko": "크기",
+  "zhTW": "大小",
+  "zhCN": "大小"
+ },
+ "ColCreatedAt": {
+  "ja": "作成日時",
+  "en": "Created",
+  "ko": "생성 일시",
+  "zhTW": "建立時間",
+  "zhCN": "创建时间"
+ },
+ "BtnApply": {
+  "ja": "Palworldに適用",
+  "en": "Apply to Palworld",
+  "ko": "팰월드에 적용",
+  "zhTW": "套用至幻獸帕魯",
+  "zhCN": "应用到幻兽帕鲁"
+ },
+ "BtnRemoveMod": {
+  "ja": "MODを解除",
+  "en": "Remove MOD",
+  "ko": "모드 해제",
+  "zhTW": "解除 MOD",
+  "zhCN": "解除 MOD"
+ },
+ "BtnRefreshList": {
+  "ja": "一覧を更新",
+  "en": "Refresh List",
+  "ko": "목록 새로고침",
+  "zhTW": "重新整理清單",
+  "zhCN": "刷新列表"
+ },
+ "BtnDeleteResult": {
+  "ja": "変換結果を削除",
+  "en": "Delete Conversion Result",
+  "ko": "변환 결과 삭제",
+  "zhTW": "刪除轉換結果",
+  "zhCN": "删除转换结果"
+ },
+ "BtnReport": {
+  "ja": "問合せ",
+  "en": "Contact",
+  "ko": "문의하기",
+  "zhTW": "問題回報",
+  "zhCN": "问题反馈"
+ },
+ "TipApply": {
+  "ja": "選んだMODをPalworldへ入れます(同時に入るのは常に1体だけ)",
+  "en": "Installs the selected MOD into Palworld (only one can be installed at a time)",
+  "ko": "선택한 모드를 팰월드에 설치합니다(동시에 하나만 적용 가능)",
+  "zhTW": "將選取的 MOD 套用至幻獸帕魯(同一時間僅能套用一個)",
+  "zhCN": "将选中的 MOD 应用到幻兽帕鲁(同一时间只能应用一个)"
+ },
+ "TipRemove": {
+  "ja": "MODを外して元のパルワールドに戻します",
+  "en": "Removes the MOD and restores the original Palworld",
+  "ko": "모드를 제거하고 원본 팰월드로 되돌립니다",
+  "zhTW": "移除 MOD 並還原成原版幻獸帕魯",
+  "zhCN": "移除 MOD 并还原为原版幻兽帕鲁"
+ },
+ "TipDelete": {
+  "ja": "選んだアバターのMODファイルと変換用プロジェクトを削除してディスクを空けます",
+  "en": "Deletes the selected avatar's MOD file and conversion project to free disk space",
+  "ko": "선택한 아바타의 모드 파일과 변환용 프로젝트를 삭제하여 디스크 공간을 확보합니다",
+  "zhTW": "刪除選取角色模型的 MOD 檔案與轉換用專案,以釋放磁碟空間",
+  "zhCN": "删除选中角色模型的 MOD 文件与转换用工程,以释放磁盘空间"
+ },
+ "TipReport": {
+  "ja": "不具合の報告・お問い合わせはこちら(診断ログを送信します)",
+  "en": "Report a problem or ask a question here (sends diagnostic logs)",
+  "ko": "문제 신고나 문의는 여기서(진단 로그를 전송합니다)",
+  "zhTW": "回報問題或洽詢請按此(將傳送診斷紀錄)",
+  "zhCN": "反馈问题或咨询请点此(将发送诊断日志)"
+ },
+ "MsgReportOfferFormat": {
+  "ja": "{0}\n\nこの内容は「{1}」ボタンから診断ログ付きで問い合わせできます。今すぐ開きますか?",
+  "en": "{0}\n\nYou can send this along with the diagnostic log via the \"{1}\" button. Open it now?",
+  "ko": "{0}\n\n\"{1}\" 버튼을 통해 진단 로그와 함께 문의할 수 있습니다. 지금 열까요?",
+  "zhTW": "{0}\n\n可透過「{1}」按鈕附上診斷紀錄進行洽詢。要立即開啟嗎?",
+  "zhCN": "{0}\n\n可通过「{1}」按钮附上诊断日志进行咨询。要立即打开吗?"
+ },
+ "CheckAutoApply": {
+  "ja": "変換完了後に自動でPalworldへ適用",
+  "en": "Automatically apply to Palworld after conversion",
+  "ko": "변환 완료 후 자동으로 팰월드에 적용",
+  "zhTW": "轉換完成後自動套用至幻獸帕魯",
+  "zhCN": "转换完成后自动应用到幻兽帕鲁"
+ },
+ "TipAutoApply": {
+  "ja": "変換が終わったら自動でPalworldに適用します",
+  "en": "Automatically applies to Palworld once conversion finishes",
+  "ko": "변환이 끝나면 자동으로 팰월드에 적용합니다",
+  "zhTW": "轉換結束後會自動套用至幻獸帕魯",
+  "zhCN": "转换结束后会自动应用到幻兽帕鲁"
+ },
+ "TipUpdateLabel": {
+  "ja": "クリックすると入手先ページ(BOOTH)をブラウザで開きます",
+  "en": "Click to open the download page (BOOTH) in your browser",
+  "ko": "클릭하면 다운로드 페이지(BOOTH)를 브라우저에서 엽니다",
+  "zhTW": "點擊後會在瀏覽器開啟下載頁面(BOOTH)",
+  "zhCN": "点击后会在浏览器中打开下载页面(BOOTH)"
+ },
+ "ConfirmExitWhileRunningBody": {
+  "ja": "変換が実行中です。中止して閉じますか?",
+  "en": "A conversion is running. Cancel it and close?",
+  "ko": "변환이 실행 중입니다. 중지하고 닫으시겠습니까?",
+  "zhTW": "轉換正在執行中。要中止並關閉嗎?",
+  "zhCN": "转换正在进行中。要中止并关闭吗?"
+ },
+ "WhatAvatarLoad": {
+  "ja": "アバターの読み込み",
+  "en": "Avatar loading",
+  "ko": "아바타 불러오기",
+  "zhTW": "讀取角色模型",
+  "zhCN": "读取角色模型"
+ },
+ "WhatScreenUpdate": {
+  "ja": "画面の更新",
+  "en": "Screen update",
+  "ko": "화면 업데이트",
+  "zhTW": "更新畫面",
+  "zhCN": "更新画面"
+ },
+ "WhatPalworldVersionCheck": {
+  "ja": "パルワールドのバージョン確認",
+  "en": "Palworld version check",
+  "ko": "팰월드 버전 확인",
+  "zhTW": "確認幻獸帕魯版本",
+  "zhCN": "确认幻兽帕鲁版本"
+ },
+ "WhatAppliedModCheck": {
+  "ja": "適用中のMODの確認",
+  "en": "Applied MOD check",
+  "ko": "적용 중인 모드 확인",
+  "zhTW": "確認目前套用的 MOD",
+  "zhCN": "确认目前应用的 MOD"
+ },
+ "ErrFailedFormat": {
+  "ja": "{0}に失敗しました: {1}",
+  "en": "{0} failed: {1}",
+  "ko": "{0}에 실패했습니다: {1}",
+  "zhTW": "{0}失敗: {1}",
+  "zhCN": "{0}失败: {1}"
+ },
+ "MsgDropVrmOrPrefab": {
+  "ja": ".prefab / .vrm ファイルをドロップしてください",
+  "en": "Please drop a .prefab or .vrm file",
+  "ko": ".prefab / .vrm 파일을 놓아주세요",
+  "zhTW": "請拖放 .prefab 或 .vrm 檔案",
+  "zhCN": "请拖放 .prefab 或 .vrm 文件"
+ },
+ "MsgHumanoidJsonNeededBody": {
+  "ja": "FBXを使うには、ボーン対応表(humanoid.json)がFBXと同じフォルダに必要です。\n\n作り方:\n1. ツールの unity\\HumanoidMapExporter.cs を\n   Unityプロジェクトの Assets\\Editor\\ に入れる\n2. アバターを選択して メニュー Tools > DiveToPalworld >\n   Export Humanoid Map を実行\n3. 出てきた humanoid.json をFBXと同じフォルダに置く",
+  "en": "To use an FBX file, a bone mapping file (humanoid.json) is required in the same folder as the FBX.\n\nHow to create it:\n1. Put the tool's unity\\HumanoidMapExporter.cs into\n   Assets\\Editor\\ in your Unity project\n2. Select the avatar and run menu Tools > DiveToPalworld >\n   Export Humanoid Map\n3. Place the resulting humanoid.json in the same folder as the FBX",
+  "ko": "FBX를 사용하려면 본 대응표(humanoid.json)가 FBX와 같은 폴더에 있어야 합니다.\n\n만드는 방법:\n1. 툴의 unity\\HumanoidMapExporter.cs를\n   Unity 프로젝트의 Assets\\Editor\\ 에 넣기\n2. 아바타를 선택하고 메뉴 Tools > DiveToPalworld >\n   Export Humanoid Map 실행\n3. 생성된 humanoid.json을 FBX와 같은 폴더에 배치",
+  "zhTW": "若要使用 FBX,需要在與 FBX 相同的資料夾中放置骨骼對應表(humanoid.json)。\n\n製作方式:\n1. 將工具內的 unity\\HumanoidMapExporter.cs\n   放入 Unity 專案的 Assets\\Editor\\ 中\n2. 選取角色模型後執行選單 Tools > DiveToPalworld >\n   Export Humanoid Map\n3. 將產生的 humanoid.json 放到與 FBX 相同的資料夾",
+  "zhCN": "若要使用 FBX,需要在与 FBX 相同的文件夹中放置骨骼对应表(humanoid.json)。\n\n制作方式:\n1. 将工具内的 unity\\HumanoidMapExporter.cs\n   放入 Unity 工程的 Assets\\Editor\\ 中\n2. 选中角色模型后执行菜单 Tools > DiveToPalworld >\n   Export Humanoid Map\n3. 将生成的 humanoid.json 放到与 FBX 相同的文件夹"
+ },
+ "TitleHumanoidJsonNeeded": {
+  "ja": "humanoid.json が必要です",
+  "en": "humanoid.json Required",
+  "ko": "humanoid.json이 필요합니다",
+  "zhTW": "需要 humanoid.json",
+  "zhCN": "需要 humanoid.json"
+ },
+ "DlgDescPaksFolder": {
+  "ja": "PalworldのPaksフォルダを選んでください (<Palworld>\\Pal\\Content\\Paks)",
+  "en": "Select Palworld's Paks folder (<Palworld>\\Pal\\Content\\Paks)",
+  "ko": "팰월드의 Paks 폴더를 선택하세요 (<Palworld>\\Pal\\Content\\Paks)",
+  "zhTW": "請選擇幻獸帕魯的 Paks 資料夾 (<Palworld>\\Pal\\Content\\Paks)",
+  "zhCN": "请选择幻兽帕鲁的 Paks 文件夹 (<Palworld>\\Pal\\Content\\Paks)"
+ },
+ "MsgPaksNotFoundFormat": {
+  "ja": "選んだフォルダに {0} が見つかりません:\n{1}\n\n正しい Paks フォルダ(<Palworld>\\Pal\\Content\\Paks)を選び直してください。",
+  "en": "{0} was not found in the selected folder:\n{1}\n\nPlease select the correct Paks folder (<Palworld>\\Pal\\Content\\Paks) again.",
+  "ko": "선택한 폴더에서 {0}을(를) 찾을 수 없습니다:\n{1}\n\n올바른 Paks 폴더(<Palworld>\\Pal\\Content\\Paks)를 다시 선택해주세요.",
+  "zhTW": "在選取的資料夾中找不到 {0}:\n{1}\n\n請重新選擇正確的 Paks 資料夾(<Palworld>\\Pal\\Content\\Paks)。",
+  "zhCN": "在选中的文件夹中找不到 {0}:\n{1}\n\n请重新选择正确的 Paks 文件夹(<Palworld>\\Pal\\Content\\Paks)。"
+ },
+ "TitlePalworldNotFound": {
+  "ja": "Palworldが見つかりません",
+  "en": "Palworld Not Found",
+  "ko": "팰월드를 찾을 수 없습니다",
+  "zhTW": "找不到幻獸帕魯",
+  "zhCN": "找不到幻兽帕鲁"
+ },
+ "TitlePalworldVersionCheck": {
+  "ja": "パルワールドのバージョン確認",
+  "en": "Palworld Version Check",
+  "ko": "팰월드 버전 확인",
+  "zhTW": "幻獸帕魯版本確認",
+  "zhCN": "幻兽帕鲁版本确认"
+ },
+ "TitleOtherModsDetected": {
+  "ja": "他のMODを検出しました",
+  "en": "Other Mods Detected",
+  "ko": "다른 모드를 감지했습니다",
+  "zhTW": "偵測到其他 MOD",
+  "zhCN": "检测到其他 MOD"
+ },
+ "MsgOtherModsDetectedFormat": {
+  "ja": "Paksフォルダに、このツール以外の.pakファイルが {0} 件見つかりました。\n\nUchinoko for Palworldは他のMODとの併用に対応していません。\n見た目が崩れる・MODが反映されない等の問題が起きることがあります。\n問題が起きた場合は他のMODを一旦外してからお試しください。",
+  "en": "Found {0} other .pak file(s) in the Paks folder besides this tool's own.\n\nUchinoko for Palworld does not support running alongside other mods.\nThis can cause broken appearance, the MOD not applying, and similar issues.\nIf you run into problems, please remove the other mods and try again.",
+  "ko": "Paks 폴더에서 이 도구 외의 .pak 파일 {0}개를 발견했습니다.\n\nUchinoko for Palworld는 다른 모드와의 병용을 지원하지 않습니다.\n외형이 깨지거나 모드가 반영되지 않는 등의 문제가 발생할 수 있습니다.\n문제가 발생하면 다른 모드를 제거한 후 다시 시도해주세요.",
+  "zhTW": "在 Paks 資料夾中發現除本工具外的 {0} 個 .pak 檔案。\n\nUchinoko for Palworld 不支援與其他 MOD 併用。\n可能發生外觀損壞、MOD 未套用等問題。\n若發生問題,請先移除其他 MOD 後再試一次。",
+  "zhCN": "在 Paks 文件夹中发现除本工具外的 {0} 个 .pak 文件。\n\nUchinoko for Palworld 不支持与其他 MOD 并用。\n可能发生外观损坏、MOD 未生效等问题。\n若发生问题,请先移除其他 MOD 后再试一次。"
+ },
+ "MsgPalworldNotFoundFatal": {
+  "ja": "Palworld本体が見つかりませんでした。Paksフォルダを選択してください",
+  "en": "Palworld could not be found. Please select the Paks folder.",
+  "ko": "팰월드 본체를 찾을 수 없습니다. Paks 폴더를 선택해 주세요.",
+  "zhTW": "找不到幻獸帕魯本體,請選擇 Paks 資料夾。",
+  "zhCN": "找不到幻兽帕鲁本体,请选择 Paks 文件夹。"
+ },
+ "MsgPalworldVersionMismatchFormat": {
+  "ja": "お使いのパルワールドは、このツールが動作確認したバージョンと異なります。\n  動作確認済み: {0}\n  お使いのもの: {1}\n\n本ツールの開発は終了しており、新しいバージョンの動作確認は\n行われないか、時間がかかることがあります。\nそのまま使えることも多いですが、おかしくなったら「MODを解除」してください。",
+  "en": "Your Palworld version differs from the ones this tool was verified against.\n  Verified: {0}\n  Yours: {1}\n\nDevelopment of this tool has ended, so new versions may be verified\nlate or not at all. It often still works — if something looks wrong,\nuse \"Remove MOD\".",
+  "ko": "사용 중인 팔월드는 이 도구에서 동작을 확인한 버전과 다릅니다.\n  확인된 버전: {0}\n  사용 중인 버전: {1}\n\n이 도구의 개발은 종료되어, 새 버전의 동작 확인은 늦어지거나\n이루어지지 않을 수 있습니다. 그대로 사용할 수 있는 경우도 많지만,\n이상해지면 \"모드 해제\"를 눌러 주세요.",
+  "zhTW": "您的 Palworld 版本與本工具已驗證的版本不同。\n  已驗證: {0}\n  您的版本: {1}\n\n本工具已停止開發，新版本的驗證可能延遲或不再進行。\n多數情況下仍可正常使用；若出現異常，請按「解除 MOD」。",
+  "zhCN": "您的 Palworld 版本与本工具已验证的版本不同。\n  已验证: {0}\n  您的版本: {1}\n\n本工具已停止开发，新版本的验证可能延迟或不再进行。\n多数情况下仍可正常使用；若出现异常，请按「解除 MOD」。"
+ },
+ "MsgPalworldVersionUpdateHintFormat": {
+  "ja": "このパルワールドのバージョンは、本ツールの v{0} 以降で対応している可能性があります。ツールを最新版に更新すると、この警告が出なくなるかもしれません。",
+  "en": "This Palworld version may be supported starting with tool version v{0}. Updating this tool to the latest version might make this warning go away.",
+  "ko": "이 팰월드 버전은 본 도구의 v{0} 이상에서 지원될 가능성이 있습니다. 도구를 최신 버전으로 업데이트하면 이 경고가 사라질 수 있습니다.",
+  "zhTW": "此幻獸帕魯版本可能自本工具 v{0} 起獲得支援。將本工具更新至最新版本,或許能讓此警告消失。",
+  "zhCN": "此幻兽帕鲁版本可能自本工具 v{0} 起获得支持。将本工具更新至最新版本,或许能让此警告消失。"
+ },
+ "LabelVerifiedPalworldVersionFormat": {
+  "ja": "動作確認済みパルワールド: {0}",
+  "en": "Verified Palworld version(s): {0}",
+  "ko": "동작 확인된 팰월드 버전: {0}",
+  "zhTW": "已驗證的幻獸帕魯版本: {0}",
+  "zhCN": "已验证的幻兽帕鲁版本: {0}"
+ },
+ "LabelVerifiedPalworldVersionUnknown": {
+  "ja": "動作確認済みパルワールド: 不明(確認情報を取得できませんでした)",
+  "en": "Verified Palworld version(s): unknown (could not retrieve verification data)",
+  "ko": "동작 확인된 팰월드 버전: 알 수 없음(확인 정보를 가져오지 못했습니다)",
+  "zhTW": "已驗證的幻獸帕魯版本: 不明(無法取得驗證資訊)",
+  "zhCN": "已验证的幻兽帕鲁版本: 不明(无法取得验证信息)"
+ },
+ "TipVerifiedPalworldVersion": {
+  "ja": "このツールが動作確認したパルワールドのバージョン一覧です。異なるバージョンでも多くの場合は動作しますが、うまく変換できない場合の参考にしてください。",
+  "en": "The Palworld versions this tool has been verified against. Other versions often still work, but this can help if a conversion doesn't behave as expected.",
+  "ko": "이 도구가 동작 확인한 팰월드 버전 목록입니다. 다른 버전에서도 대부분 동작하지만, 변환이 잘 되지 않을 때 참고해주세요.",
+  "zhTW": "本工具已驗證的幻獸帕魯版本清單。其他版本通常也能運作,但若轉換結果異常時可作為參考。",
+  "zhCN": "本工具已验证的幻兽帕鲁版本列表。其他版本通常也能运作,但若转换结果异常时可作为参考。"
+ },
+ "UpdateNoticeFormat": {
+  "ja": "新しいバージョン {0} があります(クリックで入手先を開く)",
+  "en": "A new version {0} is available (click to open the download page)",
+  "ko": "새 버전 {0}이(가) 있습니다(클릭하면 다운로드 페이지가 열립니다)",
+  "zhTW": "有新版本 {0}(點擊開啟下載頁面)",
+  "zhCN": "有新版本 {0}(点击打开下载页面)"
+ },
+ "BtnUpdateNow": {
+  "ja": "最新版を入手",
+  "en": "Get Latest Version",
+  "ko": "최신 버전 받기",
+  "zhTW": "取得最新版本",
+  "zhCN": "获取最新版本"
+ },
+ "TipUpdateNow": {
+  "ja": "最新版の入手先ページ(BOOTH等)をブラウザで開きます",
+  "en": "Opens the page (BOOTH, etc.) to get the latest version in your browser",
+  "ko": "브라우저에서 최신 버전을 받을 수 있는 페이지(BOOTH 등)를 엽니다",
+  "zhTW": "在瀏覽器中開啟取得最新版本的頁面(BOOTH 等)",
+  "zhCN": "在浏览器中打开获取最新版本的页面(BOOTH 等)"
+ },
+ "CauseNoWritePermission": {
+  "ja": "書き込み権限がありません",
+  "en": "No write permission",
+  "ko": "쓰기 권한이 없습니다",
+  "zhTW": "沒有寫入權限",
+  "zhCN": "没有写入权限"
+ },
+ "ActionNoWritePermission": {
+  "ja": "Palworldを終了してから再試行するか、Uchinoko.batを右クリック→「管理者として実行」でお試しください",
+  "en": "Close Palworld and try again, or right-click Uchinoko.bat and choose \"Run as administrator\"",
+  "ko": "팰월드를 종료한 후 다시 시도하거나, Uchinoko.bat를 우클릭하여 「관리자 권한으로 실행」을 시도해보세요",
+  "zhTW": "請先關閉幻獸帕魯後再試一次,或在 Uchinoko.bat 上按右鍵選擇「以系統管理員身分執行」",
+  "zhCN": "请先关闭幻兽帕鲁后再试一次,或在 Uchinoko.bat 上单击右键选择「以管理员身份运行」"
+ },
+ "CauseDiskFull": {
+  "ja": "ディスクの空き容量が不足しています",
+  "en": "Not enough free disk space",
+  "ko": "디스크 여유 공간이 부족합니다",
+  "zhTW": "磁碟可用空間不足",
+  "zhCN": "磁盘可用空间不足"
+ },
+ "ActionDiskFull": {
+  "ja": "適用先ドライブの空き容量を確保してから再試行してください",
+  "en": "Free up space on the target drive and try again",
+  "ko": "적용 대상 드라이브의 여유 공간을 확보한 후 다시 시도해주세요",
+  "zhTW": "請先確保目標磁碟有足夠可用空間後再試一次",
+  "zhCN": "请先确保目标磁盘有足够可用空间后再试一次"
+ },
+ "CauseFileInUse": {
+  "ja": "ファイルが他のプログラムに使われている可能性があります",
+  "en": "The file may be in use by another program",
+  "ko": "파일이 다른 프로그램에서 사용 중일 수 있습니다",
+  "zhTW": "檔案可能正被其他程式使用",
+  "zhCN": "文件可能正被其他程序占用"
+ },
+ "ActionFileInUse": {
+  "ja": "Palworldやウイルス対策ソフトを終了/一時停止してから再試行してください",
+  "en": "Close Palworld or pause your antivirus software, then try again",
+  "ko": "팰월드나 백신 프로그램을 종료/일시중지한 후 다시 시도해주세요",
+  "zhTW": "請結束幻獸帕魯或暫停防毒軟體後再試一次",
+  "zhCN": "请关闭幻兽帕鲁或暂停杀毒软件后再试一次"
+ },
+ "CauseTargetFolderNotFound": {
+  "ja": "適用先フォルダが見つかりません(Palworldの場所の設定が古い可能性)",
+  "en": "The target folder could not be found (the saved Palworld location may be outdated)",
+  "ko": "적용 대상 폴더를 찾을 수 없습니다(팰월드 위치 설정이 오래되었을 수 있습니다)",
+  "zhTW": "找不到目標資料夾(幻獸帕魯的位置設定可能已過期)",
+  "zhCN": "找不到目标文件夹(幻兽帕鲁的位置设置可能已过期)"
+ },
+ "ActionTargetFolderNotFound": {
+  "ja": "「こだわり設定」でPaksフォルダの場所を設定し直してください",
+  "en": "Reset the Paks folder location in \"Advanced Settings\"",
+  "ko": "「세부 설정」에서 Paks 폴더 위치를 다시 설정해주세요",
+  "zhTW": "請在「進階設定」中重新設定 Paks 資料夾位置",
+  "zhCN": "请在「高级设置」中重新设置 Paks 文件夹位置"
+ },
+ "CauseUnexpected": {
+  "ja": "予期しないエラーです",
+  "en": "An unexpected error occurred",
+  "ko": "예기치 않은 오류입니다",
+  "zhTW": "發生非預期的錯誤",
+  "zhCN": "发生非预期的错误"
+ },
+ "ActionUnexpected": {
+  "ja": "「問合せ」ボタンから診断ログを送信してご連絡ください",
+  "en": "Please send us the diagnostic log via the \"Contact\" button",
+  "ko": "「문의하기」 버튼으로 진단 로그를 보내주세요",
+  "zhTW": "請透過「問題回報」按鈕傳送診斷紀錄與我們聯絡",
+  "zhCN": "请通过「问题反馈」按钮发送诊断日志与我们联系"
+ },
+ "LabelApply": {
+  "ja": "適用",
+  "en": "Apply",
+  "ko": "적용",
+  "zhTW": "套用",
+  "zhCN": "应用"
+ },
+ "LabelRemove": {
+  "ja": "解除",
+  "en": "Remove",
+  "ko": "해제",
+  "zhTW": "解除",
+  "zhCN": "解除"
+ },
+ "MsgApplyFailureBodyFormat": {
+  "ja": "{0}に失敗しました。\n\n原因: {1}\n対処: {2}\n\n適用先: {3}\n詳しい内容は右のログ欄から確認できます。",
+  "en": "{0} failed.\n\nCause: {1}\nWhat to do: {2}\n\nTarget: {3}\nSee the log panel on the right for details.",
+  "ko": "{0}에 실패했습니다.\n\n원인: {1}\n대처: {2}\n\n대상: {3}\n자세한 내용은 오른쪽 로그란에서 확인할 수 있습니다.",
+  "zhTW": "{0}失敗。\n\n原因: {1}\n處理方式: {2}\n\n目標位置: {3}\n詳細內容請參閱右側的紀錄欄。",
+  "zhCN": "{0}失败。\n\n原因: {1}\n处理方式: {2}\n\n目标位置: {3}\n详细内容请参见右侧的日志栏。"
+ },
+ "MsgApplyFailureTitleFormat": {
+  "ja": "{0}エラー",
+  "en": "{0} Error",
+  "ko": "{0} 오류",
+  "zhTW": "{0}錯誤",
+  "zhCN": "{0}错误"
+ },
+ "MsgSelectModFromList": {
+  "ja": "一覧から適用するMODを選んでください",
+  "en": "Please select a MOD to apply from the list",
+  "ko": "목록에서 적용할 모드를 선택해주세요",
+  "zhTW": "請從清單中選擇要套用的 MOD",
+  "zhCN": "请从列表中选择要应用的 MOD"
+ },
+ "MsgGameRunningApply": {
+  "ja": "パルワールドが起動中です。ゲームを終了してから適用してください。",
+  "en": "Palworld is currently running. Please close the game before applying.",
+  "ko": "팰월드가 실행 중입니다. 게임을 종료한 후 적용해주세요.",
+  "zhTW": "幻獸帕魯正在執行中。請先結束遊戲後再套用。",
+  "zhCN": "幻兽帕鲁正在运行中。请先关闭游戏后再应用。"
+ },
+ "MsgModFileNotFoundFormat": {
+  "ja": "MODファイルが見つかりません: {0}",
+  "en": "MOD file not found: {0}",
+  "ko": "모드 파일을 찾을 수 없습니다: {0}",
+  "zhTW": "找不到 MOD 檔案: {0}",
+  "zhCN": "找不到 MOD 文件: {0}"
+ },
+ "StatusAppliedFormat": {
+  "ja": "適用しました: {0}",
+  "en": "Applied: {0}",
+  "ko": "적용했습니다: {0}",
+  "zhTW": "已套用: {0}",
+  "zhCN": "已应用: {0}"
+ },
+ "MsgApplySuccessFormat": {
+  "ja": "{0} を適用しました!\nゲームを起動して確認してください。",
+  "en": "{0} has been applied!\nStart the game to check the result.",
+  "ko": "{0}을(를) 적용했습니다!\n게임을 실행하여 확인해주세요.",
+  "zhTW": "已套用 {0}!\n請啟動遊戲確認結果。",
+  "zhCN": "已应用 {0}!\n请启动游戏确认效果。"
+ },
+ "TitleApplySuccess": {
+  "ja": "適用完了",
+  "en": "Applied Successfully",
+  "ko": "적용 완료",
+  "zhTW": "套用完成",
+  "zhCN": "应用完成"
+ },
+ "ConfirmDeleteHeaderFormat": {
+  "ja": "{0} について、このツールが作ったものをすべて削除しますか?",
+  "en": "Delete everything this tool created for {0}?",
+  "ko": "{0}에 대해 이 도구가 만든 모든 것을 삭제하시겠습니까?",
+  "zhTW": "是否要刪除本工具為 {0} 建立的所有內容?",
+  "zhCN": "是否要删除本工具为 {0} 创建的所有内容?"
+ },
+ "LineModFileFormat": {
+  "ja": "・MODファイル: {0}",
+  "en": "- MOD file: {0}",
+  "ko": "· 모드 파일: {0}",
+  "zhTW": "‧MOD 檔案: {0}",
+  "zhCN": "‧MOD 文件: {0}"
+ },
+ "LineWorkFolderFormat": {
+  "ja": "・設定・プレビュー等の作業フォルダ: {0}",
+  "en": "- Work folder (settings, previews, etc.): {0}",
+  "ko": "· 설정·미리보기 등의 작업 폴더: {0}",
+  "zhTW": "‧設定、預覽等工作資料夾: {0}",
+  "zhCN": "‧设置、预览等工作文件夹: {0}"
+ },
+ "LineUeProjectFormat": {
+  "ja": "・変換用の一時プロジェクト: {0}",
+  "en": "- Temporary project used for conversion: {0}",
+  "ko": "· 변환용 임시 프로젝트: {0}",
+  "zhTW": "‧轉換用暫存專案: {0}",
+  "zhCN": "‧转换用临时工程: {0}"
+ },
+ "NoteVrmNotDeleted": {
+  "ja": "元のprefab または VRM ファイルは削除されません。",
+  "en": "The original prefab or VRM file will not be deleted.",
+  "ko": "원본 prefab 또는 VRM 파일은 삭제되지 않습니다.",
+  "zhTW": "原始的 prefab 或 VRM 檔案不會被刪除。",
+  "zhCN": "原始的 prefab 或 VRM 文件不会被删除。"
+ },
+ "NoteReloadVrmToRedo": {
+  "ja": "また使う時はprefab または VRMを入れ直して最初からやり直しです。",
+  "en": "To use it again, you'll need to re-add the prefab or VRM and start over.",
+  "ko": "다시 사용할 때는 prefab 또는 VRM을 다시 넣고 처음부터 다시 진행해야 합니다.",
+  "zhTW": "若之後要再次使用,需要重新放入 prefab 或 VRM 並從頭開始。",
+  "zhCN": "若之后要再次使用,需要重新放入 prefab 或 VRM 并从头开始。"
+ },
+ "TitleConfirmDelete": {
+  "ja": "削除の確認",
+  "en": "Confirm Deletion",
+  "ko": "삭제 확인",
+  "zhTW": "確認刪除",
+  "zhCN": "确认删除"
+ },
+ "MsgDeleteFailedFormat": {
+  "ja": "削除に失敗しました:\n{0}\n(変換が実行中でないか、エクスプローラ等で開いていないか確認してください)",
+  "en": "Deletion failed:\n{0}\n(Check that a conversion isn't running and that the folder isn't open in Explorer or elsewhere)",
+  "ko": "삭제에 실패했습니다:\n{0}\n(변환이 실행 중이지 않은지, 탐색기 등에서 열려 있지 않은지 확인해주세요)",
+  "zhTW": "刪除失敗:\n{0}\n(請確認轉換是否正在執行,或該資料夾是否在檔案總管等程式中開啟)",
+  "zhCN": "删除失败:\n{0}\n(请确认转换是否正在进行,或该文件夹是否在资源管理器等程序中打开)"
+ },
+ "StatusDeletedFormat": {
+  "ja": "{0} の生成物をすべて削除しました",
+  "en": "All generated files for {0} have been deleted",
+  "ko": "{0}의 생성물을 모두 삭제했습니다",
+  "zhTW": "已刪除 {0} 的所有產生內容",
+  "zhCN": "已删除 {0} 的所有生成内容"
+ },
+ "SupportStage1Info": {
+  "ja": "下のボタンを押すと問合せフォームを開きます。そのさい、ログが送信されます。\nログの送信に際して、利用者は開発者(大崎商会)に全面的な利用権を\n委託したものとします。",
+  "en": "Pressing the button below opens the contact form; your log will be sent at that time.\nBy sending the log, you grant the developer (Osaki Shokai) full rights to use it.",
+  "ko": "아래 버튼을 누르면 문의 양식이 열립니다. 이때 로그가 전송됩니다.\n로그 전송 시, 이용자는 개발자(오사키상회)에게 로그의 전면적인\n이용 권한을 위임한 것으로 간주합니다.",
+  "zhTW": "按下方按鈕即會開啟問題回報表單,此時將會傳送紀錄。\n傳送紀錄時,視同使用者已將該紀錄的完整使用權\n委託給開發者(大崎商會)。",
+  "zhCN": "点击下方按钮即会打开问题反馈表单,此时将会发送日志。\n发送日志时,视同用户已将该日志的完整使用权\n委托给开发者(大崎商会)。"
+ },
+ "BtnOpenInquiryForm": {
+  "ja": "問い合わせフォームを開く",
+  "en": "Open Contact Form",
+  "ko": "문의 양식 열기",
+  "zhTW": "開啟問題回報表單",
+  "zhCN": "打开问题反馈表单"
+ },
+ "BtnOk": {
+  "ja": "OK",
+  "en": "OK",
+  "ko": "OK",
+  "zhTW": "OK",
+  "zhCN": "OK"
+ },
+ "SupportChangedNotice": {
+  "ja": "前回の報告以降にログが変わっています。再送してください。\n",
+  "en": "The log has changed since your last report. Please resend it.\n",
+  "ko": "이전 보고 이후 로그가 변경되었습니다. 다시 전송해주세요.\n",
+  "zhTW": "自上次回報後紀錄已有變動,請重新傳送。\n",
+  "zhCN": "自上次反馈后日志已有变化,请重新发送。\n"
+ },
+ "SupportConfirmAppendBody": {
+  "ja": "次の内容が、前回と同じ問い合わせスレッドへ追記されます。よろしいですか?\n(問題のある内容があれば、編集してください)",
+  "en": "The following content will be added to the same inquiry thread as before. Continue?\n(Edit below if anything looks wrong.)",
+  "ko": "다음 내용이 이전과 동일한 문의 스레드에 추가됩니다. 계속하시겠습니까?\n(문제가 있는 내용이 있으면 수정해주세요)",
+  "zhTW": "以下內容將會附加到與上次相同的問題回報串。是否繼續?\n(如有不便公開的內容請自行編輯)",
+  "zhCN": "以下内容将会附加到与上次相同的问题反馈串中。是否继续?\n(如有不便公开的内容请自行编辑)"
+ },
+ "SupportConfirmNewBody": {
+  "ja": "次の内容のログが送信されます。本当によろしいですか?\n(問題のある内容があれば、編集してください)",
+  "en": "The following log will be sent. Are you sure?\n(Edit below if anything looks wrong.)",
+  "ko": "다음 내용의 로그가 전송됩니다. 정말 계속하시겠습니까?\n(문제가 있는 내용이 있으면 수정해주세요)",
+  "zhTW": "將會傳送以下內容的紀錄。確定要繼續嗎?\n(如有不便公開的內容請自行編輯)",
+  "zhCN": "将会发送以下内容的日志。确定要继续吗?\n(如有不便公开的内容请自行编辑)"
+ },
+ "SupportSendFailedUseManualCopy": {
+  "ja": "送信できませんでした。「ログを手動でコピー」をお使いください。",
+  "en": "Sending failed. Please use \"Copy Log Manually\" instead.",
+  "ko": "전송하지 못했습니다. 「로그 수동 복사」를 이용해주세요.",
+  "zhTW": "傳送失敗。請改用「手動複製紀錄」。",
+  "zhCN": "发送失败。请改用「手动复制日志」。"
+ },
+ "SupportSending": {
+  "ja": "送信中...",
+  "en": "Sending...",
+  "ko": "전송 중...",
+  "zhTW": "傳送中...",
+  "zhCN": "发送中..."
+ },
+ "SupportSendFailedOffline": {
+  "ja": "送信できませんでした(オフライン、または接続先の都合)。\n「ログを手動でコピー」もお使いいただけます。",
+  "en": "Sending failed (offline, or a problem with the server).\nYou can also use \"Copy Log Manually\".",
+  "ko": "전송하지 못했습니다(오프라인이거나 서버 문제).\n「로그 수동 복사」도 이용하실 수 있습니다.",
+  "zhTW": "傳送失敗(可能是離線或伺服器端問題)。\n您也可以使用「手動複製紀錄」。",
+  "zhCN": "发送失败(可能是离线或服务器端问题)。\n您也可以使用「手动复制日志」。"
+ },
+ "SupportSentLabelFormat": {
+  "ja": "送信済みです(報告ID: {0})。\n対応状況・開発者からの返信は、下のページでいつでも確認できます:",
+  "en": "Already sent (Report ID: {0}).\nYou can check the status and any developer replies on the page below at any time:",
+  "ko": "전송 완료(보고 ID: {0}).\n대응 현황과 개발자의 답변은 아래 페이지에서 언제든지 확인할 수 있습니다:",
+  "zhTW": "已傳送(回報編號: {0})。\n處理進度與開發者的回覆,可隨時於下方頁面確認:",
+  "zhCN": "已发送(反馈编号: {0})。\n处理进度与开发者的回复,可随时在下方页面查看:"
+ },
+ "SupportEndedMessage": {
+  "ja": "お問い合わせありがとうございます。こちらのプロジェクトは資金ショートの為開発・サポートを終了しました。誠に申し訳ございませんがご要望・不具合対応など受けられない状況です。ご愛顧ありがとうございました",
+  "en": "Thank you for reaching out. This project has ended development and support due to a funding shortfall. We are very sorry, but we are no longer able to respond to requests or bug reports. Thank you for your support.",
+  "ko": "문의해 주셔서 감사합니다. 이 프로젝트는 자금 부족으로 인해 개발 및 지원을 종료하였습니다. 대단히 죄송하지만 요청 사항이나 오류 대응 등을 받을 수 없는 상황입니다. 그동안 성원해 주셔서 감사했습니다.",
+  "zhTW": "感謝您的詢問。本專案因資金短缺已結束開發與支援。萬分抱歉,目前無法受理需求或問題回報等事宜。感謝您一直以來的支持與愛護。",
+  "zhCN": "感谢您的咨询。本项目因资金短缺已结束开发与支持。非常抱歉,目前无法受理需求或问题反馈等事宜。感谢您一直以来的支持与厚爱。"
+ },
+ "BtnOpenSamePlace": {
+  "ja": "同じ場所を開く",
+  "en": "Open Same Page",
+  "ko": "같은 페이지 열기",
+  "zhTW": "開啟相同頁面",
+  "zhCN": "打开相同页面"
+ },
+ "BtnResendLog": {
+  "ja": "ログを再送",
+  "en": "Resend Log",
+  "ko": "로그 다시 전송",
+  "zhTW": "重新傳送紀錄",
+  "zhCN": "重新发送日志"
+ },
+ "BtnCopyLogManually": {
+  "ja": "ログを手動でコピー",
+  "en": "Copy Log Manually",
+  "ko": "로그 수동 복사",
+  "zhTW": "手動複製紀錄",
+  "zhCN": "手动复制日志"
+ },
+ "BtnClose": {
+  "ja": "閉じる",
+  "en": "Close",
+  "ko": "닫기",
+  "zhTW": "關閉",
+  "zhCN": "关闭"
+ },
+ "MsgLogCopiedBody": {
+  "ja": "ログをコピーしました。\n必要な場所に貼り付けてください。\n\nログにはファイルパスなど個人情報が含まれていることがあります。送付・公開前によく確認してください",
+  "en": "The log has been copied.\nPaste it wherever needed.\n\nThe log may contain personal information such as file paths. Please review it carefully before sending or posting it publicly.",
+  "ko": "로그를 복사했습니다.\n필요한 곳에 붙여넣어 주세요.\n\n로그에는 파일 경로 등 개인정보가 포함될 수 있습니다. 전송·공개 전에 잘 확인해주세요",
+  "zhTW": "已複製紀錄。\n請貼到需要的地方。\n\n紀錄中可能包含檔案路徑等個人資訊。傳送或公開前請務必仔細確認",
+  "zhCN": "已复制日志。\n请粘贴到需要的地方。\n\n日志中可能包含文件路径等个人信息。发送或公开前请务必仔细确认"
+ },
+ "TitleLogCopied": {
+  "ja": "ログをコピー",
+  "en": "Log Copied",
+  "ko": "로그 복사",
+  "zhTW": "複製紀錄",
+  "zhCN": "复制日志"
+ },
+ "MsgCopyFailedFormat": {
+  "ja": "コピーに失敗しました: {0}",
+  "en": "Copy failed: {0}",
+  "ko": "복사에 실패했습니다: {0}",
+  "zhTW": "複製失敗: {0}",
+  "zhCN": "复制失败: {0}"
+ },
+ "MsgGameRunningRemove": {
+  "ja": "パルワールドが起動中です。ゲームを終了してから解除してください。",
+  "en": "Palworld is currently running. Please close the game before removing it.",
+  "ko": "팰월드가 실행 중입니다. 게임을 종료한 후 해제해주세요.",
+  "zhTW": "幻獸帕魯正在執行中。請先結束遊戲後再解除。",
+  "zhCN": "幻兽帕鲁正在运行中。请先关闭游戏后再解除。"
+ },
+ "StatusNoModApplied": {
+  "ja": "MODは入っていません(すでに元の状態)",
+  "en": "No MOD is applied (already in original state)",
+  "ko": "모드가 설치되어 있지 않습니다(이미 원본 상태)",
+  "zhTW": "未套用任何 MOD(已是原始狀態)",
+  "zhCN": "未应用任何 MOD(已是原始状态)"
+ },
+ "StatusModRemoved": {
+  "ja": "MODを解除しました(元のパルワールドに戻りました)",
+  "en": "MOD removed (restored to original Palworld)",
+  "ko": "모드를 해제했습니다(원본 팰월드로 되돌아갔습니다)",
+  "zhTW": "已解除 MOD(已還原成原版幻獸帕魯)",
+  "zhCN": "已解除 MOD(已还原为原版幻兽帕鲁)"
+ },
+ "MsgAlreadyRunning": {
+  "ja": "実行中です",
+  "en": "Already running",
+  "ko": "실행 중입니다",
+  "zhTW": "執行中",
+  "zhCN": "正在运行"
+ },
+ "MsgSpecifyVrmFile": {
+  "ja": "prefab または VRM ファイルを指定してください",
+  "en": "Please specify a prefab or VRM file",
+  "ko": "prefab 또는 VRM 파일을 지정해주세요",
+  "zhTW": "請指定 prefab 或 VRM 檔案",
+  "zhCN": "请指定 prefab 或 VRM 文件"
+ },
+ "MsgNoMeshFatal": {
+  "ja": "メッシュが見つかりませんでした。入力ファイルが壊れていないかご確認ください",
+  "en": "No mesh was found. Please check whether the input file is corrupted.",
+  "ko": "메시를 찾을 수 없습니다. 입력 파일이 손상되지 않았는지 확인해 주세요.",
+  "zhTW": "找不到網格。請確認輸入檔案是否已損壞。",
+  "zhCN": "未找到网格。请确认输入文件是否已损坏。"
+ },
+ "MsgHumanoidBoneUnassignedFatal": {
+  "ja": "必須のHumanoidボーンが未割当です。Unityでアバターを開いて選択し、Rigタブ > Configure Avatarで未割当のボーンを割り当ててから再エクスポートしてください",
+  "en": "A required Humanoid bone is unassigned. Open the avatar in Unity, select it, and check the Rig tab > Configure Avatar to assign the missing bone, then re-export.",
+  "ko": "필수 Humanoid 본이 할당되지 않았습니다. Unity에서 아바타를 열어 선택한 후, Rig 탭 > Configure Avatar에서 누락된 본을 할당하고 다시 내보내 주세요.",
+  "zhTW": "必要的 Humanoid 骨骼未指派。請在 Unity 中開啟並選取該角色,於 Rig 分頁 > Configure Avatar 中指派缺少的骨骼,然後重新匯出。",
+  "zhCN": "必需的 Humanoid 骨骼未指定。请在 Unity 中打开并选择该角色,在 Rig 选项卡 > Configure Avatar 中指定缺失的骨骼,然后重新导出。"
+ },
+ "MsgHumanoidBoneCollisionFatal": {
+  "ja": "このアバターには複数の骨格(Armature)があります。これはアクセサリや衣装が独自の骨格を持つ場合によく見られる通常の構造です。本ツールは、必須のHumanoidボーンについて、どのボーンが本体に属するかを完全に解決できませんでした",
+  "en": "This avatar has multiple skeletons (Armatures), which is a normal structure when accessories or outfits carry their own rig. This tool could not fully resolve which bone belongs to the main body for a required Humanoid bone.",
+  "ko": "이 아바타에는 여러 개의 스켈레톤(Armature)이 있습니다. 이는 액세서리나 의상이 독자적인 리그를 가질 때 흔히 나타나는 정상적인 구조입니다. 이 도구는 필수 Humanoid 본에 대해 어느 본이 본체에 속하는지 완전히 해결하지 못했습니다.",
+  "zhTW": "此角色擁有多個骨架(Armature),當配件或服裝擁有各自的骨架時,這是常見的正常結構。本工具無法完全判斷必要的 Humanoid 骨骼中,哪一根屬於本體。",
+  "zhCN": "此角色拥有多个骨架(Armature),当配件或服装拥有各自的骨架时,这是常见的正常结构。本工具无法完全判断必需的 Humanoid 骨骼中,哪一根属于本体。"
+ },
+ "StatusPreviewGenerating": {
+  "ja": "プレビュー生成中...",
+  "en": "Generating preview...",
+  "ko": "미리보기 생성 중...",
+  "zhTW": "產生預覽中...",
+  "zhCN": "生成预览中..."
+ },
+ "StatusMaterialsApplying": {
+  "ja": "影の濃さを反映中(1分ほど)...",
+  "en": "Applying shadow strength (about 1 minute)...",
+  "ko": "그림자 농도 적용 중(약 1분)...",
+  "zhTW": "套用陰影濃度中(約 1 分鐘)...",
+  "zhCN": "应用阴影浓度中(约 1 分钟)..."
+ },
+ "StatusFullConverting": {
+  "ja": "フル変換中(時間がかかります)...",
+  "en": "Full conversion in progress (this takes a while)...",
+  "ko": "전체 변환 중(시간이 걸립니다)...",
+  "zhTW": "完整轉換中(需要一些時間)...",
+  "zhCN": "完整转换中(需要一些时间)..."
+ },
+ "StatusEtaSuffixFormat": {
+  "ja": "残り約 {0}",
+  "en": "about {0} remaining",
+  "ko": "약 {0} 남음",
+  "zhTW": "剩餘約 {0}",
+  "zhCN": "剩余约 {0}"
+ },
+ "MsgOtherProcessRunning": {
+  "ja": "他の処理を実行中です。完了してからもう一度お試しください。",
+  "en": "Another process is running. Please try again once it finishes.",
+  "ko": "다른 작업이 실행 중입니다. 완료 후 다시 시도해주세요.",
+  "zhTW": "有其他作業正在執行中。請等待完成後再試一次。",
+  "zhCN": "有其他操作正在进行中。请等待完成后再试一次。"
+ },
+ "MsgSpecifyPrefabFile": {
+  "ja": ".prefab ファイルを指定してください",
+  "en": "Please specify a .prefab file",
+  "ko": ".prefab 파일을 지정해주세요",
+  "zhTW": "請指定 .prefab 檔案",
+  "zhCN": "请指定 .prefab 文件"
+ },
+ "MsgExportScriptNotFoundFormat": {
+  "ja": "エクスポートスクリプトが見つかりません:\n{0}",
+  "en": "Export script not found:\n{0}",
+  "ko": "내보내기 스크립트를 찾을 수 없습니다:\n{0}",
+  "zhTW": "找不到匯出腳本:\n{0}",
+  "zhCN": "找不到导出脚本:\n{0}"
+ },
+ "StatusUnityExporting": {
+  "ja": "Unityプロジェクトからエクスポート中(数十秒〜。初回はパッケージ導入で数分かかることがあります)...",
+  "en": "Exporting from the Unity project (tens of seconds or more; the first time may take a few minutes for package setup)...",
+  "ko": "Unity 프로젝트에서 내보내는 중(수십 초~. 처음에는 패키지 설치로 몇 분 걸릴 수 있습니다)...",
+  "zhTW": "正在從 Unity 專案匯出中(數十秒以上;首次執行可能因套件安裝需數分鐘)...",
+  "zhCN": "正在从 Unity 工程导出中(数十秒以上;首次执行可能因包安装需数分钟)..."
+ },
+ "UnityExportElapsedSuffixFormat": {
+  "ja": "経過 {0}",
+  "en": "elapsed {0}",
+  "ko": "경과 {0}",
+  "zhTW": "已耗時 {0}",
+  "zhCN": "已耗时 {0}"
+ },
+ "LogUnityExportHeartbeatFormat": {
+  "ja": "[Unityエクスポート] まだ実行中です(経過 {0})。Unity自体の出力はログファイルにのみ書かれるため、この間は新しい行が表示されません(正常です)。",
+  "en": "[Unity export] Still running (elapsed {0}). Unity's own output only goes to its log file, so no new lines appear here during this time (this is normal).",
+  "ko": "[Unity 내보내기] 아직 실행 중입니다(경과 {0}). Unity 자체의 출력은 로그 파일에만 기록되므로, 이 동안 새 줄이 표시되지 않습니다(정상입니다).",
+  "zhTW": "[Unity 匯出] 仍在執行中(已耗時 {0})。Unity 本身的輸出只會寫入其記錄檔,因此這段期間不會顯示新的內容(屬正常現象)。",
+  "zhCN": "[Unity 导出] 仍在执行中(已耗时 {0})。Unity 本身的输出只会写入其日志文件,因此这段时间不会显示新的内容(属正常现象)。"
+ },
+ "StatusUnityExportFailed": {
+  "ja": "Unityエクスポートに失敗しました(右のログ参照)",
+  "en": "Unity export failed (see the log on the right)",
+  "ko": "Unity 내보내기에 실패했습니다(오른쪽 로그 참조)",
+  "zhTW": "Unity 匯出失敗(請參閱右側紀錄)",
+  "zhCN": "Unity 导出失败(请参见右侧日志)"
+ },
+ "MsgUnityExportErrorBody": {
+  "ja": "Unityプロジェクトからのエクスポートに失敗しました。\n\nよくある原因:\n・指定したのがAssets配下のprefabではない\n・そのUnityプロジェクトが今Unity Editorで開かれている\n  (Unity Editorを閉じてからもう一度お試しください)\n・プロジェクトに合うバージョンのUnity Editorが見つからない\n\n詳しい内容は右のログ欄から確認できます。\n解決しない場合は「問合せ」ボタンから診断ログを送信してご連絡ください。",
+  "en": "Export from the Unity project failed.\n\nCommon causes:\n- The file specified is not a prefab under Assets\n- The Unity project is currently open in Unity Editor\n  (close Unity Editor and try again)\n- No matching version of Unity Editor could be found for the project\n\nSee the log panel on the right for details.\nIf the problem persists, please send us the diagnostic log via the \"Contact\" button.",
+  "ko": "Unity 프로젝트에서 내보내기에 실패했습니다.\n\n일반적인 원인:\n· 지정한 것이 Assets 아래의 prefab이 아님\n· 해당 Unity 프로젝트가 현재 Unity Editor에서 열려 있음\n  (Unity Editor를 닫은 후 다시 시도해주세요)\n· 프로젝트에 맞는 버전의 Unity Editor를 찾을 수 없음\n\n자세한 내용은 오른쪽 로그란에서 확인할 수 있습니다.\n해결되지 않으면 「문의하기」 버튼으로 진단 로그를 보내주세요.",
+  "zhTW": "從 Unity 專案匯出失敗。\n\n常見原因:\n‧指定的檔案並非 Assets 底下的 prefab\n‧該 Unity 專案目前正在 Unity Editor 中開啟\n  (請先關閉 Unity Editor 後再試一次)\n‧找不到符合該專案的 Unity Editor 版本\n\n詳細內容請參閱右側的紀錄欄。\n若問題持續發生,請透過「問題回報」按鈕傳送診斷紀錄與我們聯絡。",
+  "zhCN": "从 Unity 工程导出失败。\n\n常见原因:\n‧指定的文件并非 Assets 下的 prefab\n‧该 Unity 工程目前正在 Unity Editor 中打开\n  (请先关闭 Unity Editor 后再试一次)\n‧找不到符合该工程的 Unity Editor 版本\n\n详细内容请参见右侧的日志栏。\n若问题持续存在,请通过「问题反馈」按钮发送诊断日志与我们联系。"
+ },
+ "MsgUnityExportErrorUnivrmDupBody": {
+  "ja": "Unityプロジェクトからのエクスポートに失敗しました。\nUniVRMが二重に導入されている可能性があります(UPMパッケージ版(com.vrmc.univrm)と、Assets/VRM フォルダ)。\nUniVRMを削除してから、もう一度エクスポートをお試しください。",
+  "en": "Export from the Unity project failed.\nUniVRM appears to be installed twice (both the UPM package (com.vrmc.univrm) and the Assets/VRM folder).\nRemove UniVRM, then try exporting again.",
+  "ko": "Unity 프로젝트에서 내보내기에 실패했습니다.\nUniVRM이 이중으로 설치되어 있을 수 있습니다(UPM 패키지 버전(com.vrmc.univrm)과 Assets/VRM 폴더).\nUniVRM을 삭제한 후 다시 내보내기를 시도해주세요.",
+  "zhTW": "從 Unity 專案匯出失敗。\n此專案中可能重複安裝了 UniVRM(UPM 套件版(com.vrmc.univrm)與 Assets/VRM 資料夾)。\n請刪除 UniVRM 後,再重新嘗試匯出。",
+  "zhCN": "从 Unity 工程导出失败。\n此工程中可能重复安装了 UniVRM(UPM 包版本(com.vrmc.univrm)与 Assets/VRM 文件夹)。\n请删除 UniVRM 后,再重新尝试导出。"
+ },
+ "TitleUnityExportError": {
+  "ja": "Unityエクスポートエラー",
+  "en": "Unity Export Error",
+  "ko": "Unity 내보내기 오류",
+  "zhTW": "Unity 匯出錯誤",
+  "zhCN": "Unity 导出错误"
+ },
+ "StatusUnityExportNoFbx": {
+  "ja": "エクスポートは完了しましたがFBXが見つかりませんでした",
+  "en": "Export finished but no FBX file was found",
+  "ko": "내보내기는 완료되었지만 FBX 파일을 찾을 수 없습니다",
+  "zhTW": "匯出已完成,但找不到 FBX 檔案",
+  "zhCN": "导出已完成,但找不到 FBX 文件"
+ },
+ "MsgUnityExportNoFbxFormat": {
+  "ja": "Unityからのエクスポートは完了しましたが、出力フォルダにFBXが見つかりませんでした:\n{0}",
+  "en": "Export from Unity finished, but no FBX file was found in the output folder:\n{0}",
+  "ko": "Unity에서의 내보내기는 완료되었지만, 출력 폴더에서 FBX 파일을 찾을 수 없습니다:\n{0}",
+  "zhTW": "已從 Unity 完成匯出,但在輸出資料夾中找不到 FBX 檔案:\n{0}",
+  "zhCN": "已从 Unity 完成导出,但在输出文件夹中找不到 FBX 文件:\n{0}"
+ },
+ "TitleUnityExport": {
+  "ja": "Unityエクスポート",
+  "en": "Unity Export",
+  "ko": "Unity 내보내기",
+  "zhTW": "Unity 匯出",
+  "zhCN": "Unity 导出"
+ },
+ "StatusUnityExportDone": {
+  "ja": "Unityエクスポートが完了しました。アバターを取り込みます...",
+  "en": "Unity export finished. Loading the avatar...",
+  "ko": "Unity 내보내기가 완료되었습니다. 아바타를 불러오는 중...",
+  "zhTW": "Unity 匯出已完成,正在載入角色模型...",
+  "zhCN": "Unity 导出已完成,正在加载角色模型..."
+ },
+ "StatusFailedOrCancelled": {
+  "ja": "失敗または中止されました(右のログ参照)",
+  "en": "Failed or cancelled (see the log on the right)",
+  "ko": "실패했거나 중지되었습니다(오른쪽 로그 참조)",
+  "zhTW": "已失敗或已中止(請參閱右側紀錄)",
+  "zhCN": "已失败或已中止(请参见右侧日志)"
+ },
+ "MsgConvertDoneWithWarningsFormat": {
+  "ja": "変換は完了しましたが、注意事項があります:\n\n{0}",
+  "en": "Conversion finished, but there are some notes:\n\n{0}",
+  "ko": "변환은 완료되었지만, 주의 사항이 있습니다:\n\n{0}",
+  "zhTW": "轉換已完成,但有以下注意事項:\n\n{0}",
+  "zhCN": "转换已完成,但有以下注意事项:\n\n{0}"
+ },
+ "TitleConvertDoneWithWarnings": {
+  "ja": "変換完了(注意事項あり)",
+  "en": "Conversion Complete (with Notes)",
+  "ko": "변환 완료(주의 사항 있음)",
+  "zhTW": "轉換完成(有注意事項)",
+  "zhCN": "转换完成(有注意事项)"
+ },
+ "StatusPreviewDone": {
+  "ja": "プレビュー更新完了。フル変換できます",
+  "en": "Preview updated. Ready for full conversion",
+  "ko": "미리보기 업데이트 완료. 전체 변환이 가능합니다",
+  "zhTW": "預覽更新完成,可以進行完整轉換",
+  "zhCN": "预览更新完成,可以进行完整转换"
+ },
+ "MsgPreviewDoneBody": {
+  "ja": "プレビューを更新しました。\n見た目(特に腕まわり)を確認して、問題なければ「フル変換」へ進んでください。",
+  "en": "The preview has been updated.\nCheck the appearance (especially around the arms), and if it looks fine, proceed to \"Full Convert\".",
+  "ko": "미리보기를 업데이트했습니다.\n외형(특히 팔 주변)을 확인하고, 문제가 없으면 「전체 변환」으로 진행해주세요.",
+  "zhTW": "已更新預覽。\n請確認外觀(尤其是手臂周圍),若沒問題請繼續進行「完整轉換」。",
+  "zhCN": "已更新预览。\n请确认外观(尤其是手臂周围),若没问题请继续进行「完整转换」。"
+ },
+ "TitlePreviewDone": {
+  "ja": "プレビュー完了",
+  "en": "Preview Complete",
+  "ko": "미리보기 완료",
+  "zhTW": "預覽完成",
+  "zhCN": "预览完成"
+ },
+ "StatusConvertDone": {
+  "ja": "変換完了!",
+  "en": "Conversion complete!",
+  "ko": "변환 완료!",
+  "zhTW": "轉換完成!",
+  "zhCN": "转换完成!"
+ },
+ "MsgConvertDoneBody": {
+  "ja": "MODが完成しました!\n\n【使用方法】\nPalworldを起動していたら、閉じてください。\n「作成済みMOD一覧」から選んで「Palworldに適用」を押して下さい。\n\n【解除方法】\n「MODを解除」を押して下さい。",
+  "en": "The MOD is complete!\n\n[How to use]\nIf Palworld is running, please close it.\nSelect it from \"Created MODs\" and press \"Apply to Palworld\".\n\n[How to remove]\nPress \"Remove MOD\".",
+  "ko": "모드가 완성되었습니다!\n\n【사용 방법】\n팰월드가 실행 중이라면 종료해주세요.\n「생성된 모드 목록」에서 선택하고 「팰월드에 적용」을 눌러주세요.\n\n【해제 방법】\n「모드 해제」를 눌러주세요.",
+  "zhTW": "MOD 已完成!\n\n【使用方法】\n若幻獸帕魯正在執行,請先關閉。\n從「已建立的 MOD 清單」中選擇後按下「套用至幻獸帕魯」。\n\n【解除方法】\n請按下「解除 MOD」。",
+  "zhCN": "MOD 已完成!\n\n【使用方法】\n若幻兽帕鲁正在运行,请先关闭。\n从「已创建的 MOD 列表」中选择后点击「应用到幻兽帕鲁」。\n\n【解除方法】\n请点击「解除 MOD」。"
+ },
+ "TitleConvertDone": {
+  "ja": "変換完了",
+  "en": "Conversion Complete",
+  "ko": "변환 완료",
+  "zhTW": "轉換完成",
+  "zhCN": "转换完成"
+ },
+ "TitlePreflightWarning": {
+  "ja": "最終チェック警告",
+  "en": "Final Check Warning",
+  "ko": "최종 체크 경고",
+  "zhTW": "最終檢查警告",
+  "zhCN": "最终检查警告"
+ },
+ "MsgPreflightWarningBody": {
+  "ja": "最終チェックで問題が検出されました。\nこのまま使うこともできますが、ゲームがクラッシュしたり、見た目がおかしかったりするかもしれません。\n問題が起きたら下のボタンから「MODを解除」してください。",
+  "en": "A problem was detected in the final check.\nYou can still use it, but the game might crash or something might look wrong.\nIf a problem occurs, press \"Remove MOD\" below.",
+  "ko": "최종 검사에서 문제가 감지되었습니다.\n그대로 사용할 수도 있지만, 게임이 충돌하거나 화면이 이상해질 수 있습니다.\n문제가 생기면 아래의 \"모드 해제\"를 눌러 주세요.",
+  "zhTW": "最終檢查偵測到問題。\n您仍可繼續使用，但遊戲可能當機或畫面出現異常。\n若發生問題，請按下方的「解除 MOD」。",
+  "zhCN": "最终检查检测到问题。\n您仍可继续使用，但游戏可能崩溃或画面出现异常。\n若发生问题，请按下方的「解除 MOD」。"
+ },
+ "StatusAvatarLoading": {
+  "ja": "アバターを読み込み中...",
+  "en": "Loading avatar...",
+  "ko": "아바타 불러오는 중...",
+  "zhTW": "正在載入角色模型...",
+  "zhCN": "正在加载角色模型..."
+ },
+ "StatusPromptVrmDnd": {
+  "ja": "prefab または VRM ファイルを入れてください(D&DでOK)",
+  "en": "Please add a prefab or VRM file (drag & drop OK)",
+  "ko": "prefab 또는 VRM 파일을 넣어주세요(드래그 앤 드롭 가능)",
+  "zhTW": "請放入 prefab 或 VRM 檔案(可拖放)",
+  "zhCN": "请放入 prefab 或 VRM 文件(可拖放)"
+ },
+ "StatusPreviewStale": {
+  "ja": "プレビューが古い状態です。「プレビュー更新」を押すか、prefab または VRMを入れ直してください(反映後にフル変換が押せます)",
+  "en": "The preview is out of date. Press \"Update Preview\" or re-add the prefab or VRM (Full Convert will be enabled once updated)",
+  "ko": "미리보기가 오래된 상태입니다. 「미리보기 업데이트」를 누르거나 prefab 또는 VRM을 다시 넣어주세요(반영 후 전체 변환이 가능합니다)",
+  "zhTW": "預覽已過期。請按「更新預覽」或重新放入 prefab 或 VRM(套用後即可進行完整轉換)",
+  "zhCN": "预览已过期。请点击「更新预览」或重新放入 prefab 或 VRM(应用后即可进行完整转换)"
+ },
+ "StatusReadyToConvert": {
+  "ja": "フル変換できます",
+  "en": "Ready for full conversion",
+  "ko": "전체 변환이 가능합니다",
+  "zhTW": "可以進行完整轉換",
+  "zhCN": "可以进行完整转换"
+ },
+ "StatusBlenderSetupNeeded": {
+  "ja": "Blenderのセットアップが必要です(「Blenderを再取得」を押してください)",
+  "en": "Blender setup is required (press \"Retry Blender Setup\")",
+  "ko": "Blender 설정이 필요합니다(「Blender 다시 받기」를 눌러주세요)",
+  "zhTW": "需要設定 Blender(請按「重新取得 Blender」)",
+  "zhCN": "需要设置 Blender(请点击「重新获取 Blender」)"
+ },
+ "HintNeedFullConvertFirst": {
+  "ja": "(先に「フル変換」が必要です)",
+  "en": "(requires \"Full Convert\" first)",
+  "ko": "(먼저 「전체 변환」이 필요합니다)",
+  "zhTW": "(需先執行「完整轉換」)",
+  "zhCN": "(需先执行「完整转换」)"
+ },
+ "MsgLicenseConfirmBody": {
+  "ja": "このアバターの利用規約は確認しましたか?\n\n・改変してよいこと\n・ゲーム内(MOD)で使用してよいこと\n\n確認と遵守は利用者の責任です。確認済みなら「はい」を押してください。\n(このアバターについて次回からは聞きません)\n\n---\n\nまた、Palworld側の利用条件についてもご確認ください。\n\n本ツールはシングルプレイ専用のクライアント側MODです。\nPalworldの規約はファイル改変を禁じる条項を含みますが、\n開発元は公式にMODを歓迎しており、\n明確な禁止はマルチプレイでの使用のみです。\nマルチプレイでは使用せず、セーブデータのバックアップを取った上で、\n自己責任でご利用ください。\n\n上記すべてに同意し、確認済みなら「はい」を押してください。",
+  "en": "Have you checked this avatar's terms of use?\n\n- That modification is allowed\n- That in-game (MOD) use is allowed\n\nChecking and complying with them is the user's responsibility. If you have confirmed this, press \"Yes\".\n(You won't be asked again for this avatar.)\n\n---\n\nPlease also check Palworld's own terms of use.\n\nThis tool is a single-player-only client-side MOD.\nPalworld's terms include a clause prohibiting file modification,\nbut the developer officially welcomes MODs;\nthe only explicit prohibition is use in multiplayer.\nDo not use it in multiplayer, back up your save data,\nand use it at your own risk.\n\nIf you agree to all of the above and have confirmed it, press \"Yes\".",
+  "ko": "이 아바타의 이용약관을 확인하셨습니까?\n\n· 개조해도 되는지\n· 게임 내(모드)에서 사용해도 되는지\n\n확인과 준수는 이용자의 책임입니다. 확인했다면 「예」를 눌러주세요.\n(이 아바타에 대해서는 다음부터 묻지 않습니다)\n\n---\n\n또한 팰월드 측의 이용 조건도 확인해주세요.\n\n본 도구는 싱글 플레이 전용 클라이언트 측 모드입니다.\n팰월드의 약관에는 파일 개조를 금지하는 조항이 있지만,\n개발사는 공식적으로 모드를 환영하고 있으며,\n명확히 금지하는 것은 멀티플레이에서의 사용뿐입니다.\n멀티플레이에서는 사용하지 말고, 세이브 데이터를 백업한 후\n자기 책임 하에 이용해주세요.\n\n위 사항 모두에 동의하고 확인했다면 「예」를 눌러주세요.",
+  "zhTW": "您是否已確認過這個角色模型的使用條款?\n\n‧是否允許進行改造\n‧是否允許在遊戲內(MOD)使用\n\n確認與遵守是使用者的責任。若已確認,請按「是」。\n(關於這個角色模型,下次將不會再次詢問)\n\n---\n\n此外,也請確認幻獸帕魯本身的使用條件。\n\n本工具是僅限單人遊玩的客戶端 MOD。\n幻獸帕魯的條款雖包含禁止修改檔案的條文,\n但開發商官方表示歡迎 MOD,\n明確禁止的僅限於多人遊戲中的使用。\n請勿在多人遊戲中使用,並在備份存檔資料後,\n自行承擔風險使用。\n\n若同意以上所有內容且已確認,請按「是」。",
+  "zhCN": "您是否已确认过这个角色模型的使用条款?\n\n‧是否允许进行改造\n‧是否允许在游戏内(MOD)使用\n\n确认与遵守是用户的责任。若已确认,请点击「是」。\n(关于这个角色模型,下次将不再询问)\n\n---\n\n此外,也请确认幻兽帕鲁本身的使用条件。\n\n本工具是仅限单人游玩的客户端 MOD。\n幻兽帕鲁的条款虽包含禁止修改文件的条文,\n但开发商官方表示欢迎 MOD,\n明确禁止的仅限于多人游戏中的使用。\n请勿在多人游戏中使用,并在备份存档数据后,\n自行承担风险使用。\n\n若同意以上所有内容且已确认,请点击「是」。"
+ },
+ "TitleLicenseConfirm": {
+  "ja": "利用規約・使用条件の確認",
+  "en": "Confirm Terms of Use",
+  "ko": "이용약관·사용 조건 확인",
+  "zhTW": "確認使用條款與條件",
+  "zhCN": "确认使用条款与条件"
+ },
+ "ErrBlenderSetupStartFailedFormat": {
+  "ja": "Blenderセットアップの起動に失敗しました: {0}",
+  "en": "Failed to start Blender setup: {0}",
+  "ko": "Blender 설정 시작에 실패했습니다: {0}",
+  "zhTW": "啟動 Blender 設定失敗: {0}",
+  "zhCN": "启动 Blender 设置失败: {0}"
+ },
+ "MsgBlenderNotFoundDevFormat": {
+  "ja": "Blenderが見つかりません({0})。開発環境の場合は tools\\ の配置を確認してください。",
+  "en": "Blender was not found ({0}). If this is a development environment, check the layout under tools\\.",
+  "ko": "Blender를 찾을 수 없습니다({0}). 개발 환경인 경우 tools\\ 배치를 확인해주세요.",
+  "zhTW": "找不到 Blender({0})。若為開發環境,請確認 tools\\ 目錄的配置。",
+  "zhCN": "找不到 Blender({0})。若为开发环境,请确认 tools\\ 目录的配置。"
+ },
+ "MsgBlenderSetupFailedShort": {
+  "ja": "Blenderのセットアップに失敗しました(「Blenderを再取得」を押すとやり直せます)",
+  "en": "Blender setup failed (press \"Retry Blender Setup\" to try again)",
+  "ko": "Blender 설정에 실패했습니다(「Blender 다시 받기」를 누르면 다시 시도할 수 있습니다)",
+  "zhTW": "Blender 設定失敗(按「重新取得 Blender」可再試一次)",
+  "zhCN": "Blender 设置失败(点击「重新获取 Blender」可再试一次)"
+ },
+ "MsgBlenderSetupFailLineHeader": {
+  "ja": "Blenderのセットアップに失敗しました。",
+  "en": "Blender setup failed.",
+  "ko": "Blender 설정에 실패했습니다.",
+  "zhTW": "Blender 設定失敗。",
+  "zhCN": "Blender 设置失败。"
+ },
+ "MsgBlenderSetupLaunchFailLineHeader": {
+  "ja": "Blenderセットアップの起動に失敗しました。",
+  "en": "Failed to launch ensure_blender.ps1.",
+  "ko": "Blender 설정 시작에 실패했습니다.",
+  "zhTW": "啟動 Blender 設定失敗。",
+  "zhCN": "启动 Blender 设置失败。"
+ },
+ "MsgBlenderSetupFailLineWhatToTry": {
+  "ja": "お試しください:",
+  "en": "What to try:",
+  "ko": "다음을 시도해 보세요:",
+  "zhTW": "請嘗試以下方法:",
+  "zhCN": "请尝试以下方法:"
+ },
+ "MsgBlenderSetupFailLineStep1": {
+  "ja": "  1. インターネット接続を確認してから、「フル変換(MOD作成)」または「プレビュー更新」をもう一度押してください。",
+  "en": "  1. Check your internet connection, then press \"Full Convert (Create MOD)\" or \"Update Preview\" again.",
+  "ko": "  1. 인터넷 연결을 확인한 후 \"전체 변환(모드 생성)\" 또는 \"미리보기 업데이트\"를 다시 눌러주세요.",
+  "zhTW": "  1. 請確認網路連線後,再次按下「完整轉換(建立 MOD)」或「更新預覽」。",
+  "zhCN": "  1. 请确认网络连接后,再次点击「完整转换(创建 MOD)」或「更新预览」。"
+ },
+ "MsgBlenderSetupFailLineStep2Intro": {
+  "ja": "  2. 自動ダウンロードが繰り返し失敗する場合は、手動でセットアップすることもできます:",
+  "en": "  2. If automatic download keeps failing, you can also set it up manually:",
+  "ko": "  2. 자동 다운로드가 계속 실패하면 수동으로 설정할 수도 있습니다:",
+  "zhTW": "  2. 如果自動下載持續失敗,您也可以手動設定:",
+  "zhCN": "  2. 如果自动下载持续失败,您也可以手动设置:"
+ },
+ "MsgBlenderSetupFailLineStep2b": {
+  "ja": "       (2) 展開し、blender.exeが入っているフォルダの中身をそのまま次の場所へコピーする:",
+  "en": "       (2) Extract it, then copy the contents of the folder containing blender.exe directly into:",
+  "ko": "       (2) 압축을 해제한 후, blender.exe가 있는 폴더의 내용을 그대로 다음 위치로 복사:",
+  "zhTW": "       (2) 解壓縮後,將包含 blender.exe 的資料夾內容直接複製到:",
+  "zhCN": "       (2) 解压后,将包含 blender.exe 的文件夹内容直接复制到:"
+ },
+ "MsgBlenderSetupFailLineStep2c": {
+  "ja": "       (3) もう一度「フル変換(MOD作成)」または「プレビュー更新」を押してください。配置した内容をアプリが検証し、そのまま使います(再ダウンロードはしません)。",
+  "en": "       (3) Press \"Full Convert (Create MOD)\" or \"Update Preview\" again -- the app will verify what you placed and use it (no re-download).",
+  "ko": "       (3) 다시 \"전체 변환(모드 생성)\" 또는 \"미리보기 업데이트\"를 눌러주세요. 배치한 내용을 앱이 검증하여 그대로 사용합니다(다시 다운로드하지 않습니다).",
+  "zhTW": "       (3) 再次按下「完整轉換(建立 MOD)」或「更新預覽」。應用程式會驗證您放置的內容並直接使用(不會重新下載)。",
+  "zhCN": "       (3) 再次点击「完整转换(创建 MOD)」或「更新预览」。应用程序会验证您放置的内容并直接使用(不会重新下载)。"
+ },
+ "MsgBlenderSetupFailLineStep3AV": {
+  "ja": "  3. 展開後に特定のファイル(例: python.exe)だけが見当たらない場合、セキュリティソフトが隔離した可能性があります。セキュリティソフトの隔離ログを確認して復元するか、上記フォルダを除外設定に追加してから、もう一度お試しください。",
+  "en": "  3. If a specific file is missing after extraction (for example python.exe), your security software may have quarantined it. Check your antivirus/security software's quarantine log and restore the file, or add an exclusion for the folder above, then try again.",
+  "ko": "  3. 압축 해제 후 특정 파일(예: python.exe)만 없는 경우, 보안 소프트웨어가 격리했을 수 있습니다. 보안 소프트웨어의 격리 로그를 확인해 복원하거나, 위 폴더를 예외로 추가한 후 다시 시도해 주세요.",
+  "zhTW": "  3. 若解壓縮後只有特定檔案(例如 python.exe)遺失,可能是您的安全防護軟體將其隔離。請檢查安全防護軟體的隔離記錄並還原該檔案,或將上方資料夾加入排除清單後再試一次。",
+  "zhCN": "  3. 如果解压后只有特定文件(例如 python.exe)缺失,可能是您的安全防护软件将其隔离。请检查安全防护软件的隔离记录并还原该文件,或将上方文件夹加入排除列表后重试。"
+ },
+ "MsgBlenderSetupFailLineDiagHeader": {
+  "ja": "診断情報(パス構造のみ、フォルダ名は含みません):",
+  "en": "Diagnostic info (path structure only, no folder names included):",
+  "ko": "진단 정보(경로 구조만, 폴더 이름은 포함하지 않음):",
+  "zhTW": "診斷資訊(僅路徑結構,不含資料夾名稱):",
+  "zhCN": "诊断信息(仅路径结构,不含文件夹名称):"
+ },
+ "StatusBlenderChecking": {
+  "ja": "Blenderの状態を確認しています…",
+  "en": "Checking Blender setup...",
+  "ko": "Blender 상태를 확인하고 있습니다…",
+  "zhTW": "正在確認 Blender 狀態…",
+  "zhCN": "正在确认 Blender 状态…"
+ },
+ "StatusBlenderSettingUpFormat": {
+  "ja": "Blenderを準備中: {0} ({1}%)",
+  "en": "Setting up Blender: {0} ({1}%)",
+  "ko": "Blender 준비 중: {0} ({1}%)",
+  "zhTW": "正在準備 Blender: {0} ({1}%)",
+  "zhCN": "正在准备 Blender: {0} ({1}%)"
+ },
+ "StatusBlenderPhaseCheckingStatus": {
+  "ja": "Blenderの状態を確認中",
+  "en": "Checking Blender status",
+  "ko": "Blender 상태 확인 중",
+  "zhTW": "正在確認 Blender 狀態",
+  "zhCN": "正在确认 Blender 状态"
+ },
+ "StatusBlenderPhaseReady": {
+  "ja": "Blenderは準備済みです",
+  "en": "Blender is ready",
+  "ko": "Blender 준비 완료",
+  "zhTW": "Blender 已就緒",
+  "zhCN": "Blender 已就绪"
+ },
+ "StatusBlenderPhaseCheckingDiskSpace": {
+  "ja": "ディスク空き容量を確認中",
+  "en": "Checking free disk space",
+  "ko": "디스크 여유 공간 확인 중",
+  "zhTW": "正在確認磁碟可用空間",
+  "zhCN": "正在确认磁盘可用空间"
+ },
+ "StatusBlenderPhaseUsingSpecifiedZip": {
+  "ja": "指定zipを使用します(ダウンロードなし、試験/オフライン用)",
+  "en": "Using specified zip (no download, test/offline mode)",
+  "ko": "지정된 zip 사용(다운로드 없음, 테스트/오프라인용)",
+  "zhTW": "使用指定的 zip(不下載,測試/離線用)",
+  "zhCN": "使用指定的 zip(不下载,测试/离线用)"
+ },
+ "StatusBlenderPhaseVerifyingIntegrity": {
+  "ja": "整合性を確認中",
+  "en": "Verifying integrity (SHA256)",
+  "ko": "무결성 확인 중",
+  "zhTW": "正在確認完整性",
+  "zhCN": "正在确认完整性"
+ },
+ "StatusBlenderPhaseExtracting": {
+  "ja": "展開中",
+  "en": "Extracting",
+  "ko": "압축 해제 중",
+  "zhTW": "正在解壓縮",
+  "zhCN": "正在解压缩"
+ },
+ "StatusBlenderPhaseExtractionComplete": {
+  "ja": "展開完了",
+  "en": "Extraction complete",
+  "ko": "압축 해제 완료",
+  "zhTW": "解壓縮完成",
+  "zhCN": "解压缩完成"
+ },
+ "StatusBlenderPhaseInjectingPatches": {
+  "ja": "Python環境の差し込みを実行中",
+  "en": "Injecting Python environment patches",
+  "ko": "Python 환경 패치 적용 중",
+  "zhTW": "正在套用 Python 環境修補",
+  "zhCN": "正在应用 Python 环境补丁"
+ },
+ "StatusBlenderPhaseVerifyingPythonEnv": {
+  "ja": "Python環境の動作検証中",
+  "en": "Verifying Python environment (import ooz)",
+  "ko": "Python 환경 동작 검증 중",
+  "zhTW": "正在驗證 Python 環境運作",
+  "zhCN": "正在验证 Python 环境运行"
+ },
+ "StatusBlenderPhaseMovingToFinalLocation": {
+  "ja": "最終配置に移動中",
+  "en": "Moving to final location",
+  "ko": "최종 위치로 이동 중",
+  "zhTW": "正在移動到最終位置",
+  "zhCN": "正在移动到最终位置"
+ },
+ "StatusBlenderPhaseSetupComplete": {
+  "ja": "Blenderのセットアップ完了",
+  "en": "Blender setup complete",
+  "ko": "Blender 설정 완료",
+  "zhTW": "Blender 設定完成",
+  "zhCN": "Blender 设置完成"
+ },
+ "WhatBlenderSetup": {
+  "ja": "Blenderのセットアップ",
+  "en": "Blender setup",
+  "ko": "Blender 설정",
+  "zhTW": "Blender 設定",
+  "zhCN": "Blender 设置"
+ },
+ "TitlePathHealthWarning": {
+  "ja": "環境チェック: 注意",
+  "en": "Environment Check: Warning",
+  "ko": "환경 점검: 주의",
+  "zhTW": "環境檢查: 注意",
+  "zhCN": "环境检查: 注意"
+ },
+ "MsgPathHealthRiskFormat": {
+  "ja": "インストール先または作業先のフォルダに、変換が失敗しやすくなる要因が見つかりました。\n\n{0}\n\n詳細(サポートへの問い合わせ時にも記録されます):\n{1}",
+  "en": "Found factor(s) in the install or work folder that can make conversion more likely to fail.\n\n{0}\n\nDetails (also recorded when contacting support):\n{1}",
+  "ko": "설치 위치 또는 작업 폴더에서 변환이 실패하기 쉬워지는 요인을 발견했습니다.\n\n{0}\n\n상세 내용(문의 시에도 기록됩니다):\n{1}",
+  "zhTW": "在安裝位置或工作資料夾中,發現可能導致轉換容易失敗的因素。\n\n{0}\n\n詳細內容(問題回報時也會一併記錄):\n{1}",
+  "zhCN": "在安装位置或工作文件夹中,发现可能导致转换容易失败的因素。\n\n{0}\n\n详细内容(问题反馈时也会一并记录):\n{1}"
+ },
+ "CausePathTooLong": {
+  "ja": "インストール先または作業先のパスが長すぎます(Windowsの制限に近づいています)",
+  "en": "The install or work location's path is too long (close to Windows' path length limit)",
+  "ko": "설치 위치 또는 작업 위치의 경로가 너무 깁니다(Windows 제한에 근접)",
+  "zhTW": "安裝位置或工作資料夾的路徑過長(接近 Windows 的限制)",
+  "zhCN": "安装位置或工作文件夹的路径过长(接近 Windows 的限制)"
+ },
+ "ActionPathTooLong": {
+  "ja": "より短いパス(例: C:\\Uchinoko)へ移動してください",
+  "en": "Move it to a shorter path (e.g. C:\\Uchinoko)",
+  "ko": "더 짧은 경로(예: C:\\Uchinoko)로 이동해주세요",
+  "zhTW": "請移動到較短的路徑(例如 C:\\Uchinoko)",
+  "zhCN": "请移动到较短的路径(例如 C:\\Uchinoko)"
+ },
+ "CausePathUnc": {
+  "ja": "インストール先または作業先がネットワークパス(UNC)です",
+  "en": "The install or work location is a network (UNC) path",
+  "ko": "설치 위치 또는 작업 위치가 네트워크 경로(UNC)입니다",
+  "zhTW": "安裝位置或工作資料夾為網路路徑(UNC)",
+  "zhCN": "安装位置或工作文件夹为网络路径(UNC)"
+ },
+ "ActionPathUnc": {
+  "ja": "ローカルドライブへコピーしてから使ってください",
+  "en": "Copy it to a local drive before using it",
+  "ko": "로컬 드라이브로 복사한 후 사용해주세요",
+  "zhTW": "請先複製到本機磁碟後再使用",
+  "zhCN": "请先复制到本机磁盘后再使用"
+ },
+ "CausePathOneDrive": {
+  "ja": "インストール先または作業先がOneDriveの同期フォルダ内です",
+  "en": "The install or work location is inside a OneDrive-synced folder",
+  "ko": "설치 위치 또는 작업 위치가 OneDrive 동기화 폴더 안에 있습니다",
+  "zhTW": "安裝位置或工作資料夾位於 OneDrive 同步資料夾內",
+  "zhCN": "安装位置或工作文件夹位于 OneDrive 同步文件夹内"
+ },
+ "ActionPathOneDrive": {
+  "ja": "OneDriveの同期を一時停止するか、OneDrive外へ移動してください",
+  "en": "Pause OneDrive sync, or move it outside the OneDrive folder",
+  "ko": "OneDrive 동기화를 일시중지하거나 OneDrive 밖으로 이동해주세요",
+  "zhTW": "請暫停 OneDrive 同步,或移動到 OneDrive 資料夾外",
+  "zhCN": "请暂停 OneDrive 同步,或移动到 OneDrive 文件夹外"
+ },
+ "TitleWorkRootUnwritable": {
+  "ja": "作業フォルダを作成できません",
+  "en": "Cannot create a work folder",
+  "ko": "작업 폴더를 만들 수 없습니다",
+  "zhTW": "無法建立工作資料夾",
+  "zhCN": "无法创建工作文件夹"
+ },
+ "MsgWorkRootUnwritableFormat": {
+  "ja": "作業用フォルダをどこにも作成できませんでした。\n\n試した場所:\n・{0}\n・{1}\n\nどちらも書き込み権限がないようです。管理者権限が必要な場所(C:\\Program Files 等)にインストールされている場合は、C:\\Uchinoko のような書き込み可能な場所へ移動して再度お試しください。",
+  "en": "Could not create a work folder anywhere.\n\nLocations tried:\n- {0}\n- {1}\n\nNeither location appears to be writable. If installed under a location that requires administrator rights (e.g. C:\\Program Files), please move it to a writable location such as C:\\Uchinoko and try again.",
+  "ko": "작업 폴더를 어디에도 만들 수 없었습니다.\n\n시도한 위치:\n· {0}\n· {1}\n\n두 위치 모두 쓰기 권한이 없는 것 같습니다. 관리자 권한이 필요한 위치(C:\\Program Files 등)에 설치된 경우, C:\\Uchinoko 같은 쓰기 가능한 위치로 이동한 후 다시 시도해주세요.",
+  "zhTW": "無法在任何位置建立工作資料夾。\n\n已嘗試的位置:\n‧{0}\n‧{1}\n\n這兩個位置似乎都沒有寫入權限。如果安裝在需要管理員權限的位置(例如 C:\\Program Files),請移動到可寫入的位置(例如 C:\\Uchinoko)後再試一次。",
+  "zhCN": "无法在任何位置创建工作文件夹。\n\n已尝试的位置:\n‧{0}\n‧{1}\n\n这两个位置似乎都没有写入权限。如果安装在需要管理员权限的位置(例如 C:\\Program Files),请移动到可写入的位置(例如 C:\\Uchinoko)后再试一次。"
+ },
+ "LabelPreviewPlaceholderFront": {
+  "ja": "(プレビュー:正面)",
+  "en": "(preview front)",
+  "ko": "(미리보기: 정면)",
+  "zhTW": "(預覽:正面)",
+  "zhCN": "(预览:正面)"
+ },
+ "LabelPreviewPlaceholderSide": {
+  "ja": "(プレビュー:側面)",
+  "en": "(preview side)",
+  "ko": "(미리보기: 측면)",
+  "zhTW": "(預覽:側面)",
+  "zhCN": "(预览:侧面)"
+ },
+ "StatusWarmCachePreparing": {
+  "ja": "共通データを準備中...",
+  "en": "Preparing shared data...",
+  "ko": "공통 데이터 준비 중...",
+  "zhTW": "正在準備共用資料...",
+  "zhCN": "正在准备共享数据..."
+ },
+ "StatusWarmCacheFirstRunNotice": {
+  "ja": "初回は共通データの準備のため数分かかることがあります",
+  "en": "The first run may take a few minutes while shared data is prepared.",
+  "ko": "처음에는 공통 데이터 준비로 몇 분 걸릴 수 있습니다",
+  "zhTW": "首次執行可能因準備共用資料需數分鐘",
+  "zhCN": "首次执行可能因准备共享数据需数分钟"
+ },
+ "MsgFbxGuiUnsupportedBody": {
+  "ja": "この形式(FBX)には対応していません。.prefab または .vrm ファイルを選んでください。",
+  "en": "This format (FBX) is not supported. Please choose a .prefab or .vrm file instead.",
+  "ko": "이 형식(FBX)은 지원하지 않습니다. .prefab 또는 .vrm 파일을 선택해주세요.",
+  "zhTW": "不支援此格式(FBX)。請選擇 .prefab 或 .vrm 檔案。",
+  "zhCN": "不支持此格式(FBX)。请选择 .prefab 或 .vrm 文件。"
+ },
+ "BtnLab": {
+  "ja": "ラボ",
+  "en": "Lab",
+  "ko": "실험실",
+  "zhTW": "實驗室",
+  "zhCN": "实验室"
+ },
+ "TipLabButton": {
+  "ja": "基本の変換には不要な追加機能を試せます",
+  "en": "Try extra features not needed for a normal conversion",
+  "ko": "일반 변환에는 필요 없는 추가 기능을 사용해 볼 수 있습니다",
+  "zhTW": "可嘗試一般轉換不需要的附加功能",
+  "zhCN": "可尝试一般转换不需要的附加功能"
+ },
+ "LabWindowTitle": {
+  "ja": "ラボ",
+  "en": "Lab",
+  "ko": "실험실",
+  "zhTW": "實驗室",
+  "zhCN": "实验室"
+ },
+ "LabWarningActive": {
+  "ja": "ラボ機能がONになっています！実験的機能なので、思わぬ不具合がおきるかもしれません！！",
+  "en": "Lab features are ON! These are experimental, so unexpected issues may occur!!",
+  "ko": "실험실 기능이 켜져 있습니다! 실험적 기능이므로 예기치 않은 문제가 발생할 수 있습니다!!",
+  "zhTW": "實驗室功能已開啟!這是實驗性功能,可能會發生意外問題!!",
+  "zhCN": "实验室功能已开启!这是实验性功能,可能会发生意外问题!!"
+ },
+ "LabColFeatureName": {
+  "ja": "機能",
+  "en": "Feature",
+  "ko": "기능",
+  "zhTW": "功能",
+  "zhCN": "功能"
+ },
+ "LabColStatus": {
+  "ja": "状態",
+  "en": "Status",
+  "ko": "상태",
+  "zhTW": "狀態",
+  "zhCN": "状态"
+ },
+ "LabFeatureDropBones": {
+  "ja": "ボーンでメッシュ削除",
+  "en": "Remove Mesh by Bone",
+  "ko": "본으로 메시 삭제",
+  "zhTW": "依骨骼刪除網格",
+  "zhCN": "按骨骼删除网格"
+ },
+ "LabStatusDisabled": {
+  "ja": "無効",
+  "en": "Disabled",
+  "ko": "비활성",
+  "zhTW": "停用",
+  "zhCN": "已禁用"
+ },
+ "LabStatusActiveFormat": {
+  "ja": "有効: {0}",
+  "en": "Enabled: {0}",
+  "ko": "활성: {0}",
+  "zhTW": "啟用: {0}",
+  "zhCN": "已启用: {0}"
+ },
+ "LabStatusDropBonesCountFormat": {
+  "ja": "{0}本",
+  "en": "{0} bone(s)",
+  "ko": "{0}개 본",
+  "zhTW": "{0}根骨骼",
+  "zhCN": "{0}根骨骼"
+ },
+ "BtnLabConfigure": {
+  "ja": "設定",
+  "en": "Configure",
+  "ko": "설정",
+  "zhTW": "設定",
+  "zhCN": "设置"
+ },
+ "BtnLabDisableAll": {
+  "ja": "全てのラボ機能を無効化",
+  "en": "Disable All Lab Features",
+  "ko": "모든 실험실 기능 비활성화",
+  "zhTW": "停用所有實驗室功能",
+  "zhCN": "禁用所有实验室功能"
+ },
+ "LabFeatureEquipmentFilter": {
+  "ja": "装備限定",
+  "en": "Equipment Filter",
+  "ko": "장비 한정",
+  "zhTW": "裝備限定",
+  "zhCN": "装备限定"
+ },
+ "LabEquipmentFilterDialogTitle": {
+  "ja": "装備限定",
+  "en": "Equipment Filter",
+  "ko": "장비 한정",
+  "zhTW": "裝備限定",
+  "zhCN": "装备限定"
+ },
+ "LabEquipmentFilterHint": {
+  "ja": "チェックした装備のみが変更されます。",
+  "en": "Only checked equipment will be changed.",
+  "ko": "체크한 장비만 변경됩니다.",
+  "zhTW": "只有勾選的裝備會被變更。",
+  "zhCN": "只有勾选的装备会被更改。"
+ },
+ "LabEquipmentFilterSearchLabel": {
+  "ja": "検索:",
+  "en": "Search:",
+  "ko": "검색:",
+  "zhTW": "搜尋:",
+  "zhCN": "搜索:"
+ },
+ "LabEquipmentFilterSummaryFormat": {
+  "ja": "{0}着",
+  "en": "{0} item(s)",
+  "ko": "{0}개",
+  "zhTW": "{0}件",
+  "zhCN": "{0}件"
+ },
+ "LabEquipmentFilterFallbackNotice": {
+  "ja": "装備名を取得できなかったため、内部コードで表示しています。",
+  "en": "Equipment names could not be retrieved, so internal codes are shown instead.",
+  "ko": "장비 이름을 가져올 수 없어 내부 코드로 표시하고 있습니다.",
+  "zhTW": "無法取得裝備名稱,因此以內部代碼顯示。",
+  "zhCN": "无法获取装备名称,因此以内部代码显示。"
+ },
+ "LabEquipmentFilterCatalogUnavailableNotice": {
+  "ja": "装備カタログを取得できませんでした。OKを押しても保存済みの選択は変更されません。",
+  "en": "Could not retrieve the equipment catalog. Pressing OK will not change your saved selection.",
+  "ko": "장비 카탈로그를 가져올 수 없습니다. OK를 눌러도 저장된 선택은 변경되지 않습니다.",
+  "zhTW": "無法取得裝備目錄。按下確定不會變更已儲存的選擇。",
+  "zhCN": "无法获取装备目录。按下确定不会更改已保存的选择。"
+ },
+ "LabEquipmentFilterSelectAll": {
+  "ja": "すべて選択",
+  "en": "Select All",
+  "ko": "모두 선택",
+  "zhTW": "全選",
+  "zhCN": "全选"
+ },
+ "LabEquipmentFilterClearAll": {
+  "ja": "すべて解除",
+  "en": "Clear All",
+  "ko": "모두 해제",
+  "zhTW": "全部取消",
+  "zhCN": "全部取消"
+ },
+ "LabEquipmentFilterAllOffWarning": {
+  "ja": "少なくとも1つは選択してください(すべて解除すると、装備が何も注入されなくなります)。",
+  "en": "Please select at least one item (clearing all would inject no equipment at all).",
+  "ko": "적어도 하나는 선택해 주세요(모두 해제하면 장비가 전혀 주입되지 않습니다).",
+  "zhTW": "請至少選擇一項(全部取消將導致沒有任何裝備被注入)。",
+  "zhCN": "请至少选择一项(全部取消将导致没有任何装备被注入)。"
+ },
+ "LabEquipmentFilterPurposeHint": {
+  "ja": "特定の装備のみでアバターを使いたい方向け。主にmod容量を軽くしたいときなどに便利です。変換するときはメインパネルの変換を使ってください。複数アバターを使いたいときは「マルチアバターPAK作成」を使ってください",
+  "en": "For those who want to use an avatar only with specific equipment. Mainly useful when you want to reduce the mod's file size. To convert, use the Convert button on the main panel. If you want to use multiple avatars, use \"Multi-Avatar PAK Build\".",
+  "ko": "특정 장비에서만 아바타를 사용하고 싶은 분을 위한 기능입니다. 주로 mod 용량을 줄이고 싶을 때 유용합니다. 변환할 때는 메인 패널의 변환을 사용해 주세요. 여러 아바타를 사용하고 싶을 때는 \"멀티 아바타 PAK 생성\"을 사용해 주세요.",
+  "zhTW": "適合只想在特定裝備上使用角色模型的使用者。主要用於減少mod容量。轉換時請使用主面板的轉換功能。若想使用多個角色模型,請使用「多角色模型PAK製作」。",
+  "zhCN": "适合只想在特定装备上使用角色模型的用户。主要用于减少mod容量。转换时请使用主面板的转换功能。如果想使用多个角色模型,请使用\"多角色模型PAK制作\"。"
+ },
+ "LabFeatureHeadEquipToggle": {
+  "ja": "頭装備切り替え",
+  "en": "Head Equipment Toggle",
+  "ko": "머리 장비 전환",
+  "zhTW": "頭部裝備切換",
+  "zhCN": "头部装备切换"
+ },
+ "LabHeadEquipToggleDialogTitle": {
+  "ja": "頭装備切り替え",
+  "en": "Head Equipment Toggle",
+  "ko": "머리 장비 전환",
+  "zhTW": "頭部裝備切換",
+  "zhCN": "头部装备切换"
+ },
+ "LabHeadEquipToggleHint": {
+  "ja": "チェックを入れた頭装備だけが表示されます(未チェックの項目は非表示のままです)。",
+  "en": "Only checked head equipment items will be shown (unchecked items stay hidden).",
+  "ko": "체크한 머리 장비만 표시됩니다(체크하지 않은 항목은 숨겨진 상태로 유지됩니다).",
+  "zhTW": "只有勾選的頭部裝備會顯示(未勾選的項目維持隱藏狀態)。",
+  "zhCN": "只有勾选的头部装备会显示(未勾选的项目保持隐藏状态)。"
+ },
+ "LabHeadEquipToggleSummaryFormat": {
+  "ja": "{0}件表示",
+  "en": "{0} shown",
+  "ko": "{0}개 표시",
+  "zhTW": "顯示{0}件",
+  "zhCN": "显示{0}件"
+ },
+ "LabHeadEquipToggleFallbackNotice": {
+  "ja": "頭装備名を取得できなかったため、内部コードで表示しています。",
+  "en": "Head equipment names could not be retrieved, so internal codes are shown instead.",
+  "ko": "머리 장비 이름을 가져올 수 없어 내부 코드로 표시하고 있습니다.",
+  "zhTW": "無法取得頭部裝備名稱,因此以內部代碼顯示。",
+  "zhCN": "无法获取头部装备名称,因此以内部代码显示。"
+ },
+ "LabHeadEquipToggleCatalogUnavailableNotice": {
+  "ja": "頭装備カタログを取得できませんでした。OKを押しても保存済みの選択は変更されません。",
+  "en": "Could not retrieve the head equipment catalog. Pressing OK will not change your saved selection.",
+  "ko": "머리 장비 카탈로그를 가져올 수 없습니다. OK를 눌러도 저장된 선택은 변경되지 않습니다.",
+  "zhTW": "無法取得頭部裝備目錄。按下確定不會變更已儲存的選擇。",
+  "zhCN": "无法获取头部装备目录。按下确定不会更改已保存的选择。"
+ },
+ "LabFeatureDtFlagHeadHide": {
+  "ja": "差替え中装備のみ頭OFF",
+  "en": "Hide Head Only While Equipped",
+  "ko": "장착 중에만 머리 끄기",
+  "zhTW": "僅替換裝備時關閉頭部",
+  "zhCN": "仅替换装备时关闭头部"
+ },
+ "LabDtFlagHeadHideDialogTitle": {
+  "ja": "差替え中装備のみ頭OFF",
+  "en": "Hide Head Only While Equipped",
+  "ko": "장착 중에만 머리 끄기",
+  "zhTW": "僅替換裝備時關閉頭部",
+  "zhCN": "仅替换装备时关闭头部"
+ },
+ "LabDtFlagHeadHideHint": {
+  "ja": "ONにすると、変換した装備を着けているときだけ元の頭を隠します。OFF(既定)では常に元の頭を隠すため、何も装備していない状態でも頭が二重に見えません。ただし、差し替え対象外の装備を着けると、頭が表示されなくなります。",
+  "en": "When ON, the original head is hidden only while wearing converted equipment. When OFF (default), the original head is always hidden, so it will not look doubled even with nothing equipped. However, wearing equipment that is not a replacement target keeps the head hidden.",
+  "ko": "ON으로 하면 변환한 장비를 착용하고 있을 때만 원래 머리를 숨깁니다. OFF(기본값)에서는 항상 원래 머리를 숨기므로 아무것도 장착하지 않아도 머리가 겹쳐 보이지 않습니다. 단, 교체 대상이 아닌 장비를 착용하면 머리가 표시되지 않습니다.",
+  "zhTW": "開啟後,僅在穿著轉換後的裝備時才會隱藏原本的頭部。關閉(預設)時會一律隱藏原本的頭部,因此即使未裝備任何東西,頭部也不會重疊顯示。但穿著非替換對象的裝備時,頭部將不會顯示。",
+  "zhCN": "开启后,仅在穿着转换后的装备时才会隐藏原本的头部。关闭(默认)时会始终隐藏原本的头部,因此即使未装备任何东西,头部也不会重叠显示。但穿着非替换对象的装备时,头部将不会显示。"
+ },
+ "LabDtFlagHeadHideCheckboxLabel": {
+  "ja": "装備しているときだけ頭を隠す",
+  "en": "Hide head only while equipped",
+  "ko": "장착 중일 때만 머리 숨기기",
+  "zhTW": "僅在裝備時隱藏頭部",
+  "zhCN": "仅在装备时隐藏头部"
+ },
+ "LabDtFlagHeadHideSummary": {
+  "ja": "装備時のみ頭を隠す",
+  "en": "Hide head only while equipped",
+  "ko": "장착 중일 때만 머리 숨김",
+  "zhTW": "僅裝備時隱藏頭部",
+  "zhCN": "仅装备时隐藏头部"
+ },
+ "LabFeatureShapeKeys": {
+  "ja": "シェイプキー",
+  "en": "Shape Keys",
+  "ko": "쉐이프 키",
+  "zhTW": "形狀鍵",
+  "zhCN": "形态键"
+ },
+ "LabShapeKeysDialogTitle": {
+  "ja": "シェイプキー",
+  "en": "Shape Keys",
+  "ko": "쉐이프 키",
+  "zhTW": "形狀鍵",
+  "zhCN": "形态键"
+ },
+ "LabShapeKeysHint": {
+  "ja": "メッシュを選び、シェイプキー(ブレンドシェイプ)をスライダーで適用した状態(0〜1)に固定して変換します。値0は未適用のままです。シェイプキーを持つメッシュのみ一覧に表示されます。",
+  "en": "Pick a mesh and fix its shape keys (blend shapes) to the slider values (0-1) before conversion. A value of 0 stays unapplied. Only meshes that have shape keys are listed.",
+  "ko": "메시를 선택하고 슬라이더 값(0~1)으로 쉐이프 키(블렌드 셰이프)를 고정한 상태로 변환합니다. 값이 0이면 적용되지 않습니다. 쉐이프 키가 있는 메시만 목록에 표시됩니다.",
+  "zhTW": "選擇網格,並依滑桿數值(0~1)固定套用形狀鍵(混合形狀)後再轉換。數值為0時維持未套用。清單只會顯示擁有形狀鍵的網格。",
+  "zhCN": "选择网格,并按滑块数值(0~1)固定应用形态键(混合形状)后再转换。数值为0时保持未应用。列表中只会显示拥有形态键的网格。"
+ },
+ "LabShapeKeysCatalogUnavailableNotice": {
+  "ja": "シェイプキーの一覧を取得できませんでした。prefabの場合は再エクスポートしてから開き直してください。OKを押しても保存済みの設定は変更されません。",
+  "en": "Could not retrieve the shape key list. For a prefab, re-export it and reopen this dialog. Pressing OK will not change your saved settings.",
+  "ko": "쉐이프 키 목록을 가져올 수 없습니다. prefab인 경우 다시 내보낸 후 다시 열어 주세요. OK를 눌러도 저장된 설정은 변경되지 않습니다.",
+  "zhTW": "無法取得形狀鍵清單。若為prefab,請重新匯出後再開啟本對話方塊。按下確定不會變更已儲存的設定。",
+  "zhCN": "无法获取形态键列表。若为prefab,请重新导出后再打开本对话框。按下确定不会更改已保存的设置。"
+ },
+ "LabShapeKeysMeshListLabel": {
+  "ja": "メッシュ",
+  "en": "Mesh",
+  "ko": "메시",
+  "zhTW": "網格",
+  "zhCN": "网格"
+ },
+ "LabShapeKeysSearchLabel": {
+  "ja": "検索:",
+  "en": "Search:",
+  "ko": "검색:",
+  "zhTW": "搜尋:",
+  "zhCN": "搜索:"
+ },
+ "LabShapeKeysSummaryFormat": {
+  "ja": "{0}件設定済み",
+  "en": "{0} key(s) set",
+  "ko": "{0}개 설정됨",
+  "zhTW": "已設定{0}項",
+  "zhCN": "已设置{0}项"
+ },
+ "LabFeatureGenderFilter": {
+  "ja": "性別限定",
+  "en": "Gender Filter",
+  "ko": "성별 한정",
+  "zhTW": "性別限定",
+  "zhCN": "性别限定"
+ },
+ "LabGenderFilterDialogTitle": {
+  "ja": "性別限定",
+  "en": "Gender Filter",
+  "ko": "성별 한정",
+  "zhTW": "性別限定",
+  "zhCN": "性别限定"
+ },
+ "LabGenderFilterHint": {
+  "ja": "選んだ性別のキャラクターだけにアバターが反映されます。選ばなかった性別はデフォルトアバターのままになります。",
+  "en": "Your avatar is applied only to the selected gender's character. The other gender stays on its default avatar.",
+  "ko": "선택한 성별 캐릭터에만 아바타가 반영됩니다. 선택하지 않은 성별은 기본 아바타 그대로입니다.",
+  "zhTW": "只有所選性別的角色會套用您的角色模型,未選擇的性別維持預設角色模型。",
+  "zhCN": "只有所选性别的角色会套用您的角色模型,未选择的性别保持默认角色模型。"
+ },
+ "LabGenderFilterOptionBoth": {
+  "ja": "両方(既定)",
+  "en": "Both (default)",
+  "ko": "양쪽 모두(기본값)",
+  "zhTW": "兩者皆是(預設)",
+  "zhCN": "两者皆是(默认)"
+ },
+ "LabGenderFilterOptionMaleOnly": {
+  "ja": "男のみ",
+  "en": "Male only",
+  "ko": "남성만",
+  "zhTW": "僅限男性",
+  "zhCN": "仅限男性"
+ },
+ "LabGenderFilterOptionFemaleOnly": {
+  "ja": "女のみ",
+  "en": "Female only",
+  "ko": "여성만",
+  "zhTW": "僅限女性",
+  "zhCN": "仅限女性"
+ },
+ "LabGenderFilterSummaryMaleOnly": {
+  "ja": "男のみ",
+  "en": "Male only",
+  "ko": "남성만",
+  "zhTW": "僅限男性",
+  "zhCN": "仅限男性"
+ },
+ "LabGenderFilterSummaryFemaleOnly": {
+  "ja": "女のみ",
+  "en": "Female only",
+  "ko": "여성만",
+  "zhTW": "僅限女性",
+  "zhCN": "仅限女性"
+ },
+ "LabFeatureMeshDelete": {
+  "ja": "メッシュ削除",
+  "en": "Delete Mesh",
+  "ko": "메시 삭제",
+  "zhTW": "刪除網格",
+  "zhCN": "删除网格"
+ },
+ "LabMeshDeleteDialogTitle": {
+  "ja": "メッシュ削除",
+  "en": "Delete Mesh",
+  "ko": "메시 삭제",
+  "zhTW": "刪除網格",
+  "zhCN": "删除网格"
+ },
+ "LabMeshDeleteHint": {
+  "ja": "チェックを外したメッシュは変換結果から削除されます。",
+  "en": "Meshes you uncheck will be removed from the converted result.",
+  "ko": "체크를 해제한 메시는 변환 결과에서 삭제됩니다.",
+  "zhTW": "取消勾選的網格將從轉換結果中刪除。",
+  "zhCN": "取消勾选的网格将从转换结果中删除。"
+ },
+ "LabMeshDeleteCatalogUnavailableNotice": {
+  "ja": "アバターのメッシュ名一覧を取得できませんでした。OKを押しても保存済みの設定は変更されません(下の欄に直接メッシュ名をカンマ区切りで入力できます)。",
+  "en": "Could not retrieve the mesh name list for this avatar. Pressing OK will not change your saved setting (you can type mesh names directly below, separated by commas).",
+  "ko": "이 아바타의 메시 이름 목록을 가져올 수 없습니다. OK를 눌러도 저장된 설정은 변경되지 않습니다(아래 칸에 메시 이름을 쉼표로 구분하여 직접 입력할 수 있습니다).",
+  "zhTW": "無法取得此角色模型的網格名稱清單。按下確定不會變更已儲存的設定(您可以在下方欄位以逗號分隔直接輸入網格名稱)。",
+  "zhCN": "无法获取此角色模型的网格名称列表。按下确定不会更改已保存的设置(您可以在下方栏位以逗号分隔直接输入网格名称)。"
+ },
+ "LabMeshDeleteManualLabel": {
+  "ja": "削除するメッシュ名(カンマ区切り):",
+  "en": "Mesh names to delete (comma-separated):",
+  "ko": "삭제할 메시 이름(쉼표로 구분):",
+  "zhTW": "要刪除的網格名稱(以逗號分隔):",
+  "zhCN": "要删除的网格名称(以逗号分隔):"
+ },
+ "LabMeshDeleteAllOffWarning": {
+  "ja": "少なくとも1つは残してください(すべて削除すると、メッシュが何も残らなくなります)。",
+  "en": "Please keep at least one mesh checked (clearing all would leave no mesh at all).",
+  "ko": "적어도 하나는 남겨두세요(모두 삭제하면 메시가 하나도 남지 않습니다).",
+  "zhTW": "請至少保留一個網格(全部刪除將導致沒有任何網格)。",
+  "zhCN": "请至少保留一个网格(全部删除将导致没有任何网格)。"
+ },
+ "LabDropBonesCatalogUnavailableNotice": {
+  "ja": "ボーン名の一覧を取得できなかったため、下の欄にボーン名をカンマ区切りで入力してください。OKを押しても保存済みの設定は変更されません。",
+  "en": "Could not retrieve the bone name list, so type the bone names directly below, separated by commas. Pressing OK will not change your saved setting.",
+  "ko": "본 이름 목록을 가져올 수 없어, 아래 칸에 본 이름을 쉼표로 구분하여 입력해야 합니다. OK를 눌러도 저장된 설정은 변경되지 않습니다.",
+  "zhTW": "無法取得骨骼名稱清單,請在下方欄位以逗號分隔輸入骨骼名稱。按下確定不會變更已儲存的設定。",
+  "zhCN": "无法获取骨骼名称列表,请在下方栏位以逗号分隔输入骨骼名称。按下确定不会更改已保存的设置。"
+ },
+ "LabDropBonesAllSelectedWarning": {
+  "ja": "すべてのボーンを削除対象にはできません(骨格が全損してしまいます)。少なくとも1つはチェックを外してください。",
+  "en": "You can't mark every bone for deletion (this would destroy the entire skeleton). Please leave at least one unchecked.",
+  "ko": "모든 본을 삭제 대상으로 지정할 수 없습니다(골격이 전부 손상됩니다). 최소 하나는 체크를 해제해 주세요.",
+  "zhTW": "無法將所有骨骼都設為刪除對象(骨架將完全損毀)。請至少取消勾選一項。",
+  "zhCN": "无法将所有骨骼都设为删除对象(骨架将完全损毁)。请至少取消勾选一项。"
+ },
+ "LabMeshDeleteSummaryFormat": {
+  "ja": "{0}件削除",
+  "en": "{0} deleted",
+  "ko": "{0}개 삭제",
+  "zhTW": "刪除{0}件",
+  "zhCN": "删除{0}件"
+ },
+ "LabFeatureMultiAvatarPak": {
+  "ja": "マルチアバターPAK作成",
+  "en": "Multi-Avatar PAK Build",
+  "ko": "멀티 아바타 PAK 생성",
+  "zhTW": "多角色模型PAK製作",
+  "zhCN": "多角色模型PAK制作"
+ },
+ "LabMultiAvatarPakDialogHint": {
+  "ja": "装備によって複数のアバターを切り替えて使いたい方向け。事前にそれぞれのアバターを通常変換すると右側のライブラリから選択可能になります(要求ver:{0}以上)。PAK作成のときはメインパネルではなく、この専用UIの作成ボタンをつかってください。この機能と揺れものを同時に使うと、揺れがおかしくなることがあります。",
+  "en": "For those who want to switch between multiple avatars depending on equipment. Convert each avatar normally beforehand, and it will become selectable from the library on the right (requires v{0} or later). To build the PAK, use the Build button on this dedicated screen instead of the main panel. Using this feature together with sway may cause the sway to behave incorrectly.",
+  "ko": "장비에 따라 여러 아바타를 전환하고 싶은 분을 위한 기능입니다. 미리 각 아바타를 일반 변환하면 오른쪽 라이브러리에서 선택할 수 있게 됩니다(필요 버전: v{0} 이상). PAK 생성 시에는 메인 패널이 아니라 이 전용 화면의 생성 버튼을 사용해 주세요. 이 기능과 흔들림 기능을 함께 사용하면 흔들림이 이상해질 수 있습니다.",
+  "zhTW": "適合想依裝備切換多個角色模型的使用者。請事先將各個角色模型分別進行一般轉換,之後就能從右側的資料庫中選擇(需要版本:v{0}以上)。製作PAK時,請使用本專用畫面的製作按鈕,而不是主面板。同時使用此功能與搖動功能時,搖動可能會出現異常。",
+  "zhCN": "适合想根据装备切换多个角色模型的用户。请事先将各个角色模型分别进行常规转换,之后就能从右侧的库中选择(需要版本:v{0}以上)。制作PAK时,请使用本专用界面的制作按钮,而不是主面板。同时使用此功能与摆动功能时,摆动可能会出现异常。"
+ },
+ "LabMultiAvatarPakBtnSetup": {
+  "ja": "設定開始",
+  "en": "Start Setup",
+  "ko": "설정 시작",
+  "zhTW": "開始設定",
+  "zhCN": "开始设置"
+ },
+ "LabMultiAvatarPakSetupHint": {
+  "ja": "はじめに、ベースにするアバターをライブラリから選んでください。選んだアバターが、すべての装備スロットへ割り当てられます。",
+  "en": "First, choose a base avatar from the library. The avatar you choose will be assigned to every equipment slot.",
+  "ko": "먼저 기준이 될 아바타를 라이브러리에서 선택해 주세요. 선택한 아바타가 모든 장비 슬롯에 할당됩니다.",
+  "zhTW": "請先從資料庫中選擇作為基礎的角色模型。選擇的角色模型將指派給所有裝備欄位。",
+  "zhCN": "请先从库中选择作为基础的角色模型。所选的角色模型将分配给所有装备栏位。"
+ },
+ "LabMultiAvatarPakSetupNoEntries": {
+  "ja": "ライブラリに選べるアバターがまだありません。先にメインパネルで通常の変換を行ってください。",
+  "en": "There are no avatars available in the library yet. Please convert an avatar from the main panel first.",
+  "ko": "라이브러리에서 선택할 수 있는 아바타가 아직 없습니다. 먼저 메인 패널에서 일반 변환을 진행해 주세요.",
+  "zhTW": "資料庫中目前還沒有可選擇的角色模型。請先在主面板進行一般轉換。",
+  "zhCN": "库中目前还没有可选择的角色模型。请先在主面板进行常规转换。"
+ },
+ "LabMultiAvatarPakColEquipment": {
+  "ja": "装備",
+  "en": "Equipment",
+  "ko": "장비",
+  "zhTW": "裝備",
+  "zhCN": "装备"
+ },
+ "LabMultiAvatarPakColLibrary": {
+  "ja": "ライブラリ",
+  "en": "Library",
+  "ko": "라이브러리",
+  "zhTW": "資料庫",
+  "zhCN": "库"
+ },
+ "LabMultiAvatarPakGrayoutHint": {
+  "ja": "灰色のアバターは、もう一度変換すると選べるようになります。",
+  "en": "Grayed-out avatars will become selectable once you convert them again.",
+  "ko": "회색으로 표시된 아바타는 다시 한 번 변환하면 선택할 수 있게 됩니다.",
+  "zhTW": "顯示為灰色的角色模型,只要再轉換一次就能選擇。",
+  "zhCN": "显示为灰色的角色模型,只要再转换一次就能选择。"
+ },
+ "LabMultiAvatarPakPaintHint": {
+  "ja": "右側でアバターを選び、左側の装備をクリックすると、その装備にアバターが割り当てられます(複数クリック可)。",
+  "en": "Select an avatar on the right, then click equipment on the left to assign that avatar to it (you can click multiple items).",
+  "ko": "오른쪽에서 아바타를 선택한 다음 왼쪽의 장비를 클릭하면 해당 장비에 아바타가 할당됩니다(여러 개 클릭 가능).",
+  "zhTW": "在右側選擇角色模型後,點擊左側的裝備即可將該角色模型指派給該裝備(可多選點擊)。",
+  "zhCN": "在右侧选择角色模型后,点击左侧的装备即可将该角色模型分配给该装备(可多次点击)。"
+ },
+ "LabMultiAvatarPakBtnCreate": {
+  "ja": "作成",
+  "en": "Build",
+  "ko": "생성",
+  "zhTW": "製作",
+  "zhCN": "制作"
+ },
+ "LabMultiAvatarPakBtnReset": {
+  "ja": "リセット",
+  "en": "Reset",
+  "ko": "초기화",
+  "zhTW": "重設",
+  "zhCN": "重置"
+ },
+ "LabMultiAvatarPakNamePromptTitle": {
+  "ja": "名前を入力",
+  "en": "Enter a Name",
+  "ko": "이름 입력",
+  "zhTW": "輸入名稱",
+  "zhCN": "输入名称"
+ },
+ "LabMultiAvatarPakNamePromptBody": {
+  "ja": "作成するMODの名前を入力してください。",
+  "en": "Enter a name for the MOD you are building.",
+  "ko": "생성할 MOD의 이름을 입력해 주세요.",
+  "zhTW": "請輸入要製作的MOD名稱。",
+  "zhCN": "请输入要制作的MOD名称。"
+ },
+ "LabMultiAvatarPakCreateRunning": {
+  "ja": "作成しています…",
+  "en": "Building…",
+  "ko": "생성하는 중입니다…",
+  "zhTW": "正在製作…",
+  "zhCN": "正在制作…"
+ },
+ "LabMultiAvatarPakCreateFailureBody": {
+  "ja": "作成に失敗しました。詳しい内容はログ欄から確認できます。",
+  "en": "Build failed. See the log panel for details.",
+  "ko": "생성에 실패했습니다. 자세한 내용은 로그란에서 확인할 수 있습니다.",
+  "zhTW": "製作失敗。詳細內容請參閱紀錄欄。",
+  "zhCN": "制作失败。详细内容请参见日志栏。"
+ },
+ "LabMultiAvatarPakComposeUnavailable": {
+  "ja": "現在この処理を行えません。しばらくしてからもう一度お試しください。",
+  "en": "This action is not available right now. Please try again later.",
+  "ko": "현재 이 작업을 수행할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+  "zhTW": "目前無法執行此操作。請稍後再試一次。",
+  "zhCN": "目前无法执行此操作。请稍后再试一次。"
+ },
+ "LabMultiAvatarPakCreateAndApplySuccess": {
+  "ja": "マルチアバターPAKを作成し、Palworldに適用しました。",
+  "en": "Created the multi-avatar PAK and applied it to Palworld.",
+  "ko": "멀티 아바터 PAK을 생성하고 Palworld에 적용했습니다.",
+  "zhTW": "已製作多角色PAK並套用至Palworld。",
+  "zhCN": "已制作多角色PAK并应用到Palworld。"
+ },
+ "LabMultiAvatarPakCreateApplyFailure": {
+  "ja": "マルチアバターPAKを作成しましたが、適用に失敗しました(ログを確認してください)。",
+  "en": "Created the multi-avatar PAK, but failed to apply it (see the log).",
+  "ko": "멀티 아바터 PAK을 생성했지만 적용에 실패했습니다(로그를 확인해 주세요).",
+  "zhTW": "已製作多角色PAK,但套用失敗(請查看紀錄)。",
+  "zhCN": "已制作多角色PAK,但应用失败(请查看日志)。"
+ },
+ "LabMultiAvatarPakCreateApplyFailureGameRunning": {
+  "ja": "マルチアバターPAKを作成しましたが、Palworldが起動中のため適用できませんでした。Palworldを終了してからもう一度お試しください。",
+  "en": "Created the multi-avatar PAK, but could not apply it because Palworld is currently running. Please close Palworld and try again.",
+  "ko": "멀티 아바터 PAK을 생성했지만, Palworld가 실행 중이어서 적용할 수 없었습니다. Palworld를 종료한 후 다시 시도해주세요.",
+  "zhTW": "已製作多角色PAK,但因幻獸帕魯正在執行中而無法套用。請先結束幻獸帕魯後再試一次。",
+  "zhCN": "已制作多角色PAK,但因幻兽帕鲁正在运行中而无法应用。请先关闭幻兽帕鲁后再试一次。"
+ },
+ "LabMultiAvatarPakSummaryFormat": {
+  "ja": "{0}件割当",
+  "en": "{0} assigned",
+  "ko": "{0}개 할당",
+  "zhTW": "已分配{0}件",
+  "zhCN": "已分配{0}件"
+ },
+ "PakListMultiAvatarMarkFormat": {
+  "ja": "{0}(マルチ)",
+  "en": "{0} (Multi)",
+  "ko": "{0}(멀티)",
+  "zhTW": "{0}(多角色)",
+  "zhCN": "{0}(多角色)"
+ },
+ "BtnCancel": {
+  "ja": "キャンセル",
+  "en": "Cancel",
+  "ko": "취소",
+  "zhTW": "取消",
+  "zhCN": "取消"
+ },
+ "LabelSwayIntensity": {
+  "ja": "揺れの度合い:",
+  "en": "Sway Intensity:",
+  "ko": "흔들림 정도:",
+  "zhTW": "搖動程度:",
+  "zhCN": "摆动程度:"
+ },
+ "TipSwayIntensity": {
+  "ja": "しっぽや耳などの揺れの強さをまとめて選びます(既定: ふつう)。",
+  "en": "Chooses the overall sway strength for tails, ears, etc. (default: Normal).",
+  "ko": "꼬리나 귀 등의 흔들림 세기를 한꺼번에 선택합니다(기본값: 보통).",
+  "zhTW": "統一選擇尾巴、耳朵等的搖動強度(預設:普通)。",
+  "zhCN": "统一选择尾巴、耳朵等的摆动强度(默认:普通)。"
+ },
+ "LabelSwayEnable": {
+  "ja": "ゆらす:",
+  "en": "Sway:",
+  "ko": "흔들기:",
+  "zhTW": "搖動:",
+  "zhCN": "摆动:"
+ },
+ "TipSwayEnable": {
+  "ja": "PB/SpringBoneが付いた鎖を自動でゆらします(既定: ON)。個別に調整したい場合はラボの「揺れもの詳細」を使ってください。",
+  "en": "Automatically sways chains that already have a PhysBone/SpringBone component (default: ON). Use the Lab's \"Sway Details\" to fine-tune individual chains.",
+  "ko": "PB/SpringBone이 달린 체인을 자동으로 흔듭니다(기본값: ON). 개별 조정은 실험실의 「흔들림 상세」를 사용하세요.",
+  "zhTW": "自動搖動已附加 PB/SpringBone 的鏈(預設:開啟)。若要個別調整,請使用實驗室的「搖動細節」。",
+  "zhCN": "自动摆动已附加 PB/SpringBone 的链(默认:开启)。如需单独调整,请使用实验室的「摆动细节」。"
+ },
+ "SwayIntensityNone": {
+  "ja": "なし",
+  "en": "None",
+  "ko": "없음",
+  "zhTW": "無",
+  "zhCN": "无"
+ },
+ "SwayIntensityHard": {
+  "ja": "固め",
+  "en": "Firm",
+  "ko": "단단하게",
+  "zhTW": "偏硬",
+  "zhCN": "偏硬"
+ },
+ "SwayIntensityNormal": {
+  "ja": "ふつう",
+  "en": "Normal",
+  "ko": "보통",
+  "zhTW": "普通",
+  "zhCN": "普通"
+ },
+ "SwayIntensitySoft": {
+  "ja": "やわらかめ",
+  "en": "Soft",
+  "ko": "부드럽게",
+  "zhTW": "偏軟",
+  "zhCN": "偏软"
+ },
+ "LabFeatureSwayChains": {
+  "ja": "揺れもの詳細設定",
+  "en": "Sway Chain Details",
+  "ko": "흔들림 상세 설정",
+  "zhTW": "搖動細節設定",
+  "zhCN": "摆动细节设置"
+ },
+ "LabSwayChainSummaryFormat": {
+  "ja": "{0}件変更",
+  "en": "{0} customized",
+  "ko": "{0}건 변경",
+  "zhTW": "已變更 {0} 項",
+  "zhCN": "已更改 {0} 项"
+ },
+ "LabSwayChainDialogTitle": {
+  "ja": "揺れもの詳細設定",
+  "en": "Sway Chain Details",
+  "ko": "흔들림 상세 설정",
+  "zhTW": "搖動細節設定",
+  "zhCN": "摆动细节设置"
+ },
+ "LabSwayChainHint": {
+  "ja": "しっぽや耳などのチェーンごとに、揺れのON/OFFやかたさを個別に指定できます。ここで指定した内容は、標準機能の「揺れの度合い」より優先されます。",
+  "en": "Turn sway on/off and set stiffness individually for each chain (tails, ears, etc.). Settings here take priority over the standard \"Sway Intensity\" control.",
+  "ko": "꼬리나 귀 등 체인별로 흔들림 켜기/끄기와 단단함을 개별적으로 지정할 수 있습니다. 여기서 지정한 내용은 표준 기능인 「흔들림 정도」보다 우선됩니다.",
+  "zhTW": "可依尾巴、耳朵等每條鏈個別指定是否搖動及軟硬度。此處的設定會優先於標準功能的「搖動程度」。",
+  "zhCN": "可按尾巴、耳朵等每条链单独指定是否摆动及软硬度。此处的设置会优先于标准功能的「摆动程度」。"
+ },
+ "LabSwayChainSampleModeNotice": {
+  "ja": "開発確認用のサンプルデータを表示しています(--sampleフラグ)。実際のアバターのチェーンではありません。",
+  "en": "Showing developer sample data (--sample flag). These are not the chains from an actual avatar.",
+  "ko": "개발 확인용 샘플 데이터를 표시하고 있습니다(--sample 플래그). 실제 아바타의 체인이 아닙니다.",
+  "zhTW": "目前顯示的是開發確認用範例資料(--sample 旗標)。並非實際角色模型的鏈。",
+  "zhCN": "当前显示的是开发确认用示例数据(--sample 标志)。并非实际角色模型的链。"
+ },
+ "LabSwayChainEmptyStateNotice": {
+  "ja": "このアバターからはまだチェーン情報を読み取れません。変換を実行すると自動的に検出されます。ボーンの名前がわかっていれば、下から手動で追加することもできます。",
+  "en": "No chain information could be read from this avatar yet. It will be detected automatically when you run a conversion. If you know the bone name, you can also add it manually below.",
+  "ko": "이 아바타에서는 아직 체인 정보를 읽을 수 없습니다. 변환을 실행하면 자동으로 감지됩니다. 본 이름을 알고 있다면 아래에서 수동으로 추가할 수도 있습니다.",
+  "zhTW": "目前尚無法從此角色模型讀取鏈資訊。執行轉換後會自動偵測。若您知道骨骼名稱,也可以在下方手動新增。",
+  "zhCN": "目前尚无法从此角色模型读取链信息。执行转换后会自动检测。如果您知道骨骼名称,也可以在下方手动添加。"
+ },
+ "LabSwayChainColOn": {
+  "ja": "ON",
+  "en": "On",
+  "ko": "켬",
+  "zhTW": "開啟",
+  "zhCN": "开启"
+ },
+ "LabSwayChainColName": {
+  "ja": "ボーン名",
+  "en": "Bone Name",
+  "ko": "본 이름",
+  "zhTW": "骨骼名稱",
+  "zhCN": "骨骼名称"
+ },
+ "LabSwayChainColNodes": {
+  "ja": "節数",
+  "en": "Nodes",
+  "ko": "노드 수",
+  "zhTW": "節點數",
+  "zhCN": "节点数"
+ },
+ "LabSwayChainColHardness": {
+  "ja": "かたさ",
+  "en": "Stiffness",
+  "ko": "단단함",
+  "zhTW": "軟硬度",
+  "zhCN": "软硬度"
+ },
+ "LabSwayChainHardnessFollow": {
+  "ja": "標準に従う",
+  "en": "Follow Standard",
+  "ko": "표준을 따름",
+  "zhTW": "跟隨標準",
+  "zhCN": "跟随标准"
+ },
+ "LabSwayChainColSafetyMargin": {
+  "ja": "安全域",
+  "en": "Safety Margin",
+  "ko": "안전 영역",
+  "zhTW": "安全範圍",
+  "zhCN": "安全范围"
+ },
+ "LabSwayChainSafetyMarginHint": {
+  "ja": "先端の動きがおかしい揺れものは、安全域を増やしてください。",
+  "en": "If the tip of a sway chain moves strangely, try increasing its safety margin.",
+  "ko": "끝부분의 움직임이 이상한 흔들림은 안전 영역을 늘려보세요.",
+  "zhTW": "若搖動鏈的末端動作異常,請嘗試增加安全範圍。",
+  "zhCN": "若摆动链末端动作异常,请尝试增加安全范围。"
+ },
+ "LabSwayChainManualTag": {
+  "ja": "手動",
+  "en": "manual",
+  "ko": "수동",
+  "zhTW": "手動",
+  "zhCN": "手动"
+ },
+ "LabSwayChainManualLabel": {
+  "ja": "ボーンの名前で手動追加",
+  "en": "Add Manually by Bone Name",
+  "ko": "본 이름으로 수동 추가",
+  "zhTW": "以骨骼名稱手動新增",
+  "zhCN": "按骨骼名称手动添加"
+ },
+ "LabSwayChainManualNameLabel": {
+  "ja": "ボーンの名前",
+  "en": "Bone Name",
+  "ko": "본 이름",
+  "zhTW": "骨骼名稱",
+  "zhCN": "骨骼名称"
+ },
+ "LabSwayChainManualHardnessLabel": {
+  "ja": "かたさ",
+  "en": "Stiffness",
+  "ko": "단단함",
+  "zhTW": "軟硬度",
+  "zhCN": "软硬度"
+ },
+ "BtnSwayChainManualAdd": {
+  "ja": "追加",
+  "en": "Add",
+  "ko": "추가",
+  "zhTW": "新增",
+  "zhCN": "添加"
+ },
+ "BtnRemoveManualChain": {
+  "ja": "削除",
+  "en": "Remove",
+  "ko": "삭제",
+  "zhTW": "移除",
+  "zhCN": "移除"
+ },
+ "BtnLabSwayChainReset": {
+  "ja": "このアバターの設定を既定値に戻す",
+  "en": "Reset This Avatar's Settings",
+  "ko": "이 아바타의 설정을 기본값으로 되돌리기",
+  "zhTW": "將此角色模型的設定重設為預設值",
+  "zhCN": "将此角色模型的设置重置为默认值"
+ },
+ "BtnLabSwayChainSelectAll": {
+  "ja": "全てON",
+  "en": "Turn All On",
+  "ko": "모두 켜기",
+  "zhTW": "全部開啟",
+  "zhCN": "全部开启"
+ },
+ "BtnLabSwayChainSelectNone": {
+  "ja": "全てOFF",
+  "en": "Turn All Off",
+  "ko": "모두 끄기",
+  "zhTW": "全部關閉",
+  "zhCN": "全部关闭"
+ },
+ "LabFeatureOutputFolder": {
+  "ja": "出力先フォルダを開く",
+  "en": "Open Output Folder",
+  "ko": "출력 폴더 열기",
+  "zhTW": "開啟輸出資料夾",
+  "zhCN": "打开输出文件夹"
+ },
+ "LabOutputFolderDialogTitle": {
+  "ja": "出力先フォルダを開く",
+  "en": "Open Output Folder",
+  "ko": "출력 폴더 열기",
+  "zhTW": "開啟輸出資料夾",
+  "zhCN": "打开输出文件夹"
+ },
+ "LabOutputFolderHint": {
+  "ja": "変換結果(pakファイル等)が保存されるフォルダを表示します。アバターごとのフォルダの中の build フォルダに pak ファイルが入っています。「フォルダを開く」を押すと、この場所をエクスプローラーで確認できます。",
+  "en": "Shows the folder where conversion results (pak files, etc.) are saved. Inside each avatar's folder, the pak file is in the build folder. Click \"Open Folder\" to view this location in File Explorer.",
+  "ko": "변환 결과(pak 파일 등)가 저장되는 폴더를 표시합니다. 아바타별 폴더 안의 build 폴더에 pak 파일이 들어 있습니다. \"폴더 열기\"를 누르면 이 위치를 탐색기에서 확인할 수 있습니다.",
+  "zhTW": "顯示轉換結果(pak 檔案等)儲存的資料夾。每個角色模型資料夾內的 build 資料夾中會有 pak 檔案。按下「開啟資料夾」即可在檔案總管中查看此位置。",
+  "zhCN": "显示转换结果(pak 文件等)保存的文件夹。每个角色模型文件夹内的 build 文件夹中会有 pak 文件。点击“打开文件夹”即可在资源管理器中查看此位置。"
+ },
+ "LabOutputFolderMissingNotice": {
+  "ja": "まだ変換結果がありません。先にメインパネルで変換を行ってください。",
+  "en": "There are no conversion results yet. Run a conversion from the main panel first.",
+  "ko": "아직 변환 결과가 없습니다. 먼저 메인 패널에서 변환을 실행하세요.",
+  "zhTW": "目前還沒有轉換結果。請先在主面板進行轉換。",
+  "zhCN": "目前还没有转换结果。请先在主面板进行转换。"
+ },
+ "BtnLabOutputFolderOpen": {
+  "ja": "フォルダを開く",
+  "en": "Open Folder",
+  "ko": "폴더 열기",
+  "zhTW": "開啟資料夾",
+  "zhCN": "打开文件夹"
+ },
+ "MsgLabOutputFolderOpenFailedFormat": {
+  "ja": "フォルダを開けませんでした:\n{0}\n\n詳しい内容はログ欄から確認できます。",
+  "en": "Failed to open the folder:\n{0}\n\nSee the log panel for details.",
+  "ko": "폴더를 열 수 없습니다:\n{0}\n\n자세한 내용은 로그란에서 확인할 수 있습니다.",
+  "zhTW": "無法開啟資料夾:\n{0}\n\n詳細內容請參閱紀錄欄。",
+  "zhCN": "无法打开文件夹:\n{0}\n\n详细内容请参见日志栏。"
+ },
+ "LabFeatureRawSwayParams": {
+  "ja": "生パラメータ調整",
+  "en": "Raw Sway Parameters",
+  "ko": "원시 파라미터 조정",
+  "zhTW": "原始參數調整",
+  "zhCN": "原始参数调整"
+ },
+ "LabRawSwayParamsDialogTitle": {
+  "ja": "生パラメータ調整",
+  "en": "Raw Sway Parameters",
+  "ko": "원시 파라미터 조정",
+  "zhTW": "原始參數調整",
+  "zhCN": "原始参数调整"
+ },
+ "LabRawSwayParamsHint": {
+  "ja": "しっぽや耳の揺れの動き方を、しっぽ・耳それぞれで細かく調整できます。標準機能の「揺れの度合い」より優先されます。硬さ=戻ろうとする強さ、戻りの速さ=揺れが収まる速さ、慣性(たなびき)=体の動きにどれだけ追従するか(0でたなびき最大、1で体に完全追従)、重力の影響=垂れ下がりの強さ、曲がる角度の上限=どこまで曲がれるか(0で無制限)です。",
+  "en": "Adjust how tails and ears sway in fine detail, separately for each. Settings here take priority over the standard \"Sway Intensity\" control. Stiffness = how strongly it springs back; Recovery Speed = how quickly the sway settles; Inertia (trailing) = how much it lags behind body movement (0 = maximum trailing, 1 = fully follows the body); Gravity = how much it droops; Angle Limit = how far it can bend (0 = unlimited).",
+  "ko": "꼬리와 귀의 흔들림을 각각 세밀하게 조정할 수 있습니다. 여기서 지정한 내용은 표준 기능인 「흔들림 정도」보다 우선됩니다. 단단함=되돌아오려는 힘, 되돌아오는 속도=흔들림이 가라앉는 속도, 관성(휘날림)=몸의 움직임을 얼마나 따라가는지(0이면 휘날림 최대, 1이면 몸에 완전히 추종), 중력의 영향=늘어지는 정도, 굽힘 각도 상한=얼마나 구부러질 수 있는지(0이면 무제한)입니다.",
+  "zhTW": "可分別針對尾巴、耳朵細部調整搖動方式。此處的設定會優先於標準功能的「搖動程度」。硬度=回彈的強度、回彈速度=搖動平息的速度、慣性(飄動)=跟隨身體動作的程度(0為飄動最大,1為完全跟隨身體)、重力影響=下垂的強度、彎曲角度上限=可彎曲的範圍(0為無限制)。",
+  "zhCN": "可分别针对尾巴、耳朵细致调整摆动方式。此处的设置会优先于标准功能的「摆动程度」。硬度=回弹的强度、回弹速度=摆动平息的速度、惯性(飘动)=跟随身体动作的程度(0为飘动最大,1为完全跟随身体)、重力影响=下垂的强度、弯曲角度上限=可弯曲的范围(0为无限制)。"
+ },
+ "LabRawSwayParamsFamilyTail": {
+  "ja": "しっぽ",
+  "en": "Tail",
+  "ko": "꼬리",
+  "zhTW": "尾巴",
+  "zhCN": "尾巴"
+ },
+ "LabRawSwayParamsFamilyEar": {
+  "ja": "耳",
+  "en": "Ear",
+  "ko": "귀",
+  "zhTW": "耳朵",
+  "zhCN": "耳朵"
+ },
+ "LabRawSwayParamsParamStiffness": {
+  "ja": "硬さ",
+  "en": "Stiffness",
+  "ko": "단단함",
+  "zhTW": "硬度",
+  "zhCN": "硬度"
+ },
+ "LabRawSwayParamsParamDamping": {
+  "ja": "戻りの速さ",
+  "en": "Recovery Speed",
+  "ko": "되돌아오는 속도",
+  "zhTW": "回彈速度",
+  "zhCN": "回弹速度"
+ },
+ "LabRawSwayParamsParamWd": {
+  "ja": "慣性(たなびき)",
+  "en": "Inertia (trailing)",
+  "ko": "관성(휘날림)",
+  "zhTW": "慣性(飄動)",
+  "zhCN": "惯性(飘动)"
+ },
+ "LabRawSwayParamsParamGravityZ": {
+  "ja": "重力の影響",
+  "en": "Gravity",
+  "ko": "중력의 영향",
+  "zhTW": "重力影響",
+  "zhCN": "重力影响"
+ },
+ "LabRawSwayParamsParamLimitAngle": {
+  "ja": "曲がる角度の上限",
+  "en": "Angle Limit",
+  "ko": "굽힘 각도 상한",
+  "zhTW": "彎曲角度上限",
+  "zhCN": "弯曲角度上限"
+ },
+ "LabRawSwayParamsSummary": {
+  "ja": "カスタム",
+  "en": "Custom",
+  "ko": "사용자 지정",
+  "zhTW": "自訂",
+  "zhCN": "自定义"
+ },
+ "LabRawSwayParamsResetButton": {
+  "ja": "既定値に戻す",
+  "en": "Reset to Defaults",
+  "ko": "기본값으로 되돌리기",
+  "zhTW": "重設為預設值",
+  "zhCN": "重置为默认值"
+ },
+ "LabFeatureSwayStyles": {
+  "ja": "揺れもの詳細設定(安全域)",
+  "en": "Sway Chain Details (Safety Margin)",
+  "ko": "흔들림 상세 설정 (안전 영역)",
+  "zhTW": "搖動細節設定(安全範圍)",
+  "zhCN": "摆动细节设置(安全范围)"
+ },
+ "LabSwayStyleDialogTitle": {
+  "ja": "揺れもの詳細設定(安全域)",
+  "en": "Sway Chain Details (Safety Margin)",
+  "ko": "흔들림 상세 설정 (안전 영역)",
+  "zhTW": "搖動細節設定(安全範圍)",
+  "zhCN": "摆动细节设置(安全范围)"
+ },
+ "LabSwayStyleHint": {
+  "ja": "しっぽや耳などの揺れもの一覧です。先端の動きがおかしい場合は、行ごとの安全域を増やしてください。",
+  "en": "This lists the sway chains (tails, ears, etc.). If a tip moves oddly, increase that row's safety margin.",
+  "ko": "꼬리나 귀 등 흔들림 목록입니다. 끝부분의 움직임이 이상하면 해당 행의 안전 영역을 늘려 보세요.",
+  "zhTW": "顯示尾巴、耳朵等搖動項目清單。若前端動作異常,請增加該行的安全範圍。",
+  "zhCN": "显示尾巴、耳朵等摆动项目列表。如果末端动作异常,请增加该行的安全范围。"
+ },
+ "LabSwayStyleStylesSectionLabel": {
+  "ja": "ゆれかた一覧",
+  "en": "Sway Styles List",
+  "ko": "흔들림 스타일 목록",
+  "zhTW": "搖動樣式清單",
+  "zhCN": "摆动样式列表"
+ },
+ "LabSwayStyleStylesHint": {
+  "ja": "組み込みのやわらかめ/ふつう/かためは値を変更できません。「複製」でコピーを作ってから編集してください。ここで選んだゆれかたは、下の一覧を塗る「筆」にもなります。",
+  "en": "The built-in Soft/Normal/Firm styles cannot be edited directly. Use \"Duplicate\" to make a copy first, then edit it. The style you select here also becomes the \"brush\" used to paint the list below.",
+  "ko": "내장된 부드럽게/보통/단단하게 스타일은 값을 변경할 수 없습니다. \"복제\"로 사본을 만든 후 편집하세요. 여기서 선택한 스타일은 아래 목록을 칠하는 \"붓\"도 됩니다.",
+  "zhTW": "內建的偏軟/普通/偏硬樣式無法直接變更數值。請先按「複製」建立副本後再編輯。在此選擇的樣式,也會成為塗色下方清單用的「筆刷」。",
+  "zhCN": "内置的偏软/普通/偏硬样式无法直接更改数值。请先点击「复制」创建副本后再编辑。在此选择的样式,也会成为涂色下方列表用的「笔刷」。"
+ },
+ "LabSwayStyleChainsSectionLabel": {
+  "ja": "揺れもの一覧",
+  "en": "Sway List",
+  "ko": "흔들림 목록",
+  "zhTW": "搖動清單",
+  "zhCN": "摆动列表"
+ },
+ "LabSwayStyleChainsHint": {
+  "ja": "ゆれかた一覧で選んだゆれかたが「筆」になります。ここでボーンをクリックすると、持っている筆のゆれかたが塗られます。「なし」を筆にすると、クリックで揺れを外せます。",
+  "en": "The style you pick in the styles list above becomes your \"brush\". Click a bone here to paint it with whatever brush you are holding. Pick \"None\" as your brush to clear a chain's sway with a click.",
+  "ko": "위 흔들림 스타일 목록에서 고른 스타일이 \"붓\"이 됩니다. 여기서 본을 클릭하면 들고 있는 붓의 스타일이 칠해집니다. \"없음\"을 붓으로 고르면 클릭으로 흔들림을 해제할 수 있습니다.",
+  "zhTW": "在上方的搖動樣式清單中選取的樣式會成為「筆刷」。點擊這裡的骨骼即可用手上的筆刷塗色。將「無」設為筆刷,即可用點擊解除搖動。",
+  "zhCN": "在上方的摆动样式列表中选取的样式会成为「笔刷」。点击这里的骨骼即可用手上的笔刷涂色。将「无」设为笔刷,即可用点击解除摆动。"
+ },
+ "LabSwayStyleParamWdl": {
+  "ja": "移動追従",
+  "en": "Follow Body Movement",
+  "ko": "이동 추종",
+  "zhTW": "跟隨移動",
+  "zhCN": "跟随移动"
+ },
+ "LabSwayStyleParamWdr": {
+  "ja": "回転追従",
+  "en": "Follow Body Rotation",
+  "ko": "회전 추종",
+  "zhTW": "跟隨旋轉",
+  "zhCN": "跟随旋转"
+ },
+ "LabSwayStyleParamPitch": {
+  "ja": "傾き(ピッチ)",
+  "en": "Tilt (Pitch)",
+  "ko": "기울기(피치)",
+  "zhTW": "傾斜(俯仰)",
+  "zhCN": "倾斜(俯仰)"
+ },
+ "LabSwayStyleParamRoll": {
+  "ja": "傾き(ロール)",
+  "en": "Tilt (Roll)",
+  "ko": "기울기(롤)",
+  "zhTW": "傾斜(翻滾)",
+  "zhCN": "倾斜(翻滚)"
+ },
+ "LabSwayStyleParamYaw": {
+  "ja": "回転(ヨー)",
+  "en": "Turn (Yaw)",
+  "ko": "회전(요)",
+  "zhTW": "旋轉(偏航)",
+  "zhCN": "旋转(偏航)"
+ },
+ "LabSwayStyleSlotFormat": {
+  "ja": "スロット: {0}/9",
+  "en": "Slots: {0}/9",
+  "ko": "슬롯: {0}/9",
+  "zhTW": "插槽: {0}/9",
+  "zhCN": "插槽: {0}/9"
+ },
+ "LabSwayStyleSlotHint": {
+  "ja": "同時に効くのは9本(PhysBone/SpringBone ひとつにつき1本)までです。超えた分の行は赤く表示されます(保存は可能です)。",
+  "en": "Up to 9 chains (one per PhysBone/SpringBone) can be active at the same time. Rows beyond that are shown in red (you can still save).",
+  "ko": "동시에 적용되는 것은 최대 9개(PhysBone/SpringBone 하나당 1개)입니다. 초과된 행은 빨간색으로 표시됩니다(저장은 가능합니다).",
+  "zhTW": "最多可同時生效9條(每個 PhysBone/SpringBone 各1條),超出的列會以紅色顯示(仍可儲存)。",
+  "zhCN": "最多可同时生效9条(每个 PhysBone/SpringBone 各1条),超出的行会以红色显示(仍可保存)。"
+ },
+ "BtnLabSwayStyleBulkApply": {
+  "ja": "選択中のゆれかたを一括設定",
+  "en": "Apply Selected Style to All",
+  "ko": "선택한 스타일 일괄 설정",
+  "zhTW": "將選取的樣式套用至全部",
+  "zhCN": "将选中的样式应用到全部"
+ },
+ "BtnLabSwayStyleCreate": {
+  "ja": "新規作成",
+  "en": "New",
+  "ko": "새로 만들기",
+  "zhTW": "新增",
+  "zhCN": "新建"
+ },
+ "BtnLabSwayStyleRename": {
+  "ja": "改名",
+  "en": "Rename",
+  "ko": "이름 바꾸기",
+  "zhTW": "重新命名",
+  "zhCN": "重命名"
+ },
+ "BtnLabSwayStyleDuplicate": {
+  "ja": "複製",
+  "en": "Duplicate",
+  "ko": "복제",
+  "zhTW": "複製",
+  "zhCN": "复制"
+ },
+ "LabSwayStyleNewNameLabel": {
+  "ja": "名前",
+  "en": "Name",
+  "ko": "이름",
+  "zhTW": "名稱",
+  "zhCN": "名称"
+ },
+ "LabSwayStyleNameEmptyError": {
+  "ja": "名前を入力してください",
+  "en": "Please enter a name",
+  "ko": "이름을 입력하세요",
+  "zhTW": "請輸入名稱",
+  "zhCN": "请输入名称"
+ },
+ "LabSwayStyleNameReservedError": {
+  "ja": "その名前は使用できません",
+  "en": "That name cannot be used",
+  "ko": "그 이름은 사용할 수 없습니다",
+  "zhTW": "該名稱無法使用",
+  "zhCN": "该名称无法使用"
+ },
+ "LabSwayStyleNameDuplicateError": {
+  "ja": "その名前は既に使われています",
+  "en": "That name is already in use",
+  "ko": "그 이름은 이미 사용 중입니다",
+  "zhTW": "該名稱已被使用",
+  "zhCN": "该名称已被使用"
+ },
+ "LabSwayStyleMigratedNameFormat": {
+  "ja": "{0}(移行)",
+  "en": "{0} (Migrated)",
+  "ko": "{0}(이전됨)",
+  "zhTW": "{0}(已轉移)",
+  "zhCN": "{0}(已迁移)"
+ },
+ "LabSwayStyleSummaryFormat": {
+  "ja": "{0}件割当",
+  "en": "{0} assigned",
+  "ko": "{0}건 할당",
+  "zhTW": "已指派 {0} 項",
+  "zhCN": "已指派 {0} 项"
+ },
+ "_progress_labels": {
+  "Preparing": {
+   "ja": "準備中",
+   "en": "Preparing",
+   "ko": "준비 중",
+   "zhTW": "準備中",
+   "zhCN": "准备中"
+  },
+  "Fetching game data": {
+   "ja": "ゲームデータを取得中",
+   "en": "Fetching game data",
+   "ko": "게임 데이터 가져오는 중",
+   "zhTW": "正在取得遊戲資料",
+   "zhCN": "正在获取游戏数据"
+  },
+  "Loading avatar": {
+   "ja": "アバターを読み込み中",
+   "en": "Loading avatar",
+   "ko": "아바타 불러오는 중",
+   "zhTW": "正在載入角色模型",
+   "zhCN": "正在加载角色模型"
+  },
+  "Retargeting skeleton": {
+   "ja": "スケルトンをリターゲット中",
+   "en": "Retargeting skeleton",
+   "ko": "스켈레톤 리타겟 중",
+   "zhTW": "正在重新定位骨架",
+   "zhCN": "正在重新定位骨架"
+  },
+  "Generating preview image": {
+   "ja": "プレビュー画像を生成中",
+   "en": "Generating preview image",
+   "ko": "미리보기 이미지 생성 중",
+   "zhTW": "正在產生預覽圖",
+   "zhCN": "正在生成预览图"
+  },
+  "Skeleton + preview complete (parallel)": {
+   "ja": "スケルトン+プレビュー完了(並列)",
+   "en": "Skeleton + preview complete (parallel)",
+   "ko": "스켈레톤+미리보기 완료(병렬)",
+   "zhTW": "骨架+預覽完成(平行)",
+   "zhCN": "骨架+预览完成(并行)"
+  },
+  "Generating MOD files": {
+   "ja": "MODファイルを生成中",
+   "en": "Generating MOD files",
+   "ko": "모드 파일 생성 중",
+   "zhTW": "正在產生 MOD 檔案",
+   "zhCN": "正在生成 MOD 文件"
+  },
+  "Packaging complete, verifying result": {
+   "ja": "パッケージ化完了、結果を確認中",
+   "en": "Packaging complete, verifying result",
+   "ko": "패키징 완료, 결과 확인 중",
+   "zhTW": "封裝完成,正在確認結果",
+   "zhCN": "打包完成,正在确认结果"
+  },
+  "Done": {
+   "ja": "完了",
+   "en": "Done",
+   "ko": "완료",
+   "zhTW": "完成",
+   "zhCN": "完成"
+  },
+  "Checking previous conversion results": {
+   "ja": "前回の変換結果を確認中",
+   "en": "Checking previous conversion results",
+   "ko": "이전 변환 결과 확인 중",
+   "zhTW": "正在確認先前的轉換結果",
+   "zhCN": "正在确认先前的转换结果"
+  },
+  "Final check": {
+   "ja": "最終確認中",
+   "en": "Final check",
+   "ko": "최종 확인 중",
+   "zhTW": "最終確認中",
+   "zhCN": "最终确认中"
+  },
+  "Preparing template assets": {
+   "ja": "テンプレート素材を準備中",
+   "en": "Preparing template assets",
+   "ko": "템플릿 자산 준비 중",
+   "zhTW": "正在準備範本素材",
+   "zhCN": "正在准备模板素材"
+  },
+  "Baking texture atlas": {
+   "ja": "テクスチャアトラスを生成中",
+   "en": "Baking texture atlas",
+   "ko": "텍스처 아틀라스 생성 중",
+   "zhTW": "正在產生紋理圖集",
+   "zhCN": "正在生成纹理图集"
+  },
+  "Preparing material overrides": {
+   "ja": "マテリアルの上書きを準備中",
+   "en": "Preparing material overrides",
+   "ko": "머티리얼 오버라이드 준비 중",
+   "zhTW": "正在準備材質覆寫",
+   "zhCN": "正在准备材质覆盖"
+  },
+  "Reading avatar data": {
+   "ja": "アバターデータを読み込み中",
+   "en": "Reading avatar data",
+   "ko": "아바타 데이터 읽는 중",
+   "zhTW": "正在讀取角色模型資料",
+   "zhCN": "正在读取角色模型数据"
+  },
+  "Injecting avatar into outfit items": {
+   "ja": "アバターを衣装アイテムへ組み込み中",
+   "en": "Injecting avatar into outfit items",
+   "ko": "아바타를 의상 아이템에 적용 중",
+   "zhTW": "正在將角色模型套用到服裝項目",
+   "zhCN": "正在将角色模型应用到服装项目"
+  },
+  "Compressing textures": {
+   "ja": "テクスチャを圧縮中",
+   "en": "Compressing textures",
+   "ko": "텍스처 압축 중",
+   "zhTW": "正在壓縮紋理",
+   "zhCN": "正在压缩纹理"
+  },
+  "Building pak file": {
+   "ja": "pakファイルを構築中",
+   "en": "Building pak file",
+   "ko": "pak 파일 빌드 중",
+   "zhTW": "正在建立 pak 檔案",
+   "zhCN": "正在构建 pak 文件"
+  },
+  "Running preflight checks": {
+   "ja": "事前検査を実行中",
+   "en": "Running preflight checks",
+   "ko": "사전 점검 실행 중",
+   "zhTW": "正在執行預檢",
+   "zhCN": "正在执行预检查"
   }
+ },
+ "LabSwayStyleCurrentPaintFormat": {
+  "ja": "現在の筆: {0}",
+  "en": "Current brush: {0}",
+  "ko": "현재 붓: {0}",
+  "zhTW": "目前的筆刷: {0}",
+  "zhCN": "当前的笔刷: {0}"
+ },
+ "LabSwayStyleChainCountFormat": {
+  "ja": "房{0}本",
+  "en": "{0} strands",
+  "ko": "가닥 {0}개",
+  "zhTW": "共{0}束",
+  "zhCN": "共{0}束"
+ },
+ "BtnLabSwayStyleForceSetup": {
+  "ja": "特殊ボーンを強制セットアップ",
+  "en": "Force-setup special bones",
+  "ko": "특수 본 강제 설정",
+  "zhTW": "強制設定特殊骨骼",
+  "zhCN": "强制设置特殊骨骼"
+ },
+ "LabSwayStyleForceSetupTitle": {
+  "ja": "強制セットアップ",
+  "en": "Force Setup",
+  "ko": "강제 설정",
+  "zhTW": "強制設定",
+  "zhCN": "强制设置"
+ },
+ "LabSwayStyleForceSetupWarning": {
+  "ja": "この設定はラボの中でもとくに壊れやすく、キャラクターの見た目を大きく破損する恐れがあります。重力を+に設定するとおちつくことがあります。",
+  "en": "This setting is especially fragile even by lab standards, and can badly break your character's appearance. Setting gravity to a positive value can sometimes calm it down.",
+  "ko": "이 설정은 랩 기능 중에서도 특히 불안정하며, 캐릭터 외형이 크게 손상될 수 있습니다. 중력을 +로 설정하면 안정되는 경우가 있습니다.",
+  "zhTW": "此設定即使在實驗室功能中也特別不穩定，可能會嚴重破壞角色外觀。將重力設為正值有時能使其穩定下來。",
+  "zhCN": "此设置即使在实验室功能中也特别不稳定，可能会严重破坏角色外观。将重力设为正值有时能使其稳定下来。"
+ },
+ "LabSwayStyleForceSetupNameFormat": {
+  "ja": "（自動）{0}",
+  "en": "(Auto) {0}",
+  "ko": "(자동) {0}",
+  "zhTW": "（自動）{0}",
+  "zhCN": "（自动）{0}"
+ }
 }

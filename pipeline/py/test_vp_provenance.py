@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vp_provenance  # noqa: E402
@@ -20,11 +21,16 @@ failures = []
 
 
 def check(label, cond, detail=""):
+    """dev#739: 従来はここでfailuresへ記録するだけでassertしておらず、
+    pytest経由では常に緑になっていた(main()を直接実行したときしか
+    有効でなかった)。呼び出し側は無改変のまま、ここでassertすることで
+    pytest収集時にも実際に効くようにする。"""
     if cond:
         print(f"[PASS] {label}")
     else:
         print(f"[FAIL] {label} {detail}")
         failures.append(label)
+    assert cond, f"{label} {detail}".rstrip()
 
 
 def test_write_build_provenance():
@@ -107,9 +113,47 @@ def test_write_build_provenance_git_fallback():
           data.get("pak_sha1") == hashlib.sha1(dummy_bytes).hexdigest())
 
 
+def test_no_git_invocation_without_dot_git():
+    """dev#886: .gitが存在しない環境(配布zip展開先を模擬)では、gitコマンドの
+    実行そのものを一切試みてはならない(単なる「失敗のフォールバック」ではなく、
+    「起動を試みないこと」自体が要求)。subprocess.runをモックし、呼ばれたら
+    即座に失敗させることで、_git_commit/_git_dirtyが実際に呼び出しをskipして
+    いることを確認する(負の対照: モックを外すとgit未導入環境で例外文言が
+    ログに混入していた旧挙動=公開#15に戻る)。"""
+    no_git_dir = tempfile.mkdtemp(prefix="vp_provenance_test_noinvoke_")
+    check("precondition: no_git_dir has no .git",
+          not os.path.exists(os.path.join(no_git_dir, ".git")), no_git_dir)
+
+    def _forbidden_run(*args, **kwargs):
+        raise AssertionError(
+            "subprocess.run must not be called when .git is absent (dev#886)")
+
+    with mock.patch.object(vp_provenance.subprocess, "run", side_effect=_forbidden_run):
+        commit = vp_provenance._git_commit(no_git_dir)
+        dirty = vp_provenance._git_dirty(no_git_dir)
+
+    check("no .git: _git_commit never invokes subprocess.run and returns 'unknown'",
+          commit == "unknown", commit)
+    check("no .git: _git_dirty never invokes subprocess.run and returns None",
+          dirty is None, dirty)
+
+
+def test_git_invocation_happens_when_dot_git_present():
+    """上のテストの裏側(誤検知防止): .gitが実在する開発環境では、従来どおり
+    gitコマンドが呼ばれること(dev#886の修正が過剰になって、開発環境でも
+    来歴情報が取れなくなっていないことを確認)。"""
+    check("precondition: REPO_DIR has .git",
+          os.path.exists(os.path.join(REPO_DIR, ".git")), REPO_DIR)
+    commit = vp_provenance._git_commit(REPO_DIR)
+    check("REPO_DIR has .git: _git_commit does not fall back to 'unknown'",
+          commit != "unknown", commit)
+
+
 def main():
     test_write_build_provenance()
     test_write_build_provenance_git_fallback()
+    test_no_git_invocation_without_dot_git()
+    test_git_invocation_happens_when_dot_git_present()
 
     print()
     if failures:

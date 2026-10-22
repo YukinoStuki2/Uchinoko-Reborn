@@ -6,6 +6,7 @@
 (PalMod add_hair_bones/patch_psk_to_1_0 で較正・実証済みの規約)。
 """
 
+import difflib
 import json
 import os
 import re
@@ -17,6 +18,7 @@ from mathutils import Matrix, Quaternion, Vector
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "py"))
 import vp_core as core  # noqa: E402
+import vp_dup_armature as vp_dup  # noqa: E402 (dev#1174: 重複armature検出、bpy非依存)
 
 
 def blender_argv():
@@ -34,6 +36,35 @@ def load_job_from_argv():
 
 def die(tag, msg):
     core.die(tag, msg)
+
+
+def disable_version_backup():
+    """Blenderの保存時バックアップ(既存ファイルを.blend1へリネームしてから
+    書く"version backup"機構)を無効化する。dev#472: このリネームが他プロセスの
+    ロックで失敗すると「Unable to make version backup」がユーザーに生で露出する
+    (2026-07-31実機、v2.2.11)。バックアップのリネーム自体を起こさないのが
+    構造対策の本体(vp_core.translate_save_errorはそれでも失敗した場合の保険)。
+    このプロセス(このBlenderインスタンス)内の以降の保存すべてに効く。"""
+    bpy.context.preferences.filepaths.save_version = 0
+
+
+def save_mainfile_or_die(tag, filepath):
+    """save_as_mainfileの共通ラッパー(dev#472)。
+
+    保存前にdisable_version_backup()でバックアップ用リネーム自体を無効化する。
+    それでも保存が失敗した場合: 元の例外(診断用、英語原文)を先にログへ残し、
+    vp_core.translate_save_errorで翻訳できた場合のみユーザー向けメッセージで
+    die()する。翻訳対象外の例外(保存失敗と無関係)はそのまま伝播させ、
+    握りつぶさない。"""
+    disable_version_backup()
+    try:
+        bpy.ops.wm.save_as_mainfile(filepath=filepath)
+    except Exception as e:
+        print(f"[{tag}][ERROR] save_as_mainfile failed: {core.format_exception_for_log(e)}")
+        friendly = core.translate_save_error(e)
+        if friendly is None:
+            raise
+        die(tag, friendly)
 
 
 # ------------------------------------------------ パルアーマチュア構築(PSK不使用)
@@ -65,11 +96,50 @@ def _ue_world_chain(refskel):
     return world
 
 
+def merge_refskel_files(paths):
+    """複数のrefskel_*.json(各々が人体骨格全体+そのファミリー固有チェーンを
+    含む自己完結データ)を1つの辞書へマージする純粋関数(bpy非依存)。
+
+    dev#19 m2defects(2026-08-11、work\\rd_19_m2smoke\\RESULT.md 欠陥1):
+    旧実装は`dict.update()`で「後着ファイルが上書き」する素朴なマージだった。
+    これは「共通ボーンの値はfamily間で同一」という前提に立っていたが、
+    実データ(refskel_headequip062_ear_{gender}.json)ではclavicle_l/rの
+    quatが基準骨格(refskel_{gender}.json)と最大約10度食い違うことが実測で
+    判明した(HeadEquip062_ear系SKアセット固有の抽出結果差と見られる)。
+    後着ファイルがこの食い違った値で共通ボーンを上書きすると、揺れチェーン
+    とは無関係な体幹骨格(肩など)が丸ごと歪む(retarget_structure_check
+    FATAL、orientation 10.10deg)。
+
+    修正: **先に読み込んだファイルの値を権威として保持し、後続ファイルでは
+    上書きしない**(setdefault方式)。呼び出し側(step02_retarget.py)が
+    常に基準骨格ファイル(refskel_{gender}.json)をリスト先頭に置くことで、
+    マージ順序(sway entriesの列挙順)に依存せず、共通ボーンは常に基準骨格
+    の値を使う決定的な結果になる。単一パス指定時は従来と完全に同じ1ファイル
+    読み込みのみで、挙動は無変更(後方互換)。
+    """
+    refskel = {}
+    for p in paths:
+        with open(p, encoding="utf-8") as f:
+            loaded = json.load(f)
+        for k, v in loaded.items():
+            refskel.setdefault(k, v)
+    return refskel
+
+
 def build_pal_armature(refskel_path, common_bones, name="PalArmature"):
     """RefSkeleton JSONからパル骨格アーマチュアを構築する(cm単位)。
-    common_bones に無いボーン(衣装固有クロスボーン)は作らない。"""
-    with open(refskel_path, encoding="utf-8") as f:
-        refskel = json.load(f)
+    common_bones に無いボーン(衣装固有クロスボーン)は作らない。
+
+    refskel_path: 単一のファイルパス(従来どおり、str/os.PathLike)、または
+    複数パスのリスト(dev#1375、dev#19 R3統合: 同時Nチェーンが異なるdonor
+    ファミリー由来のrefskel_{suffix}_{gender}.json複数を必要とする場合、
+    全ファイルの内容をマージしてから骨格を構築する)。マージの詳細・
+    優先順位(先着ファイル優先)は merge_refskel_files() のdocstring参照
+    (dev#19 m2defects)。単一パス指定時は従来と完全に同じ1ファイル読み込み
+    のみで、挙動・ログとも無変更(後方互換)。
+    """
+    paths = [refskel_path] if isinstance(refskel_path, (str, os.PathLike)) else list(refskel_path)
+    refskel = merge_refskel_files(paths)
     keep = [b for b in refskel if b in set(common_bones)]
     world = _ue_world_chain(refskel)
 
@@ -92,7 +162,7 @@ def build_pal_armature(refskel_path, common_bones, name="PalArmature"):
             b.parent = eb[parent]
     bpy.ops.object.mode_set(mode="OBJECT")
     print(f"[vp_bl] pal armature built: {len(keep)} bones from "
-          f"{os.path.basename(refskel_path)}")
+          f"{', '.join(os.path.basename(p) for p in paths)}")
     return arm
 
 
@@ -189,6 +259,23 @@ PAL_TO_UNITY_HUMAN = {
     _pal: _humanize_unity_bone(_unity) for _unity, _pal in UNITY_TO_PAL.items()
 }
 
+# パルボーン → humanoid.jsonの生キー(例: "Hips", "Head"。逆引き、全単射)。
+# 診断メッセージでhumanoid.jsonの実際の値(human.get(key))を引くために使う
+# (dev#456)。PAL_TO_UNITY_HUMANは表示用に整形済みなのでキー引きには使えない。
+PAL_TO_UNITY_RAW = {_pal: _unity for _unity, _pal in UNITY_TO_PAL.items()}
+
+# step01_import_vrm.py::main()の必須ボーンチェックと同一の11件(dev#1260)。
+# 従来はこの列挙がstep01側だけのローカル定数で、humanoid_map_from_json()
+# 内部の充足チェックは"pelvis"/"head"の2件しか見ていなかった(dev#456)。
+# 実報告CN23H3S5(Left Upper Leg)/R5PEK47D(Left Upper Arm)はいずれも
+# pelvis/head以外で欠けており、step01側の情報の乏しいdie()
+# (missing_humanoid_bone_message、命名違い/衝突の区別が無い)を踏んでいた。
+# 単一のソースをここに置き、両ファイルから参照する。
+REQUIRED_PAL_BONES = (
+    "pelvis", "spine_01", "head", "upperarm_l", "upperarm_r",
+    "hand_l", "hand_r", "thigh_l", "thigh_r", "foot_l", "foot_r",
+)
+
 
 def missing_humanoid_bone_message(pal_bone):
     """必須Humanoidボーン未割当のFATAL文言を組み立てる(dev#233)。
@@ -209,6 +296,131 @@ def _compat_name(name):
     """Unity FBX ExporterのMaya互換命名と同じ変換(スペース・ドット→_)。
     互換命名で書かれた既存FBXも読めるようにするフォールバック用"""
     return name.replace(" ", "_").replace(".", "_")
+
+
+def _closest_bone_candidates(target, bone_names, limit=3, cutoff=0.5):
+    """bone_names の中から target に近い名前を difflib で拾う(dev#456)。
+    命名違い・輸出時のリネームで一致しなかった場合に、ユーザーへの手掛かりとして
+    出す候補。見つからなければ空リスト(嘘の候補を出すよりは何も出さない)。"""
+    if not target:
+        return []
+    return difflib.get_close_matches(target, bone_names, n=limit, cutoff=cutoff)
+
+
+def _dup_hit_for_expected(expected, candidates):
+    """dev#1174: candidates(difflibの曖昧一致候補)の中に、expectedと同じ
+    ベース名の連番サフィックス違い(strip_dup_suffixによる厳密一致)を持つ
+    ものが無いかを調べる。あれば重複armature/衝突の痕跡とみなす
+    (_humanoid_json_missing_messageとclassify_missing_bone_reasonの共通処理、
+    dev#1260でこの2箇所が同じ判定基準を共有するよう抽出した)。"""
+    return any(vp_dup.strip_dup_suffix(c) == vp_dup.strip_dup_suffix(expected)
+               for c in candidates)
+
+
+def _humanoid_json_missing_message(missing_pals, human, bone_names):
+    """humanoid.jsonの必須Humanoidボーン(pelvis/head)が解決できないときの
+    FATAL文言を組み立てる(dev#456: 実報告 NHBGLP8M)。
+
+    旧文言は「Hips/Head」という汎用テキストを両方まとめて出すだけで、
+    ・そもそもUnity側でそのスロットが未割当だったのか
+    ・スロットはあるがそのボーン名がFBXに存在しない(命名違い・輸出漏れ)のか
+    ・後者なら実際は何という名前のボーンが見つかったか
+    が一切残らなかった。ここでは missing_pals(実際に欠けているもののみ)ごとに
+    上記を区別して具体名を出す。die()を呼ぶのは引き続き呼び出し側の責務のまま
+    (このタスクは通す条件を緩めるのが目的ではない)。
+
+    missing_pals: 欠けているpal_bone名のリスト("pelvis"/"head")
+    human: humanoid.jsonの "humanoid" 辞書({Unity生キー: FBXボーン名})
+    bone_names: 実際にFBX/アーマチュアに存在するボーン名の一覧
+    """
+    parts = []
+    for pal in missing_pals:
+        unity_key = PAL_TO_UNITY_RAW.get(pal, pal)
+        human_label = PAL_TO_UNITY_HUMAN.get(pal, pal)
+        expected = human.get(unity_key)
+        if not expected:
+            parts.append(
+                f"{human_label} ({unity_key}): not present in humanoid.json "
+                f"(the Unity Humanoid rig had no bone assigned to this slot)")
+            continue
+        candidates = _closest_bone_candidates(expected, bone_names)
+        if candidates:
+            # dev#1174(実報告P7ARCMQ7): 候補の中にexpectedと同じベース名の
+            # 連番サフィックス違い("hips_2"/"Hips.001"等)があれば、単なる
+            # 命名違いではなく重複armatureの痕跡である可能性が高い。difflibの
+            # 曖昧一致(_closest_bone_candidates)とは別に、こちらは
+            # strip_dup_suffixによる厳密一致なので誤検知しにくい
+            dup_hit = _dup_hit_for_expected(expected, candidates)
+            parts.append(
+                f"{human_label} ({unity_key}): humanoid.json points to bone "
+                f"'{expected}', which is not in the exported FBX. Similarly "
+                f"named bones found instead: {', '.join(candidates)}"
+                + (f". {vp_dup.GUIDANCE_TEXT}" if dup_hit else ""))
+        else:
+            parts.append(
+                f"{human_label} ({unity_key}): humanoid.json points to bone "
+                f"'{expected}', which is not in the exported FBX "
+                f"(no similarly named bone found)")
+    return (
+        "could not resolve required Humanoid bone(s) from humanoid.json -- "
+        + " | ".join(parts)
+        + ". Open the avatar in Unity, select it, and check the Rig tab > "
+        "Configure Avatar to assign the missing bone(s), then re-export."
+    )
+
+
+def classify_missing_bone_reason(missing_pals, human, bone_names):
+    """dev#1260(実報告CN23H3S5/R5PEK47D再検証、オーナー裁定2026-08-09):
+    missing_pals全体から、GUI向け##AVATAR_FATAL##マーカーに使う分類コードを
+    1つ選ぶ。
+
+    オーナー裁定の2分類に対応する:
+      - "collision": アクセサリ骨格等との同名ボーン衝突が疑われる
+        (dev#1226の権威ボーン解決+衝突説明の対象)
+      - "unassigned": 本当に未割当、または命名違いだが重複の痕跡が無い
+        (dev#250の候補提示フローの対象)
+
+    missing_pals中のどれか1件でも衝突の痕跡(_dup_hit_for_expected)が
+    あれば"collision"を返す(GUIの状態表示は1行のため、複数理由が同時に
+    起きた場合は"collision"を優先する——衝突の方がより具体的な診断であり、
+    見落とすと誤ってdev#250的な「候補から選ばせる」誘導をしかねないため)。
+    詳細な理由の切り分けは常にログ本文(_humanoid_json_missing_message)側に
+    全件分残る。この関数はログ文言を変えない(GUIマーカー選択専用)。
+    """
+    for pal in missing_pals:
+        unity_key = PAL_TO_UNITY_RAW.get(pal, pal)
+        expected = human.get(unity_key)
+        if not expected:
+            continue
+        candidates = _closest_bone_candidates(expected, bone_names)
+        if candidates and _dup_hit_for_expected(expected, candidates):
+            return "collision"
+    return "unassigned"
+
+
+def log_duplicate_bone_warning(tag, pal_map, bone_names, warnings):
+    """dev#1174のvp_dup.find_mapped_bone_duplicates(実際にpal_mapで解決済みの
+    ボーンの近傍に、連番サフィックス違いの同名ボーンが無いか)を実行し、
+    見つかればprint()で即座にログへ出しつつwarningsへも積む。
+
+    dev#1260: die()(core.die()、sys.exit()のみでwarningsリストを一切出力
+    しない)がこの直後に必須ボーン未充足で発火する可能性がある呼び出し元
+    (humanoid_map_from_json)向けに、print()を直接呼ぶことでdie()経路でも
+    この診断がログに残るようにする。成功時はwarnings.appendした内容が
+    従来どおりavatar_meta.json/最終WARN一覧にも反映される。
+
+    返り値: dup_hits辞書({パルボーン: [重複ボーン名, ...]}、見つからなければ
+    空辞書)。
+    """
+    dup_hits = vp_dup.find_mapped_bone_duplicates(pal_map, bone_names)
+    if dup_hits:
+        detail = "; ".join(f"{pal}={pal_map[pal]} vs {dup_hits[pal]}"
+                            for pal in sorted(dup_hits))
+        msg = (f"duplicate-named bone(s) detected near the mapped Humanoid "
+               f"skeleton ({detail}). {vp_dup.GUIDANCE_TEXT}")
+        print(f"[{tag}][WARN] {msg}")
+        warnings.append(msg)
+    return dup_hits
 
 
 def humanoid_map_from_json(arm, json_path, warnings):
@@ -267,8 +479,32 @@ def humanoid_map_from_json(arm, json_path, warnings):
         else:
             warnings.append(f"humanoid.json: bone not in FBX: "
                             f"{human_name} -> {bone_name}")
-    if "pelvis" not in pal_map or "head" not in pal_map:
-        die("vp_bl", "could not resolve humanoid.json's required bones (Hips/Head)")
+
+    bone_names = [b.name for b in arm.data.bones]
+    # dev#1260(実報告CN23H3S5/R5PEK47D再検証): 重複armature診断
+    # (log_duplicate_bone_warning、dev#1174)を必須ボーン充足の判定
+    # (die()の可能性がある)より前に実行する。die()はwarningsリストを
+    # 一切出力しない(core.die()はsys.exit()するのみ)ため、後続でdie()が
+    # 発火してもこの診断結果がログへ残るようにする(旧: pal_mapが完全に
+    # 揃った場合にしか呼び出し元step01_import_vrm.py側で走らず、die()経路に
+    # 届かなかった)。
+    log_duplicate_bone_warning("vp_bl", pal_map, bone_names, warnings)
+
+    # dev#1260: 必須ボーンチェックを従来の"pelvis"/"head"の2件から
+    # REQUIRED_PAL_BONES全11件へ拡張する。旧実装はここで生き残ったpal_mapを
+    # 呼び出し側(step01_import_vrm.pyのmain())へ返し、そちらの汎用チェック
+    # ループが情報の乏しいmissing_humanoid_bone_message()でdie()していた
+    # (実報告CN23H3S5="Left Upper Leg"/R5PEK47D="Left Upper Arm"はいずれも
+    # pelvis/head以外で、この乏しい経路を踏んでいた)。
+    missing = [p for p in REQUIRED_PAL_BONES if p not in pal_map]
+    if missing:
+        category = classify_missing_bone_reason(missing, human, bone_names)
+        # app_py\pipeline_runner.pyのparse_avatar_fatal/translate_avatar_fatal
+        # (dev#1261のno_meshマーカーと同型)が拾い、main_window.pyがUI言語へ
+        # 翻訳して表示する。内部診断文言(die()の第2引数、英語)自体は問い合わせ
+        # デバッグの作法(CLAUDE.md)どおり変更しない。
+        print(f"##AVATAR_FATAL## humanoid_bone_{category}")
+        die("vp_bl", _humanoid_json_missing_message(missing, human, bone_names))
     return pal_map
 
 
@@ -296,8 +532,10 @@ def humanoid_to_pal_map(arm):
 
     # VRM0
     pal_map = {}
+    vrm0_items = []  # dev#1174: (bone_enum, node_bone_name) の全件。重複割当の検出用
     try:
         for item in ext.vrm0.humanoid.human_bones:
+            vrm0_items.append((item.bone, item.node.bone_name))
             pal = VRM0_TO_PAL.get(item.bone)
             if pal is None:
                 continue
@@ -309,8 +547,20 @@ def humanoid_to_pal_map(arm):
     if "pelvis" in pal_map and "head" in pal_map:
         return pal_map, "0.x"
 
-    die("vp_bl", "could not read the VRM Humanoid definition (hips/head unassigned). "
-        "The VRM file may be corrupt, or in a format the addon does not support")
+    # dev#1174(実報告VKKLD4HA/35TX8ERY): アドオンが出す
+    # `[VRM Add-on:WARNING] Duplicated VRM0 bone: ...` の直後にここでFATALに
+    # なるケースがあった。アドオンの警告テキストをパースせず、human_bonesの
+    # データそのものから同一HumanBoneNameの重複割当を直接検出し、汎用文言に
+    # 反映する(検出できなくても従来どおりの文言でdie()する。誤検知の懸念より
+    # 「診断が空振りする」方を安全側とする)
+    dup = vp_dup.find_vrm0_duplicate_human_bone_assignment(vrm0_items)
+    msg = ("could not read the VRM Humanoid definition (hips/head unassigned). "
+           "The VRM file may be corrupt, or in a format the addon does not support")
+    if dup:
+        dup_desc = ", ".join(f"{k} -> {v}" for k, v in sorted(dup.items()))
+        msg += (f". Detected duplicate Humanoid bone assignment(s) in the VRM "
+                f"file itself ({dup_desc}). {vp_dup.GUIDANCE_TEXT}")
+    die("vp_bl", msg)
 
 
 def _vrm_op_available():
@@ -319,6 +569,30 @@ def _vrm_op_available():
         return True
     except Exception:
         return False
+
+
+def missing_addon_zip_message(zip_path):
+    """third_party\\ 同梱のVRMアドオンzipが見つからない/読めないときのFATAL文言
+    (dev#11)。
+
+    旧C#版(app\\DiveToPalworld.cs WriteJob())はこのケースでnull安全でない
+    .Replace()呼び出しがNullReferenceExceptionを起こし、ユーザーには意味不明な
+    クラッシュにしか見えなかった。py版のjob.json書き出し(pipeline_runner.
+    write_job())は既にnull安全化済み(見つからなければ空文字列を書く)だが、
+    そのままでは「後段が明確に失敗する」だけで、何が足りず・何が原因で・
+    何をすればよいかが利用者に伝わらない。ここでその3点を明示する
+    (missing_humanoid_bone_message()と同じ思想: 内部事情でなく利用者が
+    次に取れる行動を書く)。"""
+    where = zip_path or "third_party\\VRM_Addon_for_Blender-Extension*.zip"
+    return (
+        f"required bundled file missing: the VRM Add-on for Blender zip "
+        f"({where}) was not found or is unreadable. "
+        f"Likely cause: the distribution zip was extracted incompletely, "
+        f"quarantined/deleted by antivirus software, or the download itself "
+        f"is corrupted. "
+        f"Next step: re-download the DiveToPalworld distribution and extract "
+        f"it again (do not delete or move anything under third_party\\)."
+    )
 
 
 def ensure_vrm_addon(job):
@@ -349,7 +623,7 @@ def ensure_vrm_addon(job):
     # 2) 初回のみ: zipからインストール(enable_on_installでこのセッションでも有効化)
     zip_path = job["paths"].get("vrm_addon_zip")
     if not zip_path or not os.path.exists(zip_path):
-        die("vp_bl", f"VRM addon zip not found: {zip_path}")
+        die("vp_bl", missing_addon_zip_message(zip_path))
     bpy.ops.extensions.package_install_files(
         repo="user_default", filepath=zip_path, enable_on_install=True)
     if not _vrm_op_available():

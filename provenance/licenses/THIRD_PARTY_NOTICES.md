@@ -1,0 +1,124 @@
+# THIRD_PARTY_NOTICES
+
+DiveToPalworld 本体は **MIT License** です([LICENSE](LICENSE) 参照)。
+
+このファイルは、本体のソースコードおよび**配布フルセット版**(`Uchinoko.bat` +
+`res\`)に含まれる第三者コンポーネントの一覧です。詳細な出所・取得記録は
+`third_party\SOURCES.md` および `third_party\pyooz-0.0.8-source\NOTICE.md`
+に一次資料として記録しています(本ファイルはその要約です。二重管理を
+避けるため、詳細記述はそちらを正とします)。
+
+## GPLv3+ コードと MIT 本体の境界(重要)
+
+`pipeline\py\ooz_worker_gpl.py` の**1ファイルのみ**が GPLv3+ です(ファイル冒頭に
+`SPDX-License-Identifier: GPL-3.0-or-later` および説明コメントあり)。
+
+このファイルは、Palworld の pak が採用する Oodle 互換圧縮(ooz)を解凍するための、
+**独立した別プロセス**として実行されるプログラムです。本体(MIT)からは `subprocess`
+経由でのみ起動され、import もリンクもされません(ffmpeg.exe 等の外部実行ファイルを
+MIT ツールが subprocess で呼ぶのと同種の「mere aggregation」構成です)。呼び出し元は
+`pipeline\py\pak_live_extract.py`。この経路は同ファイルの docstring とソース自体
+(`subprocess.run` による呼び出し箇所)から、リポジトリ内だけで直接確認できます。
+
+## リポジトリ(ソースコード)に含まれる第三者コンポーネント
+
+| コンポーネント | ライセンス | 配置 | 出所 |
+|---|---|---|---|
+| pyooz 0.0.8 の対応ソース(sdist、無改変同梱) | GPLv3+ | `third_party\pyooz-0.0.8-source\pyooz-0.0.8.tar.gz` | https://pypi.org/project/pyooz/ , https://github.com/zao/pyooz |
+| VRM Add-on for Blender 4.4.0 | MIT | `third_party\VRM_Addon_for_Blender-Extension-4_4_0.zip` | https://github.com/saturday06/VRM-Addon-for-Blender/releases/tag/v4.4.0 |
+| logprivacy 0.6.0(sdist `src/logprivacy\` を無改変で展開・同梱。配布物へも `res\app\logprivacy\` としてそのままコピーされ、実行時に使用される) | MIT | `third_party\logprivacy-0.6.0-source\logprivacy\` | https://pypi.org/project/logprivacy/ , https://github.com/igors93/logprivacy |
+| Shapell(テスト用アバター) | CC0 1.0 Universal | `test\cc0avatar\Shapell_v1_0_3.zip` | 出所URL未確認(要オーナー確認)。zip内 LICENSE.txt で CC0 と明記されていることを実物確認済み |
+
+pyoozのソース(`pyooz-0.0.8-source\`)は、GPLv3の「対応するソースコードを入手可能にすること」
+という義務を、外部リンクに依存せず満たすために同梱しています。取得元URL・SHA256・
+バージョン一致の確認記録は `third_party\pyooz-0.0.8-source\NOTICE.md` を参照してください。
+
+なお pyooz の sdist 内には、pyooz/ooz 本体コードに加えて第三者の別プロジェクト
+(SIMDe: MIT、Hedley: CC0-1.0)がvendoringされています。詳細は同 NOTICE.md を参照してください。
+
+## 配布フルセット版(BOOTH等で配布する zip)にのみ含まれる第三者コンポーネント
+
+配布 zip はルート直下に `Uchinoko.bat` / `README.txt` / `res\` の3点のみを
+置く構成で、`app_py\build.py` がビルドします。以下は「配布 zip」にのみ
+含まれ、GitHub リポジトリのソースコード自体には含まれません。下表のパスは
+展開後のペイロード内でのものです(`res\` が本ツールのアプリケーション
+ルートに相当します)。
+
+| コンポーネント | ライセンス | バージョン | 同梱形態・入手元 |
+|---|---|---|---|
+| Python(embeddable 版、公式ビルド無改変) | PSF License | 3.11.9 | `res\python_embed\` に同梱。python.org の公式 embeddable zip をそのまま展開したもの(`app_py\build.py` が SHA256 をピン留めして取得・照合)。ライセンス全文は配布物の `res\licenses\PYTHON_LICENSE.txt` |
+| Tcl/Tk ランタイム(`_tkinter.pyd` / `tcl86t.dll` / `tk86t.dll` / `tcl8.6` / `tk8.6` スクリプトライブラリ) | Tcl/Tk License(BSD 系) | Python 3.11.9 の公式フルインストーラに同梱されているもの相当 | embeddable 版には含まれないため、python.org の公式フルインストーラを一時的にサイレントインストールして該当ファイルのみを抽出し、embeddable Python へ上書き配置(`app_py\build.py` の `ensure_tkinter_bundle`)。抽出元と同じ Authenticode 署名("CN=Python Software Foundation")を保持していることを確認済み(`packaging\check_signatures.py`)。ライセンス全文は配布物の `res\licenses\TCL_TK_LICENSE.txt` |
+| Blender Portable(無改変の公式ビルド) | GPL(公式配布に `GPL-3.0-or-later.txt` `GPL-2.0-or-later.txt` 同梱) | 4.3.2 | **配布zipには含まれません**。初回起動時に `pipeline\cli\ensure_blender.ps1` が公式サイト [blender.org](https://www.blender.org/download/) から自動的にダウンロードし、`res\assets\tools\` に配置します(SHA256をピン留めして照合) |
+| pyooz(`ooz.pyd`) | GPLv3+ | 0.0.8 | 差し込み素材のみ `res\assets\blender_patch\` に同梱し、初回起動時にダウンロードしたBlender同梱 Python 環境へ配置します。対応ソースはリポジトリ内 `third_party\pyooz-0.0.8-source\` にも同梱済み |
+| python3.dll | PSF License | CPython 3.11 相当 | pyooz が stable ABI (`cp38-abi3`) ビルドのため、Blender 同梱 Python(3.11系)向けに別途配置。差し込み素材は `res\assets\blender_patch\` に同梱し、初回起動時に配置します。組み込み Python(`res\python_embed\`)自体に含まれるものと同一の CPython 公式配布物の一部です。 https://www.python.org/ |
+| Blender 同梱の各 Python パッケージ(numpy, requests, urllib3, certifi, Cython, autopep8 等) | 各種(MIT/BSD/PSF/Apache 等) | Blender 4.3.2 公式ビルド同梱のまま、無改変 | Blender 公式ビルドに元々含まれるもの(ダウンロードされるBlender本体の一部。配布zip自体には含まれない) |
+| VC++ 再頒布可能ランタイム等 | Microsoft 再頒布可能ランタイムライセンス | — | 配布zipには含まれません。初回起動時にダウンロードするBlender公式ビルド内 `blender.crt\` から `ensure_blender.ps1` がそのまま複製します(新規追加なし) |
+| logprivacy | MIT | 0.6.0 | `res\app\logprivacy\` に無改変のソースを同梱(`app_py\build.py` の `_copy_logprivacy()`、コンパイル済みバイナリなしの純Pythonのため展開先へコピーするだけ)。`app_py\inquiry.py` の汎用PII伏字化層(`sanitize_generic_pii()`、issue #1011)がメールアドレス・クレジットカード番号・認証情報・APIキー/トークン等の伏字化に使用します(Windowsローカルファイルパスの検出は非対応のため、その部分は引き続き本体の自作実装が担う。電話番号・IPアドレス用のルールは、GUID/バージョン文字列を誤検知することがdev#1012レビュー時に判明し指揮者裁定で除外済み)。対応ソースはリポジトリ内 `third_party\logprivacy-0.6.0-source\` にも同梱済み。ライセンス全文は配布物の `res\licenses\LOGPRIVACY_LICENSE.txt` |
+
+配布 zip 内には、ビルド時に動的生成される `res\licenses\THIRD_PARTY_LICENSES.txt`
+にも同様の説明があります。
+
+`packaging\check_signatures.py` による署名検査の詳細(何が自作PE扱いで、何が
+第三者コンポーネントとして許容されるか)は [`CODE_SIGNING_POLICY.md`](CODE_SIGNING_POLICY.md)
+を参照してください。
+
+## logprivacyの選定理由(issue #1011、配布物への同梱は上表のとおり配線済み)
+
+`app_py\inquiry.py` の汎用PII伏字化層(`sanitize_generic_pii()`)が使う
+logprivacyは、**配布 zip に `res\app\logprivacy\` としてソースが同梱され、
+実際にユーザーへ届く製品でも使用されています**(`app_py\build.py` の
+`_copy_logprivacy()`。コンパイル済みバイナリを持たない純Pythonのため、
+pip/site-packagesを介さずソースをそのままコピーするだけで済む同梱方式)。
+未導入・破損時など何らかの理由で `import logprivacy` が失敗した場合でも
+クラッシュせず、既存の自作パス伏字化のみで動作を続けます(`try/except
+ImportError` によるfail-open設計、負の対照込みで実機検証済み)。
+
+**選定理由の要約**(詳細は issue #1011 のコメントおよび
+`work\wp_pii_library\` の完了報告を参照): 机上調査(issue #1011)で筆頭候補
+だった scrubadub は実機検証で `textblob`→`nltk`・`scikit-learn`→`numpy`/`scipy`
+という**必須**依存(合計100MB超)を確認して不採用、次点の Microsoft Presidio は
+spaCy パイプラインが構造的に必須で不採用、DataFog はコア機能自体は軽量だが
+`import datafog` が無条件に `pydantic`(コンパイル済みバイナリの `pydantic-core`
+を伴う)を要求し、本ツールの配布形態(pip も site-packages も持たない
+embeddable Python 方式)への同梱コストが見合わないため不採用とした。logprivacy
+は MIT ライセンス・PyPI 上の install_requires がゼロ(純Python、依存パッケージ
+なし)・Python 3.10+ で、これらの制約をすべて満たす唯一の候補だった。
+
+実際に有効化しているルールは Credential/Token/Secret/CreditCard/Email の5種
+(既定の UrlRule は自ツール自身のインフラURLを誤って潰すため除外、
+PhoneRule/IPAddressRuleはdev#1012レビュー時にGUID・バージョン文字列を
+誤検知することが判明し指揮者裁定で除外)。詳細は `app_py\inquiry.py` の
+`_build_generic_pii_cleaner()` のコメントを参照。
+
+## テスト結果に含まれるサンプルアバターのプレビュー画像について
+
+`tests\relgate\baseline\<検体キー>\images\` には、リリース前の自動視覚回帰試験(層2)が
+生成した固定画像(本ツールでの変換結果をレンダリングしたもの)を格納しています。
+元の3DアバターファイルはリポジトリにVRMそのものは含めていません(`.gitignore`済み)が、
+レンダリング画像には検体の見た目が写り込みます。写っているアバターの出所は以下のとおりです。
+
+| 検体キー | アバター名 | 出所・著作者 | ライセンス・許諾 |
+|---|---|---|---|
+| `prefab_flatapron` | flatapron | プロジェクトオーナー自身が使用しているアバター | オーナー本人のアバターであり、本ツール自身の宣伝・試験目的での使用 |
+| `shapell` | Shapell | `test\cc0avatar\Shapell_v1_0_3.zip` | CC0 1.0 Universal(上表参照) |
+| `vrm0_kate` | Kate | "100 Avatars" 系サンプルモデル、制作 Polygonal Mind (www.polygonalmind.com) | CC0。ファイル埋め込みメタデータで確認済み(`third_party\SOURCES.md`参照) |
+| `vrm1_seedsan` | Seed-san | VRM仕様公式サンプルモデル(vrm-c/vrm-specification)、著作者 **VirtualCast, Inc.** | VRM Public License 1.0。`avatarPermission: everyone` / `allowRedistribution: true` / `modification: allowModificationRedistribution` を確認済み。ライセンス上**クレジット表記必須**のため、本表をもって Seed-san の著作者が VirtualCast, Inc. であることを明記する |
+| `vrm1_vita`(opt-in 検体) | Vita | VRoid Hub「歴代サンプルモデル」、アップロード者 Coatie(Koh-Tee)、pixiv inc. | CC0 1.0 Universal 相当(再配布・改変・改変物の再配布・商用利用いずれもOK、クレジット表記不要)。VRoid Hub掲載の利用条件およびファイル埋め込みメタデータの両方で確認済み(`third_party\SOURCES.md`参照) |
+
+いずれも「特定の個人が購入し再配布を許可していないアセット」ではなく、著作者が
+再配布・改変を明示的に許可している公開サンプルモデル、またはプロジェクトオーナー
+自身のアバターです。詳細な確認記録は `third_party\SOURCES.md` を参照してください。
+
+## `pipeline\py\noue_master\` 配下の `.uasset`/`.uexp` について
+
+このリポジトリには Unreal Engine 形式のバイナリアセットファイル(`.uasset`/`.uexp`)が
+`pipeline\py\noue_master\` 配下に含まれています。Palworld本体のゲームデータと同じ
+コンテナ形式であるため誤解を招きやすく、出所を能動的に開示しています。詳細は
+[PROVENANCE_NOUE_ASSETS.md](PROVENANCE_NOUE_ASSETS.md)(英語)を参照してください。
+
+## Blenderの呼び出し形態について(透明性のための補足)
+
+`pipeline\blender\step01_import_vrm.py` / `step02_retarget.py` は、Blender の `--python`
+引数機構でロードされ、Blender が提供する `bpy` API を通じて動作します。これは
+Blender コミュニティで広く行われている一般的な外部操作形態です。GPL文脈での評価が
+議論されうる論点であることの記録として、ここに補足しておきます(結論は断定しません)。

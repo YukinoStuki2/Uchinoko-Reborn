@@ -3,6 +3,10 @@
 
 配布物にゲームデータを一切含めないための要。ここで作るもの(全てジョブ内):
   vanilla/refskel_male.json / refskel_female.json  … 各性別のバインドポーズ数値
+  vanilla/refskel_{family}_{male,female}.json      … dev#19 sway donor拡張家系
+                                                     (EXTRA_SWAY_FAMILY_SK_REL
+                                                     登録済み全家系、常に抽出。
+                                                     extract-all-families WP)
   vanilla/common_bones.json                        … 両性別に共通するボーン集合
   vanilla/dup_outfit_{male,female}.csv             … 全ティア複製リスト
   vanilla/dup_head_{male,female}.csv / dup_hair.csv / dup_headequip.csv
@@ -27,11 +31,28 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pak_live_extract
+import sway_shared_skeleton  # dev#1508 W2a-2c(汎用ハブ配線): 共有Skeleton
+                              # (SK_PalHuman_Skeleton)の全骨rest transform
+                              # カタログ抽出(extract_shared_skeleton_catalog()参照)
 import vp_core as core
 
 TAG = "extract_vanilla"
 # 抽出物の版数。出力の追加・形式変更時に上げる(convert.ps1が照合し、古ければ再抽出)
-VANILLA_VERSION = "4"  # 1=初版 2=headequip追加 3=hair refskel追加 4=場所依存列挙(U50)
+VANILLA_VERSION = "7"  # 1=初版 2=headequip追加 3=hair refskel追加 4=場所依存列挙(U50)
+                        # 5=sway donor合成リーフボーン追加(dev#19 swayfix)
+                        # 6=donor家系refskelを既定で全家系抽出(dev#19
+                        #   extract-all-families WP、sway_extra_family依存を撤去)
+                        # 7=共有Skeleton(SK_PalHuman_Skeleton)全骨カタログ
+                        #   sk_palhuman_full.json追加(dev#1508 W2a-2c、汎用ハブ配線)
+
+# dev#1508 W2a-2c(汎用ハブ配線): 共有Skeleton(SK_PalHuman_Skeleton)の
+# バニラ正パス。`build_pak_from_avatar.py`の`SWAY_HUB_SK_PACKAGE_NAME`/
+# `SWAY_HUB_SK_VANILLA_REL`と意図的に重複させている(値を変えるときは両方
+# 直すこと——本ファイル冒頭の「意図的な重複」運用と同型、bpy非依存の
+# 2つの独立プロセス境界を跨ぐ定数はこのリポジトリでは重複を許容する)。
+SWAY_HUB_SK_PACKAGE_NAME = "SK_PalHuman_Skeleton"
+SWAY_HUB_SK_VANILLA_REL = (
+    f"Pal/Content/Pal/Model/Character/Skeleton/Human/{SWAY_HUB_SK_PACKAGE_NAME}")
 
 # ============================================================================
 # U54(2026-07-26): 抽出のキャッシュ判定と2段化
@@ -60,7 +81,7 @@ STAGES = (STAGE_BLENDER, STAGE_FULL)
 # 段ごとの必須出力(スタンプを信じ切らず実在も確かめる)。refskel_hair.jsonは
 # バニラ髪SKが取れないときに作られない(WARNを出して続行する)ので必須にしない
 BLENDER_OUTPUTS = ("refskel_male.json", "refskel_female.json",
-                   "common_bones.json")
+                   "common_bones.json", "sk_palhuman_full.json")
 FULL_OUTPUTS = ("dup_outfit_male.csv", "dup_outfit_female.csv",
                 "dup_head_male.csv", "dup_head_female.csv",
                 "dup_hair.csv", "dup_headequip.csv",
@@ -156,10 +177,397 @@ SK_REL = ("Pal/Content/Pal/Model/Character/Player/Outfit/"
 HAIR_REL = ("Pal/Content/Pal/Model/Character/Player/Hair/Hair001/"
             "SK_Player_Hair001")
 
+# dev#19 R2b-3(2026-08-11、試着室pak実験、rd_19_r2b3限定の追加)〜donorexp WP
+# (issue#19、2026-08-11本流化)〜extract-all-families WP(2026-08-14、下記
+# extract_sk_files()docstring参照、本流化第2段): OldCloth001以外のdonor
+# ファミリーは、ここに列挙した全キーが**常に**追加抽出され、家系ごとに一意な
+# refskel_{family_lower}_{gender}.json へbindpose数値を書き出す
+# (OldCloth001の基底refskel_{gender}.jsonは従来どおり不変、追加分のみ増える)。
+# job.json "sway_extra_family" は抽出対象そのものはもう左右しない
+# (後方互換の未知家系名検証にのみ残る、extract_sk_files()参照)。
+#
+# donorexp WP(2026-08-11、issue#19、notes_master_1385.md白黒判定の解消):
+# "sway_extra_family" は文字列(単一家系、旧仕様)またはリスト(複数家系、
+# 新仕様)のどちらも受け付ける(_normalize_extra_families()参照)。旧仕様の
+# 単一文字列指定は、本WP以前と全く同じ意味論を保つ(唯一の変更は出力ファイル名
+# ——固定共有名"refskel_extra_{gender}.json"から家系ごとの一意名へ。旧共有名は
+# 複数家系が同時抽出されると上書き衝突する構造的バグ(notes_master_1385.md
+# §「供給段」)を持っていたため、単一家系指定でも家系名を含む一意名へ揃えて
+# 衝突可能性そのものを除去する)。キー不在(既定)は分岐に一切入らない
+# (=完全no-op、既定出力不変)。
+EXTRA_SWAY_FAMILY_SK_REL = {
+    "Ancient001": ("Pal/Content/Pal/Model/Character/Player/Outfit/"
+                    "SK_Player_{g}_Outfit_Ancient001/SK_Player_{g}_Outfit_Ancient001"),
+    # dev#19 rd_19_refskel(2026-08-11): 尻尾8節donor(pelvis直下、チビ安全)。
+    # refskel_kigurumi001_{gender}.json はRefSkeleton追加登録
+    # (vp_refskel_extend.py)のバインド値ソースとG5b基準マージ(dev#1363)の
+    # 両方に使われる
+    "Kigurumi001": ("Pal/Content/Pal/Model/Character/Player/Outfit/"
+                     "SK_Player_{g}_Outfit_Kigurumi001/SK_Player_{g}_Outfit_Kigurumi001"),
+    # dev#19 R3統合(issue#1384、2026-08-11): 耳donor(head直下4節×左右、
+    # work\rd_19_haori\sk_palhuman_bones.jsonで実在確認済み。donor詳細は
+    # work\rd_19_ears\PROPOSAL.md §4)。SK_HeadEquip062はPlayer/Outfit系と
+    # 異なりMale/Female分岐の無い共有アセット(1ファイルのみ)なので、
+    # パステンプレートに"{g}"を含めない——下のextract_sk_files()で
+    # `extra_rel.format(g=g)`を男女とも呼ぶが、str.format()は未使用の
+    # キーワード引数を無視するため、両呼び出しとも同じパスを返し安全に
+    # 同じ1ファイルを指す(結果、Extra_HeadEquip062_ear_Male/Femaleは
+    # 同一内容になる)。
+    "HeadEquip062_ear": ("Pal/Content/Pal/Model/Character/Player/HeadEquip/"
+                          "HeadEquip062/SK_HeadEquip062"),
+    # donorexp WP(2026-08-11、issue#19、要件3): 骨盤系スカート用donor拡充。
+    # work\rd_19_haori\sk_palhuman_bones.json(骨在庫4079骨)実測でpelvis直下
+    # 家系を比較した結果、Hunter001が最も枝分かれの多い候補(pelvis直下に
+    # 独立4チェーン: 01(2節)/03(1節)/04(2節)/06(4節)、他候補は最大でも
+    # OldCloth001の2チェーンまで)。Aliciaのスカート10チェーンを単一家系だけで
+    # 賄いきる在庫はバニラに存在しないため、Hunter001(4チェーン)+
+    # OldCloth001(2チェーン、既存)+相乗りフォールバック(要件4)の組み合わせで
+    # 「対応できない揺れものを作らない」(dev#19裁定§5-3の③)を満たす設計。
+    # 選定根拠の候補比較はwork\rd_19_flight\notes_donorexp.md参照。
+    "Hunter001": ("Pal/Content/Pal/Model/Character/Player/Outfit/"
+                  "SK_Player_{g}_Outfit_Hunter001/SK_Player_{g}_Outfit_Hunter001"),
+    # tailmatch WP(dev#19、issue#19、2026-08-12、work\rd_19_flight\briefs\
+    # tailmatch_probe.mdが正本): 節数完全一致donor(裁定原理5)の実証。
+    # SK_PalHuman_Skeleton(共有骨格、4079骨)自体はvp_core.find_refskeleton()
+    # のフィンガープリント上限(count<=400)を超えて直接抽出できないため、
+    # このNPC由来チェーンを実際にウェイト付きで含む個別メッシュSK
+    # (SK_NPC_GrassBoss001_Skin001、181骨、Male/Female分岐の無い共有アセット。
+    # HeadEquip062_earと同様{g}を含まないパス)を指す。パス実在・181骨での
+    # 抽出成功・NPC_GrassBoss001_Skin001_tail_{01..05,10}全6骨の座標が
+    # work\rd_19_donorcatalog\sk_palhuman_full.jsonの値と一致することを
+    # work\rd_19_flight\notes_tailmatch.mdで実測確認済み。
+    "NPC_GrassBoss001_Skin001_tail": (
+        "Pal/Content/Pal/Model/Character/NPC/Boss/GrassBoss/"
+        "SK_NPC_GrassBoss001_Skin001/SK_NPC_GrassBoss001_Skin001"),
+}
+
+
+# swayfix WP(dev#19、issue#19、2026-08-11、work\rd_19_anglelimit\PROPOSAL.md
+# §7.2-7.4が正本): 各donor家系のcloth_chain末尾へ追加する合成リーフボーン
+# (ウェイト無し、vanilla非在の座標プレースホルダ)の定義。
+# pipeline\blender\step02_retarget.py SWAY_DONOR_FAMILIESの"chain"/"leaf"/
+# "gendered"/"siblings"と**意図的に重複**させている(step02_retarget.pyはbpy
+# 依存モジュールであり、bpy非依存のこのファイルから素直にimportできない
+# ——既存のROTATE_CHAINS 3箇所重複(step02_retarget.py冒頭コメント参照)と
+# 同じ運用。2箇所を変更するときは値の一致を保つこと)。
+#
+# earleaf WP(dev#19、issue#19、2026-08-11、work\rd_19_leafcheck\RESULT.md
+# 欠陥Bが正本): "siblings"(省略可)は、chainと左右(_l/_r)対をなす別チェーン
+# (HeadEquip062_earのみ現状該当、chain=..._l系、siblings=..._r系)。
+# siblings末尾が"_l"/"_r"で終わる場合のみ、_add_synthetic_leaf_bone()が
+# leafの接尾辞をsiblings側へ書き換えたR側専用の合成リーフボーンも追加登録
+# する(下記_add_synthetic_leaf_bone()docstring参照)。旧実装はL側決め打ちの
+# "HeadEquip062_ear_05_l"1本しか定義しておらず、R側リーフのRefSkeleton構造
+# 登録先自体が存在しなかった(欠陥B)。siblings末尾が左右接尾辞を持たない
+# 家系(Ancient001のwaistClothB/C等)ではこの追加登録は発火しない
+# (_swap_lr_suffix()がNoneを返し無変更のまま、無退行)。
+# siblingsの値はpipeline\blender\step02_retarget.py SWAY_DONOR_FAMILIESの
+# 対応する家系のsiblingsと完全一致させる(左右接尾辞を持たない家系でも、
+# test_synthetic_leaf_bones_matches_step02_families()の完全性チェックが
+# 1:1対応を機械的に保証できるよう、値そのものは省略せず転記する。挙動は
+# _side_suffix_of()がNoneを返すため無変更=無退行)。
+SYNTHETIC_LEAF_BONES = {
+    "OldCloth001": {"chain": [f"OldCloth001_{i:02d}" for i in (4, 5, 6, 7)],
+                     "leaf": "OldCloth001_08", "gendered": True,
+                     "siblings": [f"OldCloth001_{i:02d}" for i in (1, 2, 3)]},
+    "Ancient001": {"chain": [f"Ancient001_waistClothA_{i:02d}" for i in (1, 2, 3, 4)],
+                   "leaf": "Ancient001_waistClothA_05", "gendered": True,
+                   "siblings": ([f"Ancient001_waistClothB_{i:02d}" for i in (1, 2, 3, 4)]
+                                + [f"Ancient001_waistClothC_{i:02d}" for i in (1, 2, 3, 4)])},
+    "Kigurumi001": {"chain": [f"Kigurumi001_tail_{i:02d}" for i in range(1, 9)],
+                    "leaf": "Kigurumi001_tail_09", "gendered": True,
+                    "siblings": []},
+    "HeadEquip062_ear": {"chain": [f"HeadEquip062_ear_0{i}_l" for i in (1, 2, 3, 4)],
+                          "leaf": "HeadEquip062_ear_05_l", "gendered": False,
+                          "siblings": [f"HeadEquip062_ear_0{i}_r" for i in (1, 2, 3, 4)]},
+    "Hunter001": {"chain": [f"Hunter001_{i:02d}" for i in (6, 7, 8, 9)],
+                  "leaf": "Hunter001_10", "gendered": True,
+                  "siblings": [f"Hunter001_{i:02d}" for i in (1, 2, 3, 4, 5)]},
+    # tailmatch WP(dev#19、issue#19、2026-08-12): pipeline\blender\
+    # step02_retarget.py SWAY_DONOR_FAMILIES の同名エントリと値を一致させる
+    # (上のSYNTHETIC_LEAF_BONES docstring「意図的な重複」の運用どおり)。
+    # tailexclude WP(dev#19、issue#19、2026-08-13、
+    # work\rd_19_pbmap\TAIL_ROOT_FALLBACK_ROOTCAUSE_20260813.md・
+    # TAIL_VISUAL_VERDICT_20260813.mdが正本): tail_10/tail_11を除外(chain末尾
+    # =tail_05、leaf=tail_06)。step02_retarget.py側の同名エントリのコメントに
+    # 詳細な理由を記載——この2箇所は値を必ず一致させること(上記docstring)。
+    "NPC_GrassBoss001_Skin001_tail": {
+        "chain": [f"NPC_GrassBoss001_Skin001_tail_{i:02d}" for i in (1, 2, 3, 4, 5)],
+        "leaf": "NPC_GrassBoss001_Skin001_tail_06", "gendered": False,
+        "siblings": [],
+        # dev#19 weight-direct-assign WP(2026-08-14、オーナー裁定「元々
+        # ウェイトが乗っているボーンがn本なら、donorはn+1本以上でなければ
+        # ならない」): しっぽの実転写元は6帯(Tail Root+Tail.001-005)で
+        # chainは5節しかないため、旧leaf("..._06")を可動donorへ転用しないと
+        # 全帯が収まらない。転用後は"..._06"に実ウェイトが乗るため、揺れの
+        # 末端を表す新しいウェイト無しの実リーフボーンがさらに先に要る。
+        # "leaf2"はそのための第2合成リーフ(先頭ゼロ2桁"_07"、UE FName分割
+        # 地雷"_10"/"_11"問題(tailexclude WP参照)を踏まない命名)。
+        # pipeline\blender\step02_retarget.py SWAY_DONOR_FAMILIESの同名
+        # エントリと値を一致させること(このファイル冒頭の「意図的な重複」
+        # 運用どおり)。
+        "leaf2": "NPC_GrassBoss001_Skin001_tail_07"},
+}
+
+
+def _side_suffix_of(name):
+    """nameが"_l"または"_r"で終わっていればその接尾辞("_l"/"_r")を返す。
+    どちらでもなければNone(左右の概念を持たない家系、例: OldCloth001)。
+
+    earleaf WP(dev#19、issue#19): L/R対称家系のリーフ名派生に使う共通規約。
+    pipeline\\blender\\step02_retarget.py 側の_sway_side_suffix_of()と同一の
+    規約(末尾"_l"/"_r")で意図的に重複定義(bpy非依存モジュールへ素直に
+    importできないため、既存の重複運用と同じ)。"""
+    if name.endswith("_l") or name.endswith("_r"):
+        return name[-2:]
+    return None
+
+
+def _swap_lr_suffix(name, target_suffix):
+    """name末尾の"_l"/"_r"を target_suffix("_l"または"_r")へ置換する
+    (name/target_suffixのいずれかが対象外なら無変更のnameをそのまま返す)。
+    pipeline\\blender\\step02_retarget.py 側の_sway_with_side_suffix()と同一
+    規約(意図的な重複、上記_side_suffix_of()docstring参照)。"""
+    if target_suffix is None:
+        return name
+    if name.endswith("_l") or name.endswith("_r"):
+        return name[:-2] + target_suffix
+    return name
+
+
+def _add_one_leaf_bone(ref, chain, leaf_name):
+    """chain(接頭辞込みの完全ボーン名列)の末尾へ、leaf_name(接頭辞込み)の
+    合成リーフボーン1件をin-placeで追記する共通処理(_add_synthetic_leaf_bone()
+    のchain/leaf側・siblings/sibling-leaf側の両方から呼ばれる、earleaf WP
+    で関数分割)。位置決めの考え方は_add_synthetic_leaf_bone()docstring参照。
+
+    leaf_nameが既にref内にある、またはchainが空/chain末尾がrefに未抽出の
+    場合は静かにno-op(die()しない、安全側)。"""
+    if leaf_name in ref:
+        return  # 既に存在(想定外の衝突) — 上書きしない、安全側
+    if not chain or chain[-1] not in ref:
+        return
+    tail_bone = ref[chain[-1]]
+    delta = list(tail_bone["pos"])
+    if all(abs(v) < 1e-9 for v in delta):
+        delta = [0.0, 0.0, 1.0]  # tail自身のposがゼロ(想定外): 適当な非ゼロ値
+    ref[leaf_name] = {
+        "parent": chain[-1],
+        "quat": [0.0, 0.0, 0.0, 1.0],
+        "pos": delta,
+        "scale": [1.0, 1.0, 1.0],
+    }
+
+
+def _add_synthetic_leaf_bone(ref, family, gender):
+    """SYNTHETIC_LEAF_BONES[family]の定義に従い、ref(1性別分のRefSkeleton
+    dict、core.load_refskel()形式)へ合成リーフボーン(chain側1件+、
+    siblings側が左右接尾辞対応なら追加でsiblings側1件)をin-placeで追記する。
+
+    位置は「chain末尾骨自身の親相対pos(=1つ前の骨からの局所オフセット)を
+    そのまま1節分再利用したプレースホルダ」(親→子の局所オフセットは概ね
+    そのチェーンの"1節分の長さ・向き"を表すため、同じ値を使い回すことは
+    「同じ調子でもう1節続ける」という合理的な仮定になる)。
+    実際のper-avatar位置はBlender側(step02_retarget.py
+    reposition_sway_donor_chain_and_leaf())が変換のたびに再計算し、既存の
+    U21 chibi_bone_world_head機構でcooked SKへ反映される——ここでの値は
+    「RefSkeletonへ構造登録するための仮の非ゼロ値」で足り、この値そのものが
+    実機出力に残ることは無い(vp_refskel_extend.pyが読むのはこのJSONの値だが、
+    それは全装備SKへの**構造的な骨追加**のためであり、位置の正しさは
+    per-avatarパッチが担保する)。
+
+    earleaf WP(dev#19、issue#19、work\\rd_19_leafcheck\\RESULT.md欠陥B):
+    spec.get("siblings")があり、その末尾ボーンが"_l"/"_r"で終わる場合、
+    spec["leaf"]の接尾辞をsiblings側の左右へ書き換えたR側(またはL側)
+    専用の合成リーフボーンも追加登録する(siblings末尾から親の"chain末尾
+    骨相対pos"を再利用する点はchain側と同じ)。siblingsが左右接尾辞を
+    持たない家系(Ancient001のwaistClothB/C等)ではこの追加登録は発火しない
+    (_swap_lr_suffix()が無変更を返し、既にchain側で追加済みの名前と
+    衝突して何もしない=無退行)。
+
+    family未登録・チェーン末尾がrefへ未抽出等の異常時は静かにno-op
+    (die()しない——片方のfamilyの欠落だけで抽出全体を止めない。
+    実際の欠落は後続のresolve_sway_chain_entries()側のvanilla_dirチェック/
+    build_pal_armature側で別途検出される)。
+    """
+    spec = SYNTHETIC_LEAF_BONES.get(family)
+    if spec is None:
+        return
+    prefix = ("M_" if gender == "Male" else "F_") if spec["gendered"] else ""
+    chain = [f"{prefix}{b}" for b in spec["chain"]]
+    leaf_name = f"{prefix}{spec['leaf']}"
+    _add_one_leaf_bone(ref, chain, leaf_name)
+
+    # dev#19 weight-direct-assign WP(2026-08-14、オーナー裁定): spec["leaf2"]
+    # (省略可)があれば、旧leafをさらに1節延長した第2合成リーフを追加登録
+    # する。既存のleaf生成と同じ手口(_add_one_leaf_bone()、親の1つ前からの
+    # 相対オフセットを再利用する外挿)をchain+[leaf_name]に対してもう1段
+    # 適用するだけ(leaf_nameは直前の呼び出しで既にrefへ登録済みのため、
+    # chain末尾として参照できる)。旧leafを可動donorへ転用する家系
+    # (resolve_sway_chain_entries()のspillover分岐、現状tailのみ)専用。
+    leaf2 = spec.get("leaf2")
+    if leaf2:
+        leaf2_name = f"{prefix}{leaf2}"
+        _add_one_leaf_bone(ref, chain + [leaf_name], leaf2_name)
+
+    siblings = spec.get("siblings")
+    if not siblings:
+        return
+    sib_chain = [f"{prefix}{b}" for b in siblings]
+    sib_leaf_name = _swap_lr_suffix(leaf_name, _side_suffix_of(sib_chain[-1]))
+    if sib_leaf_name == leaf_name:
+        return  # siblingsが左右接尾辞を持たない家系 — 追加登録なし(無退行)
+    _add_one_leaf_bone(ref, sib_chain, sib_leaf_name)
+
+
+def _family_gender_of_sk_key(sk_key):
+    """extract_sk_files()の結果dictキー("Male"/"Female"/"Hair"/
+    "Extra_{family}_{gender}")から(family, gender)を返す。
+    "Male"/"Female" -> ("OldCloth001", sk_key)(基底chainはOldCloth001)。
+    "Hair" -> (None, None)(sway対象外)。"Extra_..." -> _refskel_output_name()
+    と同じrsplit規則でfamily/genderを分離する。"""
+    if sk_key in ("Male", "Female"):
+        return "OldCloth001", sk_key
+    if sk_key == "Hair":
+        return None, None
+    prefix = "Extra_"
+    if not sk_key.startswith(prefix):
+        return None, None
+    family, _sep, gender = sk_key[len(prefix):].rpartition("_")
+    if not family or gender not in ("Male", "Female"):
+        return None, None
+    return family, gender
+
+
+def _normalize_extra_families(raw):
+    """job["sway_extra_family"]の生値を、家系名のlist(順序維持・空なら[])へ
+    正規化する(donorexp WP、要件1)。
+
+    - 未指定/偽値(None, "", [], 0等) -> []  (=完全no-op、既定出力不変)
+    - 文字列(旧仕様、単一家系)        -> [その文字列]
+    - リスト/タプル(新仕様、複数家系)  -> list(...)(そのまま、重複除去はしない
+      ——呼び出し元job.jsonの記載ミスをここで隠さない)
+    """
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        return [raw]
+    return list(raw)
+
+
+def _find_fallback_base_outfit_family(entries):
+    """OldCloth001自体がpakに存在しない場合の代役家系探索(xboxgraceful WP2、
+    dev#1606残課題、2026-08-22オーナー裁定「揺れもの無しに設定したら変換が
+    通る」)。
+
+    Player/Outfit配下に実在する、OldCloth001と同型(バージョン管理サブ
+    フォルダを持たない単一階層、`SK_Player_{g}_Outfit_{family}/
+    SK_Player_{g}_Outfit_{family}`)の家系のうち、Male/Female・uasset/uexpの
+    4ファイルすべてが揃っているものを、家系名の辞書順で決定論的に1つ選んで
+    返す(entries自体の列挙順は実行のたびに変わりうる、dev#91参照)。1件も
+    無ければNoneを返す。
+
+    前提: Palworldの全Player衣装SkeletalMeshは共有Skeletonアセット
+    (SK_PalHuman_Skeleton)にリグされており、body共通ボーン
+    (common_bones.jsonが計算する交差集合)のbind pose数値は衣装非依存
+    ——という設計(EXTRA_SWAY_FAMILY_SK_REL各家系のdonor骨格ソースとして
+    既に採用されている前提と同じ)に基づく。OldCloth001固有のsway donor
+    チェーン(SYNTHETIC_LEAF_BONES["OldCloth001"]、"OldCloth001_04"..等の
+    ボーン名)は代役家系には存在しないため、_add_synthetic_leaf_bone()が
+    静かにno-opするだけで実害はない(OldCloth001自身のsway donorが
+    使えなくなるだけ、他家系donorやbody共通ボーンには影響しない)。
+
+    enumerate_vanilla_sk()(場所依存列挙、SK_CATEGORY_ROOTS["outfit"])を
+    再利用する——このファイル内で定義順としては後だが、呼び出し時点で
+    モジュールは全読み込み済みのため問題ない。
+    """
+    inventory = enumerate_vanilla_sk(entries)
+    prefix_by_gender = {
+        "Male": "SK_Player_Male_Outfit_",
+        "Female": "SK_Player_Female_Outfit_",
+    }
+    found = {}  # family -> {"Male", "Female"}(uassetが揃っている性別の集合、
+                # 下でuexpも確認する前段のふるい)
+    for r in inventory.get("outfit", []):
+        name = r["name"]
+        folder_tail = r["folder"].rsplit("/", 1)[-1]
+        if folder_tail != name:
+            continue  # バージョン管理サブフォルダ等(Octavia001/v01等)は対象外
+        for gender, prefix in prefix_by_gender.items():
+            if name.startswith(prefix):
+                found.setdefault(name[len(prefix):], set()).add(gender)
+                break
+    uasset_complete = sorted(fam for fam, genders in found.items()
+                              if genders == {"Male", "Female"})
+    # enumerate_vanilla_sk()は".uasset"エントリしか見ないため、対になる
+    # ".uexp"の実在はここで別途確認する(片方だけ揃っていても抽出できない)。
+    for fam in uasset_complete:
+        rels = [f"Pal/Content/Pal/Model/Character/Player/Outfit/"
+                f"SK_Player_{g}_Outfit_{fam}/SK_Player_{g}_Outfit_{fam}"
+                for g in ("Male", "Female")]
+        if all(rel + ext in entries for rel in rels for ext in (".uasset", ".uexp")):
+            return fam
+    return None
+
 
 def extract_sk_files(job, out_dir):
-    """OldCloth001のSK+バニラ髪SK(uasset/uexp)だけを抽出する。UE/UnrealPak.exeは
-    使わず、pak_live_extract(U17)でPalworld本体のpakからその場解凍する。"""
+    """OldCloth001のSK+バニラ髪SK(uasset/uexp)を抽出する。UE/UnrealPak.exeは
+    使わず、pak_live_extract(U17)でPalworld本体のpakからその場解凍する。
+    EXTRA_SWAY_FAMILY_SK_REL登録済みの全donorファミリーのSKも常に併せて
+    抽出する(下記「dev#19 extract-all-families WP」参照)。
+
+    dev#19 extract-all-families WP(2026-08-14、issue#19、
+    work\\rd_19_smokefinal3\\MANIFEST.md実測欠陥の修正): 旧実装は
+    job.json "sway_extra_family"(dev#19 R2b-3追加)に明示指定された家系
+    だけを抽出していた。既定GUIジョブはこのキーを一切設定しないため、
+    Kigurumi001等の追加donor家系のrefskelがそもそも抽出されず、自動割当
+    エンジンのdiscovery(step02_retarget.build_donor_bone_pairs_from_vanilla()、
+    このjobが実際に抽出したrefskel_*.jsonの実在だけを見る設計)の候補
+    プールに一度も現れない構造的欠陥があった(n+1規則自体
+    ——sway_native_rule.py——は正しく実装済みだが、候補が来ないので発動
+    しようがない。実測: flatapron 6帯尻尾がKigurumi001(native8、n+1規則の
+    正解)ではなく縮退のOldCloth001(native4)へ落ちていた)。
+
+    修正: job["sway_extra_family"]の値に関わらず、EXTRA_SWAY_FAMILY_SK_REL
+    に登録済みの全家系を常に抽出する。job["sway_extra_family"]は後方互換の
+    ため未知家系名の検証にのみ残す(指定してもしなくても抽出結果そのもの
+    は変わらない——既に全家系が無条件で含まれるため)。
+
+    donorexp WP(2026-08-11、issue#19、要件1)由来の "Extra_{family}_{gender}"
+    (家系名を含む一意なキー)という戻り値dictの形は不変。
+
+    xboxgraceful WP(dev#1606、issue#1606、2026-08-21): 各extra-family(Hairを
+    含む)は「pak内に無ければその家系だけWARN+スキップして続行」する
+    (=結果dictにそのキーが現れないだけで、他家系や変換全体には影響しない)。
+    OldCloth001(SK_REL、Male/Female)は人体/服骨格の基本SK(refskel_male/
+    female.jsonの源、common_bones.json算出にも必須、揺れの有無に関わらず
+    リターゲット自体に必須)であり、揺れ有効時(job["sway_enable"]が真)は
+    従来どおりFATAL(緩和しない)。Xbox App(Microsoft Store/Game Pass)版
+    PalworldのPal-WinGDK.pakがextra-family各家系のSKを1つも含まないケースの
+    実測が動機(work\\inq_triage_20260821\\DRBNPKMX.md)。
+
+    xboxgraceful WP2(dev#1606残課題、issue#1606、2026-08-22オーナー裁定
+    「揺れもの無しに設定したら変換が通る」): OldCloth001自体もpakに1つも
+    無い場合(同実測、DRBNPKMX.mdのFATALログにOldCloth001自体も含まれて
+    いた)、かつ揺れ無効設定(job["sway_enable"]が偽)のときに限り、
+    Player/Outfit配下に実在する別家系(_find_fallback_base_outfit_family()
+    参照)を代役として使い、リターゲット自体は完走させる。揺れ有効時は
+    代役を使わず従来どおりFATAL(見た目品質より安全側、「無理筋の実装で
+    見た目品質を壊さない」というオーナー裁定に対応)。ゲーム由来データの
+    同梱は権利方針上禁止のため、代役はこのjobのpakからその場で探すだけで
+    配布物へは一切焼き込まない。
+
+    既知の限界(fingerprintは意図的にpak内容のみに依存し job 設定を含まない
+    ——dev#19 extract-all-families WPの設計、本ファイル上部
+    build_fingerprint()docstring参照): 同一pak・同一ユーザーが
+    sway_enableをOFF→ONへ切り替えて再実行した場合、共有キャッシュが
+    新鮮と判定されればこの関数自体が再実行されず、OFF時に代役で作った
+    refskel_male/female.jsonがそのまま再利用される(=ON時に本来出るはずの
+    FATALが出ない)。これはOldCloth001自体が欠けたpak(Xbox版の一部)でしか
+    起こらない上、最悪の帰結も「代役骨格のままsway機能が縮退する」だけで
+    誤った見た目にはならない(OldCloth001固有のsway donorだけが使えない)。
+    より厳密な修正(job依存の再評価をpakキャッシュの外側——例:
+    convert_noue.py側——へ切り出す)は本WPのスコープ外として送る。"""
     pak = job["paths"].get("palworld_pak")
     if not pak or not os.path.exists(pak):
         # WP16(公開issue #8): job.jsonに明示指定が無く自動探索も失敗した場合、
@@ -171,20 +579,87 @@ def extract_sk_files(job, out_dir):
             "Please set paths.palworld_pak in job.json")
         core.die(TAG, detail)
 
+    # 後方互換の検証のみ(抽出対象そのものはもう左右しない、上のdocstring参照)。
+    explicit_extra = _normalize_extra_families(job.get("sway_extra_family"))
+    unknown_families = [f for f in explicit_extra if f not in EXTRA_SWAY_FAMILY_SK_REL]
+    if unknown_families:
+        core.die(TAG, f"sway_extra_family: unknown family(ies) {unknown_families!r} "
+                       f"(known: {sorted(EXTRA_SWAY_FAMILY_SK_REL)})")
+    # dev#19 extract-all-families WP: 常に登録済み全家系を抽出する
+    # (list(EXTRA_SWAY_FAMILY_SK_REL)は宣言順、決定論的)。未登録家系が
+    # ここに紛れ込むことは構造的に無い(このdict自体が抽出対象の唯一の
+    # 出所のため——受入条件③の負の対照)。
+    extra_families = list(EXTRA_SWAY_FAMILY_SK_REL)
+
+    mount, entries = core.read_pak_entries(pak)
+
+    # xboxgraceful WP2: OldCloth001の代役決定(base_rel_template構築より前に
+    # entriesが要るため、read_pak_entries()をここへ引き上げた)。
+    base_rel_template = SK_REL
+    base_family_label = "OldCloth001"
+    old_cloth_paths = [SK_REL.format(g=g) + ext
+                        for g in ("Male", "Female") for ext in (".uasset", ".uexp")]
+    old_cloth_available = all(p in entries for p in old_cloth_paths)
+    if not old_cloth_available and not job.get("sway_enable"):
+        fallback_family = _find_fallback_base_outfit_family(entries)
+        if fallback_family:
+            base_rel_template = (
+                "Pal/Content/Pal/Model/Character/Player/Outfit/"
+                f"SK_Player_{{g}}_Outfit_{fallback_family}/"
+                f"SK_Player_{{g}}_Outfit_{fallback_family}")
+            base_family_label = fallback_family
+            print(f"[{TAG}][WARN] OldCloth001 SK not found in pak; sway is disabled "
+                  f"(job['sway_enable'] is falsy) so using '{fallback_family}' as the "
+                  "base body/outfit skeleton source instead (dev#1606)")
+
     want = {}  # pak内相対パス -> (out_dirへの書き出し先絶対パス)
     for g in ("Male", "Female"):
-        base_rel = SK_REL.format(g=g)
+        base_rel = base_rel_template.format(g=g)
         for ext in (".uasset", ".uexp"):
             want[base_rel + ext] = os.path.join(out_dir, *(base_rel + ext).split("/"))
     for ext in (".uasset", ".uexp"):
         want[HAIR_REL + ext] = os.path.join(out_dir, *(HAIR_REL + ext).split("/"))
+    for family in extra_families:
+        extra_rel = EXTRA_SWAY_FAMILY_SK_REL[family]
+        for g in ("Male", "Female"):
+            base_rel = extra_rel.format(g=g)
+            for ext in (".uasset", ".uexp"):
+                want[base_rel + ext] = os.path.join(out_dir, *(base_rel + ext).split("/"))
 
-    mount, entries = core.read_pak_entries(pak)
     hair_available = (HAIR_REL + ".uasset") in entries and (HAIR_REL + ".uexp") in entries
-    want_paths = [p for p in want if p in entries or not p.startswith(HAIR_REL)]
+
+    # xboxgraceful WP(dev#1606、issue#1606、2026-08-21): Hairと同じ
+    # 「家系ごと欠けたらその家系だけWARN+スキップ、変換自体は続行」を
+    # EXTRA_SWAY_FAMILY_SK_REL登録済みの全extra-family(donor骨格ソース)へ
+    # 拡張する。Xbox App(Microsoft Store/Game Pass)版Palworldのpak
+    # (Pal-WinGDK.pak)がこれら家系のSKを1つも含まないケースが実測された
+    # (work\inq_triage_20260821\DRBNPKMX.md)。OldCloth001(SK_REL、
+    # Male/Female)だけは人体/服骨格の基本SK(refskel_male.json/
+    # refskel_female.jsonの源、下流extract_blender_stage()のcommon_bones
+    # 算出にも必須)のため、従来どおりFATAL(緩和しない)。
+    family_available = {}
+    for family in extra_families:
+        extra_rel = EXTRA_SWAY_FAMILY_SK_REL[family]
+        family_paths = [extra_rel.format(g=g) + ext
+                         for g in ("Male", "Female") for ext in (".uasset", ".uexp")]
+        family_available[family] = all(p in entries for p in family_paths)
+
+    # Hairおよび欠落中のextra-family分は、旧来のHair専用フィルタ
+    # (`not p.startswith(HAIR_REL)`)と同じ手口で「必須チェック対象から
+    # 除外」する。OldCloth001(SK_REL)のパスはこの除外集合に一切含まれない
+    # ため、欠落時は従来どおりmissing_skへ載りFATALのまま。
+    optional_paths = {HAIR_REL + ext for ext in (".uasset", ".uexp")}
+    for family, available in family_available.items():
+        if available:
+            continue
+        extra_rel = EXTRA_SWAY_FAMILY_SK_REL[family]
+        optional_paths.update(extra_rel.format(g=g) + ext
+                               for g in ("Male", "Female") for ext in (".uasset", ".uexp"))
+
+    want_paths = [p for p in want if p in entries or p not in optional_paths]
     missing_sk = [p for p in want_paths if p not in entries]
     if missing_sk:
-        core.die(TAG, f"OldCloth001/Hair SK not found in pak: {missing_sk}")
+        core.die(TAG, f"{base_family_label} SK not found in pak (required): {missing_sk}")
 
     files = pak_live_extract.extract_files(pak, want_paths)
     for p, data in files.items():
@@ -195,12 +670,21 @@ def extract_sk_files(job, out_dir):
 
     result = {}
     for g in ("Male", "Female"):
-        ua = want[SK_REL.format(g=g) + ".uasset"]
+        ua = want[base_rel_template.format(g=g) + ".uasset"]
         result[g] = ua
     if hair_available:
         result["Hair"] = want[HAIR_REL + ".uasset"]
     else:
         print(f"[{TAG}][WARN] failed to extract vanilla hair SK — hair-sway feature unavailable")
+    for family in extra_families:
+        if not family_available[family]:
+            print(f"[{TAG}][WARN] failed to extract vanilla '{family}' SK "
+                  f"— this donor family's sway is unavailable, continuing")
+            continue
+        extra_rel = EXTRA_SWAY_FAMILY_SK_REL[family]
+        for g in ("Male", "Female"):
+            ua = want[extra_rel.format(g=g) + ".uasset"]
+            result[f"Extra_{family}_{g}"] = ua
     return result
 
 
@@ -385,13 +869,23 @@ def build_fingerprint(job):
     """
     pak = job["paths"]["palworld_pak"]
     pst = os.stat(pak)
-    return {
+    fp = {
         "vanilla_version": VANILLA_VERSION,
         "pak_path": os.path.abspath(pak),
         "pak_size": pst.st_size,
         "pak_mtime": pst.st_mtime,
         "extractor_hash": core.sha256_file(os.path.abspath(__file__)),
     }
+    # dev#19 extract-all-families WP(2026-08-14): 旧実装はここで
+    # job["sway_extra_family"]をfingerprintへ含め、指定の有無でキャッシュを
+    # 分けていた。extract_sk_files()が登録済み全家系を常に抽出するように
+    # なった今、抽出物の中身はもうsway_extra_familyの値に依存しない
+    # (=同じpakなら常に同じ出力)ため、この条件付きキーを削除した。
+    # VANILLA_VERSIONの版上げ(下記コメント参照)+この関数自身を含む
+    # extract_vanilla.py本体のextractor_hash変化により、この変更を跨ぐ
+    # 既存キャッシュは自動的に無効化される(古い抽出物を使い回す事故は
+    # 起きない、上のdocstring③と同じ安全側の理屈)。
+    return fp
 
 
 def _stamp_path(vanilla_dir):
@@ -517,6 +1011,87 @@ def is_cache_fresh(job, want_stage):
 
 # ------------------------------------------------------------------ 抽出の本体
 
+def _refskel_output_name(sk_key):
+    """extract_sk_files()の結果dictキー("Male"/"Female"/"Hair"/
+    "Extra_{family}_{gender}")から、書き出すrefskel JSONのファイル名を導出
+    する(donorexp WP、要件2: 固定共有名"refskel_extra_{gender}.json"を廃し、
+    家系ごとに一意なファイル名へ)。
+
+    - "Male"/"Female" -> "refskel_male.json"/"refskel_female.json"(不変)
+    - "Hair"           -> "refskel_hair.json"(不変)
+    - "Extra_{family}_{gender}" -> "refskel_{family.lower()}_{gender.lower()}.json"
+      (familyそのものに"_"を含む場合(例: "HeadEquip062_ear")でも、末尾の
+      "_Male"/"_Female"だけをrsplit("_", 1)で切り離せば正しく family を
+      取り出せる——genderは常に"Male"/"Female"のいずれかで固定のため)
+    """
+    if sk_key in ("Male", "Female"):
+        return f"refskel_{sk_key.lower()}.json"
+    if sk_key == "Hair":
+        return "refskel_hair.json"
+    prefix = "Extra_"
+    if not sk_key.startswith(prefix):
+        raise ValueError(f"unrecognized extract_sk_files() result key: {sk_key!r}")
+    family, _sep, gender = sk_key[len(prefix):].rpartition("_")
+    if not family or gender not in ("Male", "Female"):
+        raise ValueError(f"unrecognized extract_sk_files() result key: {sk_key!r}")
+    return f"refskel_{family.lower()}_{gender.lower()}.json"
+
+
+def extract_shared_skeleton_catalog(job, vanilla_dir):
+    """dev#1508 W2a-2c(汎用ハブ配線): 共有Skeleton(SK_PalHuman_Skeleton、
+    実測4079骨)の全骨rest transformを`vanilla/sk_palhuman_full.json`へ
+    抽出する。`pipeline\\blender\\step02_retarget.py`(sway_hub_wire.py経由)が
+    ハブroot+自由donorプールの骨在庫として読む。
+
+    通常のfind_refskeleton()(count<=400の安全域)では抽出できない大規模
+    RefSkeletonのため、専用スキャナ(`sway_shared_skeleton.
+    scan_full_refskeleton()`、min_bones/max_bones=1000〜6000)を使う
+    (`SK_PalHuman_Skeleton(共有骨格、4079骨)自体はvp_core.find_refskeleton()の
+    フィンガープリント上限を超えて直接抽出できない`、本ファイル上部の
+    EXTRA_SWAY_FAMILY_SK_REL節コメント参照)。"""
+    pak = job["paths"].get("palworld_pak")
+    if not pak or not os.path.exists(pak):
+        detail = job.get("_palworld_pak_search_error") or (
+            f"Palworld's pak was not found: {pak}\n"
+            "Please set paths.palworld_pak in job.json")
+        core.die(TAG, detail)
+    want = [SWAY_HUB_SK_VANILLA_REL + ext for ext in (".uasset", ".uexp")]
+    mount, entries = core.read_pak_entries(pak)
+    missing = [p for p in want if p not in entries]
+    if missing:
+        core.die(TAG, f"shared skeleton ({SWAY_HUB_SK_PACKAGE_NAME}) not found in "
+                       f"Palworld's pak (missing: {missing}) -- dev#1508 hub donor "
+                       "catalog extraction cannot proceed")
+    files = pak_live_extract.extract_files(pak, want)
+
+    tmp = tempfile.mkdtemp(prefix="d2p_ext_sk_")
+    try:
+        uasset_path = os.path.join(tmp, SWAY_HUB_SK_PACKAGE_NAME + ".uasset")
+        uexp_path = os.path.join(tmp, SWAY_HUB_SK_PACKAGE_NAME + ".uexp")
+        with open(uasset_path, "wb") as f:
+            f.write(files[SWAY_HUB_SK_VANILLA_REL + ".uasset"])
+        with open(uexp_path, "wb") as f:
+            f.write(files[SWAY_HUB_SK_VANILLA_REL + ".uexp"])
+        try:
+            catalog = sway_shared_skeleton.full_skeleton_catalog(uasset_path, uexp_path)
+        except sway_shared_skeleton.SharedSkeletonError as e:
+            core.die(TAG, f"failed to scan shared skeleton "
+                           f"({SWAY_HUB_SK_PACKAGE_NAME}) for hub donor catalog "
+                           f"(dev#1508 W2a-2c): {e}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    # source_uasset/source_uexpはこのプロセスのtempディレクトリ(既に削除済み)を
+    # 指す絶対パスのため、キャッシュへは残さない(可搬性・ノイズ排除)。
+    catalog = dict(catalog)
+    catalog.pop("source_uasset", None)
+    catalog.pop("source_uexp", None)
+    out = os.path.join(vanilla_dir, "sk_palhuman_full.json")
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(catalog, f)
+    print(f"[{TAG}] sk_palhuman_full.json: {catalog['bone_count']} bones")
+
+
 def extract_blender_stage(job, vanilla_dir):
     """Blender工程が読む分(refskel_*.json / common_bones.json)を作る。"""
     # 1) SK抽出 → RefSkeleton数値化(ゲームバイナリは即削除、数値のみ保持)
@@ -527,10 +1102,17 @@ def extract_blender_stage(job, vanilla_dir):
         for g, ua in sk.items():
             # 髪SKは小骨格(root〜head+hair_01..09の十数本)なので下限を下げる
             ref[g] = core.load_refskel(ua, min_bones=5 if g == "Hair" else 40)
-            out = os.path.join(vanilla_dir, f"refskel_{g.lower()}.json")
+            # swayfix WP(dev#19): このSKのdonor familyが登録済みなら、
+            # cloth_chain末尾へ合成リーフボーン1件を追記する(ref[g]を
+            # in-place更新、JSON出力にも反映される)。
+            _leaf_family, _leaf_gender = _family_gender_of_sk_key(g)
+            if _leaf_family is not None:
+                _add_synthetic_leaf_bone(ref[g], _leaf_family, _leaf_gender)
+            out_name = _refskel_output_name(g)
+            out = os.path.join(vanilla_dir, out_name)
             with open(out, "w", encoding="utf-8") as f:
                 json.dump(ref[g], f, indent=1)
-            print(f"[{TAG}] refskel_{g.lower()}.json: {len(ref[g])} bones")
+            print(f"[{TAG}] {out_name}: {len(ref[g])} bones")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -544,6 +1126,10 @@ def extract_blender_stage(job, vanilla_dir):
               encoding="utf-8") as f:
         json.dump({"common": common, "dropped": dropped}, f, indent=1)
     print(f"[{TAG}] common bones: {len(common)} (dropped: {dropped})")
+
+    # 3) 共有Skeleton(SK_PalHuman_Skeleton)全骨カタログ(dev#1508 W2a-2c、
+    #    汎用ハブ配線のdonor骨在庫)。
+    extract_shared_skeleton_catalog(job, vanilla_dir)
 
 
 def extract_full_stage(job, vanilla_dir):

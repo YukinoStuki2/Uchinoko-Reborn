@@ -21,6 +21,10 @@ from mathutils import Matrix, Vector
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vp_bl
 from vp_bl import core
+# dev#505: 非白tint(Unity `_Color`)をテクスチャへ乗算するための共有ロジック。
+# vp_bl(直前のimportでpipeline\py がsys.pathへ追加済み)経由で解決できる。
+import vp_atlas  # noqa: E402
+import vp_tex    # noqa: E402
 
 TAG = "preview"
 
@@ -68,8 +72,24 @@ def replace_with_preview_materials(job, meta):
             bsdf = next(n for n in m.node_tree.nodes
                         if n.type == "BSDF_PRINCIPLED")
             if info["texture"]:
-                tex = m.node_tree.nodes.new("ShaderNodeTexImage")
                 img_path = os.path.join(tex_dir, info["texture"])
+                base_color = info.get("base_color")
+                # dev#505(実報告CFLSKDWM: 瞳/虹彩がプレビューで白飛びする):
+                # 非白tint(Unity `_Color`)が付いたテクスチャは、実際のpak
+                # 側(vp_atlas.apply_tint)と同じ計算であらかじめ乗算した
+                # 一時PNGを読む(白/グレーのマスクをtintで着色するトゥーン
+                # シェーダーの一般的な作りに対応。従来はここでテクスチャが
+                # あるとtintを無視しており、プレビューでも無彩色のまま
+                # 表示されていた=このモジュールが実際に見せていた症状)。
+                if (base_color and len(base_color) >= 4
+                        and not vp_atlas.is_white_tint(base_color)
+                        and os.path.exists(img_path)):
+                    tint_dir = core.job_subdir(job, "converted", "preview_tinted")
+                    _, _, tex_rgba = vp_tex.decode_png(img_path)
+                    tinted = vp_atlas.apply_tint(tex_rgba, base_color)
+                    img_path = os.path.join(tint_dir, f"{name.split('.')[0]}.png")
+                    vp_tex.encode_png(img_path, tinted)
+                tex = m.node_tree.nodes.new("ShaderNodeTexImage")
                 if os.path.exists(img_path):
                     tex.image = bpy.data.images.load(img_path)
                 m.node_tree.links.new(tex.outputs["Color"],

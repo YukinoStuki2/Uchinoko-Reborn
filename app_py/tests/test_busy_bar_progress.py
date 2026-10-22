@@ -145,6 +145,8 @@ class _FakeSelfForPipelineLine:
 
     _set_busy_bar_mode = mw.MainWindow._set_busy_bar_mode
     _on_pipeline_line = mw.MainWindow._on_pipeline_line
+    # dev#897: statusLabel設定がself._set_status()経由に変わったための追加束縛。
+    _set_status = mw.MainWindow._set_status
 
 
 # ---------------------------------------------------------------------------
@@ -249,3 +251,54 @@ def test_on_pipeline_line_non_marker_line_does_not_touch_busy_bar_mode():
     assert busy_bar["mode"] == "indeterminate"
     assert busy_bar.stop_calls == 0
     assert fake_self.logged == ["plain log line, not a progress marker"]
+
+
+# ---------------------------------------------------------------------------
+# _on_pipeline_line: ##AVATAR_WARNING##行(dev#690)
+#
+# 正: app\DiveToPalworld.cs AppendLog() L.2874-2879 -- AvatarWarnMarkに一致
+# しても return せず、pipelineWarnings.Add() の後に無条件で
+# logBox.AppendText(clean + "\r\n") へ落ちる(=画面のログ欄とセッション全体ログ
+# 双方に残る)。旧py版main_window.pyはここでreturnしており、##AVATAR_WARNING##
+# 行がlog_box(=「ログをコピー」ボタンが読む_build_diagnostics_text()の材料)に
+# 一切残らなかった(完了時messagebox.showwarningのポップアップにしか使われて
+# いなかった)。問い合わせKFRHNTTK(色が正しく表示されない)は、この色診断に
+# 必要な唯一の材料(convert_noue.pyが出す##AVATAR_WARNING##行)がログ送付経路に
+# 構造的に載らないことが原因だった。
+# ---------------------------------------------------------------------------
+
+
+def test_on_pipeline_line_avatar_warning_is_logged_and_collected():
+    """##AVATAR_WARNING##行はポップアップ用リスト(_pipeline_warnings)に積まれる
+    だけでなく、C#版と同じくログ欄(_log経由、診断テキストの材料)にも残ること。"""
+    fake_self = _FakeSelfForPipelineLine()
+    fake_self._on_pipeline_line(
+        "##AVATAR_WARNING## Color information for some materials could not be "
+        "retrieved (material=Body)"
+    )
+    # ポップアップ用(従来どおり)
+    assert fake_self._pipeline_warnings == [
+        "Color information for some materials could not be retrieved (material=Body)"
+    ]
+    # dev#690: ログ欄にも同じ行が残ること(「ログをコピー」で送られる材料)
+    assert fake_self.logged == [
+        "##AVATAR_WARNING## Color information for some materials could not be "
+        "retrieved (material=Body)"
+    ]
+
+
+def test_on_pipeline_line_progress_marker_still_not_logged():
+    """負の対照(要件4): ##PROGRESS##行は本修正後も従来どおりログ欄に出ない
+    (dev#690はAVATAR_WARNING分岐だけを直し、PROGRESS分岐のreturnには触れて
+    いないことを固定する回帰試験)。"""
+    fake_self = _FakeSelfForPipelineLine()
+    fake_self._on_pipeline_line("##PROGRESS## 10 import")
+    assert fake_self.logged == []
+
+
+def test_on_pipeline_line_no_warning_leaves_warnings_list_empty():
+    """負の対照(要件2の前段): 警告マーカーを含まない行では_pipeline_warningsに
+    何も積まれない(診断テキスト側で警告セクションの残骸が生じないことの前提)。"""
+    fake_self = _FakeSelfForPipelineLine()
+    fake_self._on_pipeline_line("plain log line, not a progress marker")
+    assert fake_self._pipeline_warnings == []

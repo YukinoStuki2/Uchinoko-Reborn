@@ -121,6 +121,7 @@ import faulthandler  # noqa: E402
 import tkinter as tk  # noqa: E402
 
 from ui.main_window import MainWindow  # noqa: E402
+from ui.workarea import enable_dpi_awareness  # noqa: E402
 
 
 def _enable_faulthandler(app_root: str) -> None:
@@ -143,8 +144,17 @@ def _enable_faulthandler(app_root: str) -> None:
 def main() -> None:
     app_root = _resolve_app_root()
     _enable_faulthandler(app_root)
+    # dev#662: tk.Tk()より前に呼ぶことが唯一の要件(Tcl/Tkは最初のウィンドウ
+    # 生成時にプロセスのDPI awareness状態を読み取るため)。失敗しても起動を
+    # 止めない(ui.workarea.enable_dpi_awareness()のdocstring参照)。
+    enable_dpi_awareness()
     root = tk.Tk()
-    MainWindow(root, app_root=app_root)
+    # dev#19揺れものUIプロトタイプ(2026-08-11、work\rd_19_flight\briefs\
+    # uimock2_embedded.md仕様4): `--sample`は開発確認専用の隠しフラグ(製品
+    # には残さない前提、work\rd_19_uimock2\RESULT.md参照)。ラボ「揺れもの
+    # 詳細設定」ダイアログに組み込みサンプルチェーンを注入させる。
+    dev_sample_sway = "--sample" in sys.argv[1:]
+    MainWindow(root, app_root=app_root, dev_sample_sway=dev_sample_sway)
     root.mainloop()
 
 

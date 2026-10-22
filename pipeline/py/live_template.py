@@ -44,6 +44,13 @@ import vp_core as core  # noqa: E402
 import parse_sk_structure as sks  # noqa: E402
 import parse_uasset_header as puh  # noqa: E402
 import stub_skeletal_mesh  # noqa: E402  (dev#26: SKスタブの実行時生成)
+import vp_equipment_filter  # noqa: E402  (dev#165第2期: 装備限定の除外集合計算)
+import vp_gender_filter  # noqa: E402  (dev#336: 性別限定の除外集合計算、F3の縮退形)
+import vp_headequip_filter  # noqa: E402  (dev#277第1弾④: 頭装備切り替えの表示集合計算)
+# dev#458: 一時uasset/uexp書き込みの失敗診断に既存の伏字化ヘルパーを再利用する
+# (新規の診断実装を作らない。dev#7由来、path_facts()はlength=/UNC=/drive_type=を
+# 生パスを出さずに返す)。
+from path_privacy import path_facts as _path_facts  # noqa: E402
 
 TAG = "live_template"
 
@@ -241,7 +248,87 @@ TAG = "live_template"
 # (stub_skeletal_mesh.build_stub_files)。uassetはバイト完全一致、uexpは
 # bind pose等をライブ抽出バニラ値へ置換(旧同梱比 約2.2KBの差、
 # work\wp_stub\REPORT.md参照)。テンプレート内容が変わるため更新。
-TEMPLATE_BUILD_VERSION = 24
+# WP-B3(dev#1198、2026-08-08): Head/Hair系スタブ178件の生成を無条件廃止
+# (noue_template_manifest.jsonの"project"からも削除、_is_head_or_hair_stub_rel
+# 参照)。HeadEquip(帽子)は現状どおり維持。pak内容が変わるため更新
+# (work\rd_1198_wpb\PROPOSAL.md §4)。
+TEMPLATE_BUILD_VERSION = 25
+
+# dev#46(2026-08-02): TEMPLATE_BUILD_VERSIONは手動運用の版数(意図的な
+# 一斉無効化の手段として併存させる。廃止しない)。だが「テンプレ生成ロジックを
+# 変更したのに版数を上げ忘れる」事故が起きると、旧キャッシュが使われ続けた
+# まま`devtools\relgate.py`のpak比較まで「無退行」と誤判定してしまう
+# (新コードが効いていないことをリリース関所が検出できないマスキング)。
+# 対策として、実際にテンプレ組み立て(_assemble_live_template()の到達コード、
+# 2026-08-02時点で下記を実際に読んで確認済み)に関与するソースファイル群の
+# 内容ハッシュもfingerprintへ加える。コード変更 = 自動無効化になる。
+#
+#   - live_template.py      自分自身。_assemble_live_template/
+#                            _inject_outfit_body_parka_textures等の本体
+#   - pak_live_extract.py   vanilla抽出(extract_files、Phase A/Bで使用)
+#   - vp_core.py            pak_live_extract.pyが呼ぶread_pak_entries/
+#                            read_pak_compression_methods、
+#                            parse_sk_structure.pyが呼ぶ
+#                            parse_skeletalmesh_buffers/load_refskelを持つ
+#                            (単なる汎用ヘルパーではなく、pak/SK解析の実体)
+#   - stub_skeletal_mesh.py SKスタブの実行時生成(Phase A、dev#26)
+#   - vp_exclusions.py      コラボ除外SK判定(_inject_outfit_body_parka_textures内)
+#   - parse_sk_structure.py Materials[]スロット検出
+#                            (_find_outfit_slot_material_paths)
+#   - parse_uasset_header.py uasset/uexpのimport/export解析
+#                            (_patch_mi_base_texture等、複数箇所で使用)
+#   - ooz_worker_gpl.py     Oodle解凍の実体(pak_live_extract.pyがsubprocess
+#                            起動。importではなくファイルパス参照のため
+#                            自動追跡できない)
+#
+# 【対象外(2026-08-02時点で確認済み・意図的に除外)】
+#   - palworld_locate.py: vp_core.pyがimportするが、pakパス「発見」用で
+#     テンプレ生成ロジックには関与しない(job["paths"]["palworld_pak"]は
+#     呼び出し前に既に解決済みの値として渡ってくる)
+#   - noue_template_manifest.json / noue_master\pak_extract_extra配下の
+#     資産: 「ソースファイル」ではなくデータ。manifestは既存のmanifest_hash
+#     が別途カバーする。project資産(M_VP_*/t00/t01/anchor等)は意図的な
+#     素材更新であり、コード変更の版数上げ忘れとは別の話
+#
+# 【追加時の申し送り(重要)】_assemble_live_template()の到達コードに新しい
+# モジュールへのimport/subprocess呼び出しを追加したら、必ずこのリストにも
+# 追記すること。追記を怠ると、この対策自体が今回と同じ「上げ忘れ」の穴に
+# 落ちる。逆に、リストが増えすぎて過剰無効化(無関係な変更でも再構築が
+# 走る)になるのは許容される安全側の挙動であり、それを避けるための凝った
+# 仕組み(関数単位の依存追跡等)は作らない(dev#46 WP指示書より)。
+_TEMPLATE_LOGIC_SOURCE_FILES = [
+    "live_template.py",
+    "pak_live_extract.py",
+    "vp_core.py",
+    "stub_skeletal_mesh.py",
+    "vp_exclusions.py",
+    "parse_sk_structure.py",
+    "parse_uasset_header.py",
+    "ooz_worker_gpl.py",
+]
+
+
+def _template_logic_hash(base_dir=None):
+    """_TEMPLATE_LOGIC_SOURCE_FILES(テンプレ生成ロジックに関与するソース
+    ファイル群)の内容から結合ハッシュを1本計算する(dev#46)。
+
+    base_dirはテスト用の差し替え口(既定はHERE=このファイルのディレクトリ、
+    本番の呼び出しは常に省略時の既定値を使う)。リスト中のファイルが
+    見つからない場合は即座に停止する(綴り間違いで静かに検査が
+    空振りするのを防ぐ、dev#46受入条件)。"""
+    base_dir = base_dir or HERE
+    h = hashlib.sha256()
+    for rel in _TEMPLATE_LOGIC_SOURCE_FILES:
+        path = os.path.join(base_dir, rel)
+        if not os.path.exists(path):
+            core.die(TAG, f"dev#46: template logic source file not found "
+                     f"(fix _TEMPLATE_LOGIC_SOURCE_FILES in live_template.py): {path}")
+        h.update(rel.encode("utf-8"))
+        h.update(b"\0")
+        h.update(core.sha256_file(path).encode("ascii"))
+        h.update(b"\n")
+    return h.hexdigest()
+
 
 MVP_PACKAGE_PREFIX = "/Game/Pal/Model/Character/Player/ModelMaterials/MainShader"
 _MATERIAL_CLASS_NAMES = ('Material', 'MaterialInstanceConstant')
@@ -808,9 +895,14 @@ def _find_outfit_slot_material_paths(uasset_path, uexp_path):
 
     戻り値: {0: full_path, 1: full_path}。単一マテリアル衣装等でスロットが
     2件未満の場合は空dict({})。"""
-    with open(uasset_path, "rb") as f:
+    # dev#1101(レビュー差し戻し): 呼び出し元(collect_unified_mi_targets)が
+    # dst_dir配下の可変長パス(uasset_path/uexp_path)を渡すため、書き込み側と
+    # 同じ_open_long()で統一する。ここで生open()がFileNotFoundErrorを出すと
+    # 周囲のexcept _OutfitMaterialPatchErrorでは捕まらず、書き込み側対策が
+    # 発動する前に変換全体が落ちる。
+    with _open_long(uasset_path, "rb") as f:
         data = f.read()
-    with open(uexp_path, "rb") as f:
+    with _open_long(uexp_path, "rb") as f:
         uexp_data = bytearray(f.read())
 
     h = _parse_header_with_offsets(data)
@@ -869,9 +961,11 @@ def find_outfit_material_paths_all(uasset_path, uexp_path, limit=2):
       MaterialIndex 0/1 のセクションしか作らない(=2番目以降のマテリアル
       スロットは描画されない)ため既定2。0以下で全スロット。
     """
-    with open(uasset_path, "rb") as f:
+    # dev#1101(レビュー差し戻し): 呼び出し元(collect_unified_mi_targets)が
+    # dst_dir配下の可変長パスを渡すため_open_long()で統一する。
+    with _open_long(uasset_path, "rb") as f:
         data = f.read()
-    with open(uexp_path, "rb") as f:
+    with _open_long(uexp_path, "rb") as f:
         uexp_data = bytearray(f.read())
 
     h = _parse_header_with_offsets(data)
@@ -1080,9 +1174,12 @@ def _patch_mi_base_texture(uasset_path, uexp_path, out_uasset_path, out_uexp_pat
     TEMPLATE_BUILD_VERSIONコメント参照)。アンカー不一致等で無改変判定の
     場合はバイト内容が実質コピーと同じになるため、既存の「uexpはそのまま
     コピー」という設計意図は実効的に保たれる。"""
-    with open(uasset_path, "rb") as f:
+    # dev#1101: 呼び出し元がuasset_path/uexp_pathを既に_win_long_path()済みか
+    # どうかに関わらずこの関数単体でMAX_PATH対策済みになるよう、
+    # _open_long()(冪等)を通す。
+    with _open_long(uasset_path, "rb") as f:
         data = f.read()
-    with open(uexp_path, "rb") as f:
+    with _open_long(uexp_path, "rb") as f:
         uexp_bytes_orig = f.read()
 
     h = _parse_header_with_offsets(data)
@@ -1193,20 +1290,17 @@ def _patch_mi_base_texture(uasset_path, uexp_path, out_uasset_path, out_uexp_pat
         old_serial_offset = struct.unpack_from("<q", new_data, entry["serial_size_offset"] + 8)[0]
         struct.pack_into("<q", new_data, entry["serial_size_offset"] + 8, old_serial_offset + name_delta)
 
-    if out_uasset_path != uasset_path:
-        os.makedirs(os.path.dirname(out_uasset_path) or ".", exist_ok=True)
-    with open(out_uasset_path, "wb") as f:
-        f.write(new_data)
+    # dev#1101: 出力側(out_uasset_path/out_uexp_path)はdst_dir配下(可変長・
+    # 深い)ことが多く、dev#458/PR#746の対策が及んでいなかった箇所。
+    # _write_bytes_long()に統一する(makedirs+_win_long_path込み)。
+    _write_bytes_long(out_uasset_path, new_data)
 
     # ShadingModel系のSubsurfaceProfile無効化(_disable_subsurface_shading)と、
     # U46: Subsurface Color(Vector)の白中和はuexpへ適用する
     # (Subsurface Textureのimport自体はU47で不変化、上記docstring参照)。
     patched_uexp, sm_sss_info = _disable_subsurface_shading(uexp_bytes_orig)
     patched_uexp, sc_info = _neutralize_named_vector_param(patched_uexp, names, "Subsurface Color")
-    if out_uexp_path != uexp_path:
-        os.makedirs(os.path.dirname(out_uexp_path) or ".", exist_ok=True)
-    with open(out_uexp_path, "wb") as f:
-        f.write(patched_uexp)
+    _write_bytes_long(out_uexp_path, patched_uexp)
     sss_info = dict(sm_sss_info)
     sss_info["subsurface_color_neutralized"] = sc_info
     return {"skipped": False, "sss": sss_info}
@@ -1464,8 +1558,12 @@ _SSS_FLATTEN_DISABLE = os.environ.get("D2P_U50_DISABLE_SSS_FLATTEN") == "1"
 
 def _read_header_and_tables_for_flatten(uasset_path):
     """_collect_flatten_targets向けの最小限のuasset読み取り(name table+
-    import table)。_find_outfit_slot_material_paths等の既存パース手順と同型。"""
-    with open(uasset_path, "rb") as f:
+    import table)。_find_outfit_slot_material_paths等の既存パース手順と同型。
+
+    dev#1101: 呼び出し元は既に_win_long_path()済みのパスを渡す(_open_long()は
+    冪等なので二重適用でも無害)が、この関数単体でも自己完結してMAX_PATH
+    対策済みになるよう統一する。"""
+    with _open_long(uasset_path, "rb") as f:
         data = f.read()
     h = _parse_header_with_offsets(data)
     names, names_end = _read_name_table(data, h.name_offset, h.name_count)
@@ -1583,12 +1681,10 @@ def _flatten_normal_orm_textures(dst_dir, pak, flatten_targets):
             raise _OutfitMaterialPatchError(f"texture not found in vanilla pak: {full_path}")
         new_uexp = _flatten_cooked_texture(extracted[p_uexp], value, len(extracted[p_uasset]))
         new_uasset = _patch_texture_uasset_serial_size(extracted[p_uasset], len(new_uexp))
+        # dev#1101: dst_dir配下の出力パス(MAX_PATH対策)。
         out_path = os.path.join(dst_dir, *rel.split("/"))
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        with open(out_path + ".uasset", "wb") as f:
-            f.write(new_uasset)
-        with open(out_path + ".uexp", "wb") as f:
-            f.write(new_uexp)
+        _write_bytes_long(out_path + ".uasset", new_uasset)
+        _write_bytes_long(out_path + ".uexp", new_uexp)
         n_ok += 1
     print(f"[{TAG}] U46/U47: replaced Normal/ORM/Subsurface textures with flat-value, fully-inline "
           f"versions (.ubulk unused): {n_ok}")
@@ -1731,20 +1827,64 @@ def unify_shadow_ops(shadow_lift, unlit=False):
              ("scalar", "Emissive Texture Intensity", emis)], k)
 
 
-def collect_unified_mi_targets(dst_dir, manifest, limit=2):
+def _effective_extra_excluded_sk_names(manifest, job):
+    """dev#165第2期(2026-08-08): job.get("equipment_filter")が示す「未選択
+    装備」のSKベース名集合を、manifest(まだテンプレートを組み立てていなくても
+    読める静的リスト)から計算する。vp_exclusions.is_excluded(rel,
+    extra_excluded=...)へそのまま渡す想定(グローバル状態は一切変更しない、
+    明示引数のみ)。
+
+    job=None または job.get("equipment_filter")が空/未設定なら**必ず空集合**
+    (=既定・絞り込み無し。呼び出し側のis_excluded()呼び出しが従来と一字一句
+    同じ結果になり、無退行の直接根拠になる)。
+
+    共有MI(1つのMIパスを複数の異なる衣装SKが参照するケース)の巻き添え
+    問題を起こさない理由: この集合は「未選択のSK**だけ**」を指す。呼び出し元
+    (collect_unified_mi_targets/_inject_outfit_body_parka_textures)は
+    「除外されていないSKたちが参照するMIパスの和集合」という既存の構造を
+    保ったまま、判定基準にこの集合を足すだけなので、同じMIパスを非除外SKが
+    1つでも参照していれば、そのMIは対象集合に残り続ける(継続してテスト
+    tests\\equipment_filter_dev165で固定)。
+
+    dev#336(2026-08-08、性別限定、work\\rd_1198_wpb\\PROPOSAL.md §7.2
+    「性別限定は装備限定の縮退形」): job.get("genders")が示す「未選択性別」の
+    SK名集合も同じ和集合へ合成する。job.get("genders")が空/未設定/両性別
+    ならvp_gender_filter.unselected_sk_names_by_gender()は空集合を返す
+    ため、genders未使用の既存ユーザーの結果は不変(④無退行)。equipment_filter
+    とgendersが両方有効なときは「両方の未選択条件のいずれかに該当する
+    SK」が除外される(OR合成、§7.3)——例えばgenders=["Male"]の状態で
+    equipment_filter側がFemale専用装備を選択していても、その装備のSKは
+    性別側の理由で除外され続ける(選択したのに出ない、ではなく「その性別
+    自体を除外しているので出ない」が正しい期待値)。"""
+    if not job:
+        return set()
+    all_names = vp_equipment_filter.outfit_sk_names_from_manifest(manifest)
+    excluded = vp_equipment_filter.unselected_sk_names(all_names, job.get("equipment_filter"))
+    excluded |= vp_gender_filter.unselected_sk_names_by_gender(all_names, job.get("genders"))
+    return excluded
+
+
+def collect_unified_mi_targets(dst_dir, manifest, limit=2, job=None):
     """U50-single: 注入対象の衣装SKが描画スロットで参照するバニラMIパスを
-    全部集める(重複排除・順序安定)。スロット役の割り当ても競合ガードも無い。"""
+    全部集める(重複排除・順序安定)。スロット役の割り当ても競合ガードも無い。
+
+    dev#165第2期: jobを渡すと、job.get("equipment_filter")で選択されな
+    かった装備のSKもここで除外する(MIを対象集合へ持ち込ませない)。
+    job=None(省略)なら固定denylistのみで判定し、従来と一字一句同じ挙動
+    (④無退行の根拠)。"""
     import vp_exclusions
     targets = []
     seen = set()
     skipped = []
     excluded = []
+    extra_excluded = _effective_extra_excluded_sk_names(manifest, job)
     outfit_uassets = sorted(
         rel for rel in manifest["vanilla"]
         if rel.startswith("Player/Outfit/") and rel.endswith(".uasset"))
     for rel in outfit_uassets:
         # U50: 非対応(コラボ系)のSKはMIも差し替えない=バニラの装備がそのまま出る
-        if vp_exclusions.is_excluded(rel):
+        # dev#165第2期: extra_excluded(装備限定で未選択のSK)も同じ扱い
+        if vp_exclusions.is_excluded(rel, extra_excluded=extra_excluded):
             excluded.append(rel)
             continue
         ua = os.path.join(dst_dir, *rel.split("/"))
@@ -1759,7 +1899,8 @@ def collect_unified_mi_targets(dst_dir, manifest, limit=2):
                 seen.add(p)
                 targets.append(p)
     if excluded:
-        print(f"[{TAG}] U50: excluded from MI replacement (unsupported/collab items): {len(excluded)}: "
+        print(f"[{TAG}] U50: excluded from MI replacement (unsupported/collab items, "
+              f"or equipment filter): {len(excluded)}: "
               f"{[os.path.basename(r) for r in excluded]}")
     return targets, skipped
 
@@ -1770,7 +1911,7 @@ def _mi_targets_cache_path(dst_dir):
     return dst_dir.rstrip("\\/") + ".mi_targets.json"
 
 
-def collect_unified_mi_targets_cached(dst_dir, manifest, limit=2):
+def collect_unified_mi_targets_cached(dst_dir, manifest, limit=2, job=None):
     """U50-fast(2026-07-26): collect_unified_mi_targets の結果を使い回す。
 
     この関数はテンプレート内の衣装SK 58件を実際に開いて参照MIパスを読むため
@@ -1780,16 +1921,27 @@ def collect_unified_mi_targets_cached(dst_dir, manifest, limit=2):
 
     フィンガープリントが無い(=ライブ抽出でないテンプレート)ときは
     キャッシュを使わず毎回計算する(鍵が作れないため。安全側)。
+
+    dev#165第2期: jobはcollect_unified_mi_targets()へそのまま渡すだけ
+    (キャッシュキー自体はdst_dirの兄弟`.fingerprint.json`——
+    _live_template_fingerprint()がequipment_filterを含めるため、絞り込み
+    パターンが違えばdst_dir自体が別の共有キャッシュディレクトリになり、
+    この関数のキャッシュも自動的に正しく分離される。ここでの追加対応は
+    「キャッシュミス時の再計算にjobを渡す」だけでよい)。
     """
+    # dev#1101(レビュー差し戻し): fp_path/cache_pathはdst_dirの兄弟(同じ深さ)。
+    # 書き込み側は既に_win_long_path()対策済みのため、読み取り側(existsも
+    # 含む。生のos.path.existsは260文字超で例外は出さず黙ってFalseを返し、
+    # 「常にキャッシュミス」という無言劣化になる)も対にして統一する。
     fp_path = dst_dir.rstrip("\\/") + ".fingerprint.json"
     key = None
-    if os.path.exists(fp_path):
-        with open(fp_path, encoding="utf-8") as f:
+    if os.path.exists(_win_long_path(fp_path)):
+        with _open_long(fp_path, encoding="utf-8") as f:
             key = f.read()
     cache_path = _mi_targets_cache_path(dst_dir)
-    if key is not None and os.path.exists(cache_path):
+    if key is not None and os.path.exists(_win_long_path(cache_path)):
         try:
-            with open(cache_path, encoding="utf-8") as f:
+            with _open_long(cache_path, encoding="utf-8") as f:
                 cached = json.load(f)
             if cached.get("fingerprint") == key:
                 print(f"[{TAG}] U50-fast: reusing {len(cached['targets'])} MI replacement target(s) "
@@ -1797,10 +1949,11 @@ def collect_unified_mi_targets_cached(dst_dir, manifest, limit=2):
                 return list(cached["targets"]), list(cached["skipped"])
         except (ValueError, KeyError, OSError) as e:
             print(f"[{TAG}][WARN] could not read MI target cache ({e}). Rebuilding")
-    targets, skipped = collect_unified_mi_targets(dst_dir, manifest, limit=limit)
+    targets, skipped = collect_unified_mi_targets(dst_dir, manifest, limit=limit, job=job)
     if key is not None:
         try:
-            with open(cache_path, "w", encoding="utf-8") as f:
+            # dev#1101: cache_pathはdst_dirの兄弟(同じ深さ)。MAX_PATH対策。
+            with _open_long(cache_path, "w", encoding="utf-8") as f:
                 json.dump({"fingerprint": key, "targets": targets,
                            "skipped": skipped}, f, ensure_ascii=False)
         except OSError as e:
@@ -1818,32 +1971,56 @@ def unify_base_ops():
     return [("scalar", "Specular", UNIFY_SPECULAR)]
 
 
-def build_unified_mi_variant(pak, ops, tmp_dir):
-    """統一MIの元バイト(t00向き + ops適用済み)を1つ作って返す。
+def unify_src_paths(pak, tmp_dir):
+    """dev#1170 WP-2フォローアップ(合成品Emissive残留修正): 統一MIの元と
+    なるバニラ衣装MI(UNIFY_SRC_GAME_PATH)のバイトをpakから一度だけ抽出し、
+    tmp_dir配下へ書き出してファイルパスを返す((src_uasset_path,
+    src_uexp_path))。
 
-    SRC(バニラ衣装MI)→ _patch_mi_base_texture(t00)→ vp_matparam(ops)
-    という、テンプレート側と高速差し替え側で**完全に同じ**手順。"""
-    import vp_matparam
+    合成エンジン(vp_avatar_compose.py)は装備コード数ぶん(数十〜100件超)
+    build_unified_mi_variant_for_target()を呼ぶため、そのたびにpakから
+    再抽出するのは無駄——呼び出し側がcompose_avatar()の先頭で1回だけ
+    これを呼び、返り値をそのまま全呼び出しへ使い回す想定。"""
     src_rel = UNIFY_SRC_GAME_PATH[len("/Game/Pal/Model/Character/"):]
     keys = [PAK_PREFIX + src_rel + ".uasset", PAK_PREFIX + src_rel + ".uexp"]
     got = pak_live_extract.extract_files(pak, keys)
     if keys[0] not in got or keys[1] not in got:
         raise _OutfitMaterialPatchError(
             f"the vanilla MI used as the unification base is not in the pak: {UNIFY_SRC_GAME_PATH}")
-    os.makedirs(tmp_dir, exist_ok=True)
-    src_ua = os.path.join(tmp_dir, "src.uasset")
-    src_ue = os.path.join(tmp_dir, "src.uexp")
-    with open(src_ua, "wb") as f:
-        f.write(got[keys[0]])
-    with open(src_ue, "wb") as f:
-        f.write(got[keys[1]])
-    out_ua = os.path.join(tmp_dir, "patched_t00.uasset")
-    out_ue = os.path.join(tmp_dir, "patched_t00.uexp")
-    _patch_mi_base_texture(src_ua, src_ue, out_ua, out_ue,
-                           MVP_PACKAGE_PREFIX + "/t00", "t00")
-    with open(out_ua, "rb") as f:
+    # dev#1101: tmp_dirはdst_dir/out_dirの兄弟(同じ深さ)のため、
+    # ここも_win_long_path()経由に統一する。
+    _makedirs_long(tmp_dir)
+    src_ua = os.path.join(tmp_dir, "unify_src.uasset")
+    src_ue = os.path.join(tmp_dir, "unify_src.uexp")
+    _write_bytes_long(src_ua, got[keys[0]])
+    _write_bytes_long(src_ue, got[keys[1]])
+    return src_ua, src_ue
+
+
+def build_unified_mi_variant_for_target(src_ua_path, src_ue_path, target_tex_full,
+                                         target_tex_short, ops, tmp_dir, tag="target"):
+    """統一MIの元バイト(target_tex_full向き + ops適用済み)を1つ作って返す。
+    build_unified_mi_variant()の一般化版(dev#1170 WP-2フォローアップ、
+    合成品Emissive残留修正): Base Textureの向き先を固定の共有t00ではなく
+    任意のターゲットへ変えられるようにした——合成エンジン
+    (vp_avatar_compose.py)は装備コードごとに別々のBase Texture実ファイル
+    (ライブラリエントリのアトラスを個別に焼き込んだ、それぞれのバニラ
+    "_B"パス)へ向ける必要があり、単一の共有t00を前提にできないため。
+
+    SRC(バニラ衣装MI、src_ua_path/src_ue_pathとして既に抽出済み)→
+    _patch_mi_base_texture(target)→ vp_matparam(ops) という、
+    build_unified_mi_variant()と**完全に同じ**手順(内部で使う一時
+    ファイル名だけがtagで分離される——同一tmp_dirを多数回呼んでも
+    衝突しない)。"""
+    import vp_matparam
+    _makedirs_long(tmp_dir)
+    out_ua = os.path.join(tmp_dir, f"patched_{tag}.uasset")
+    out_ue = os.path.join(tmp_dir, f"patched_{tag}.uexp")
+    _patch_mi_base_texture(src_ua_path, src_ue_path, out_ua, out_ue,
+                           target_tex_full, target_tex_short)
+    with _open_long(out_ua, "rb") as f:
         va = f.read()
-    with open(out_ue, "rb") as f:
+    with _open_long(out_ue, "rb") as f:
         ve = f.read()
     oplog = []
     if ops:
@@ -1851,18 +2028,81 @@ def build_unified_mi_variant(pak, ops, tmp_dir):
     return va, ve, oplog
 
 
+def build_unified_mi_variant(pak, ops, tmp_dir):
+    """統一MIの元バイト(t00向き + ops適用済み)を1つ作って返す。
+
+    SRC(バニラ衣装MI)→ _patch_mi_base_texture(t00)→ vp_matparam(ops)
+    という、テンプレート側と高速差し替え側で**完全に同じ**手順。
+
+    dev#1170 WP-2フォローアップ: 内部実装をunify_src_paths()+
+    build_unified_mi_variant_for_target()(t00固定)への薄い委譲へ変更した
+    (戻り値のバイト列は従来と完全に同一——出力するta/ueのバイト内容自体は
+    どちらの実装でも同じ手順(同じSRC→同じ_patch_mi_base_texture呼び出し→
+    同じops)で作られるため、無退行)。"""
+    src_ua, src_ue = unify_src_paths(pak, tmp_dir)
+    return build_unified_mi_variant_for_target(
+        src_ua, src_ue, MVP_PACKAGE_PREFIX + "/t00", "t00", ops, tmp_dir, tag="t00")
+
+
+def unify_src_normal_orm_flatten_targets(pak, tmp_dir):
+    """dev#165第2期バグ修正(2026-08-08、実機報告=選択装備の顔・服に別物の
+    法線(皺)が乗る): UNIFY_SRC_GAME_PATH自身(`_unify_slot_materials()`が
+    統一MIの元バイトとして使うバニラ衣装MI、SK_Player_Female_Outfit_
+    OldCloth001)が参照するNormal Map/ORM/Subsurface Textureの完全パッケージ
+    パスを検出する。
+
+    **バグの構造**: `_inject_outfit_body_parka_textures()`の通常ループは
+    `_effective_extra_excluded_sk_names()`(job.get("equipment_filter")の
+    未選択装備)で除外されたSKをスキップしてflatten_targetsへ加えない。
+    equipment_filterでOldCloth001自身が未選択のとき、このSKも通常ループから
+    除外されるため、そのNormal Map/ORMは一切flatten(中立化)されなくなる。
+    しかし`_unify_slot_materials()`は equipment_filter の状態に**一切関係
+    なく**、常にこのMIのバイト(Base Textureとshadow_lift関連スカラーだけ
+    変更)を全ての選択装備のMIパスへそのまま複製するため、Normal Map/ORMの
+    import table自体はこのMI自身のバニラ値を指したまま出荷される。参照先
+    テクスチャをflattenしないと、選択装備(実際に出荷されるアバター化衣装)
+    がOldCloth001の生のバニラ法線(=別物の衣装の皺)をそのまま表示して
+    しまう。
+
+    **呼び出し側の契約**: equipment_filterの状態に関わらず**常に**この
+    関数を呼び、戻り値をflatten_targetsへマージすること。既定(フィルタ
+    無し)の場合、OldCloth001は通常ループで既にスキャン済みのため、ここで
+    検出されるターゲットは通常ループの結果と同じ値で重複するだけで最終
+    出力は変わらない(④無退行の根拠。tests\\equipment_filter_dev165\\
+    test_live_template_normal_flatten_dev165.pyで固定)。"""
+    src_rel = UNIFY_SRC_GAME_PATH[len("/Game/Pal/Model/Character/"):]
+    keys = [PAK_PREFIX + src_rel + ".uasset", PAK_PREFIX + src_rel + ".uexp"]
+    got = pak_live_extract.extract_files(pak, keys)
+    if keys[0] not in got or keys[1] not in got:
+        raise _OutfitMaterialPatchError(
+            f"the vanilla MI used as the unification base is not in the pak: {UNIFY_SRC_GAME_PATH}")
+    _makedirs_long(tmp_dir)
+    src_ua = os.path.join(tmp_dir, "unify_src_flatten.uasset")
+    src_ue = os.path.join(tmp_dir, "unify_src_flatten.uexp")
+    _write_bytes_long(src_ua, got[keys[0]])
+    _write_bytes_long(src_ue, got[keys[1]])
+    mi_h, mi_names, mi_imports = _read_header_and_tables_for_flatten(_win_long_path(src_ua))
+    with _open_long(src_ue, "rb") as f:
+        uexp_bytes = f.read()
+    return _collect_flatten_targets(uexp_bytes, mi_names, mi_imports)
+
+
 def write_unified_mis(targets, va, ve, out_root):
-    """統一MIの元バイトを、各対象パッケージパスへ改名複製して書き出す。"""
+    """統一MIの元バイトを、各対象パッケージパスへ改名複製して書き出す。
+
+    dev#1101(実報告FJRHUZVY): out_root(work_root配下・UNC等でありうる)+
+    Player/Outfit以下の相対パスの連結が260文字を超えFileNotFoundErrorに
+    なる実例があった。dev#458/PR#746のMAX_PATH対策は別の書き込み経路
+    (`_inject_outfit_body_parka_textures`の一時ファイル)にしか適用されて
+    おらず、この関数は素通しだった。`_write_bytes_long()`(`_win_long_path()`
+    経由)で統一する。"""
     n = 0
     for full_path in targets:
         new_uasset, new_uexp = _clone_mvp_mic_as(va, ve, full_path)
         rel = full_path[len("/Game/Pal/Model/Character/"):]
         out_path = os.path.join(out_root, *rel.split("/"))
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        with open(out_path + ".uasset", "wb") as f:
-            f.write(new_uasset)
-        with open(out_path + ".uexp", "wb") as f:
-            f.write(new_uexp)
+        _write_bytes_long(out_path + ".uasset", new_uasset)
+        _write_bytes_long(out_path + ".uexp", new_uexp)
         n += 1
     return n
 
@@ -1891,20 +2131,21 @@ def _unify_slot_materials(dst_dir, pak, manifest, job):
     その結果**テンプレートは shadow_lift に依存しない**ので、
     フィンガープリントからも外せる。"""
     ops = unify_base_ops()
-    targets, skipped = collect_unified_mi_targets(dst_dir, manifest)
+    targets, skipped = collect_unified_mi_targets(dst_dir, manifest, job=job)
     if skipped:
         print(f"[{TAG}] U50-single: SK where MI path detection failed: {len(skipped)}: {skipped}")
     if not targets:
         raise _OutfitMaterialPatchError("no MI path found to unify")
 
     tmp_dir = dst_dir.rstrip("\\/") + "_unify_tmp"
-    if os.path.isdir(tmp_dir):
-        shutil.rmtree(tmp_dir)
+    # dev#1101: tmp_dirはdst_dirの兄弟(同じ深さ)。MAX_PATH対策。
+    if os.path.isdir(_win_long_path(tmp_dir)):
+        shutil.rmtree(_win_long_path(tmp_dir))
     va, ve, oplog = build_unified_mi_variant(pak, ops, tmp_dir)
     for line in oplog:
         print(f"[{TAG}] U50-single   {line}")
     n = write_unified_mis(targets, va, ve, dst_dir)
-    shutil.rmtree(tmp_dir, ignore_errors=True)
+    shutil.rmtree(_win_long_path(tmp_dir), ignore_errors=True)
     print(f"[{TAG}] U50-single: replaced {n} draw-slot-referenced MI with **one** unified MI (SRC="
           f"{UNIFY_SRC_GAME_PATH.rsplit('/', 1)[-1]}, Base Texture=t00) "
           f"(shadow_lift-independent. Shadow depth is patched right before pak generation)")
@@ -1932,10 +2173,12 @@ def build_shadow_mi_overrides(job, dst_dir, out_dir, pak=None, manifest=None):
                                 unlit=bool(job.get("unlit", False)))
     info = {"k": k, "n": 0, "uexp_sha1": None}
     tmp_dir = out_dir.rstrip("\\/") + "_tmp"
-    if os.path.isdir(tmp_dir):
-        shutil.rmtree(tmp_dir)
-    if os.path.isdir(out_dir):
-        shutil.rmtree(out_dir)
+    # dev#1101: out_dir/tmp_dirはwork_root配下(可変・UNC等)。既存の
+    # dev#458パターン(_win_long_path()経由のisdir/rmtree)に合わせる。
+    if os.path.isdir(_win_long_path(tmp_dir)):
+        shutil.rmtree(_win_long_path(tmp_dir))
+    if os.path.isdir(_win_long_path(out_dir)):
+        shutil.rmtree(_win_long_path(out_dir))
     if _U50_UNIFY_DISABLE:
         # 統一を切っているテンプレートへ統一MIだけ差し込むと、切り分けの
         # 意図(統一なしの絵を見る)を無言で壊す。何もしない。
@@ -1950,17 +2193,17 @@ def build_shadow_mi_overrides(job, dst_dir, out_dir, pak=None, manifest=None):
         pak = job["paths"]["palworld_pak"]
     if manifest is None:
         manifest = _load_manifest()
-    targets, _skipped = collect_unified_mi_targets_cached(dst_dir, manifest)
+    targets, _skipped = collect_unified_mi_targets_cached(dst_dir, manifest, job=job)
     if not targets:
         raise _OutfitMaterialPatchError("no MI path found to unify")
 
     ops = unify_base_ops() + k_ops
-    os.makedirs(out_dir, exist_ok=True)
+    _makedirs_long(out_dir)
     va, ve, oplog = build_unified_mi_variant(pak, ops, tmp_dir)
     for line in oplog:
         print(f"[{TAG}] U50-fast   {line}")
     n = write_unified_mis(targets, va, ve, out_dir)
-    shutil.rmtree(tmp_dir, ignore_errors=True)
+    shutil.rmtree(_win_long_path(tmp_dir), ignore_errors=True)
     info["n"] = n
     info["uexp_sha1"] = hashlib.sha1(ve).hexdigest()
     print(f"[{TAG}] U50-fast: baked shadow depth k={k:.4f} into {n} unified MI "
@@ -2134,6 +2377,295 @@ def _clone_mvp_mic_as(src_uasset_bytes, src_uexp_bytes, target_package_path, for
     return bytes(v2), src_uexp_bytes
 
 
+# ============================================================================
+# WP-B6(dev#1198系、work\rd_1198_wpb\PROPOSAL.md §6): 素体テクスチャ(肌)の
+# 選択化 — SK importテーブル再配線。
+#
+# 背景: 描画スロット0(body)が参照する共有MI(MI_Player_{Male,Female}_Body)は
+# バニラの設計で「1つのパッケージパスを非常に多くの衣装SKが共有参照する」
+# ファイルであり、このパス自体の中身を書き換える既存方式
+# (_unify_slot_materials/_inject_outfit_body_parka_textures)は「選択された
+# 装備だけ」を対象にできない——同じパスを未選択の衣装も参照するため、
+# 書き換えは全衣装へ波及する(work\rd_bodytex\PROPOSAL.md §2で構造分析済み)。
+# オーナー原文(dev#277、rd_1198_wpb/PROPOSAL.md §6.2再掲):
+#   「アバター差し変えしていない装備は、pak未適用と遜色なきこと=肌色も
+#    ここに含まれる」
+#
+# 本節はこの限界を、SK側のimportテーブルを再配線する方式で解決する
+# (rd_1198_wpb/PROPOSAL.md §6.3 Option A採用)。設計の要点:
+#   1. 複製先パッケージパスは「元とleaf(オブジェクト名)が同一、直前に
+#      専用サブフォルダを1つ挟むだけ」にする(avatar_body_mi_package_path)。
+#      これにより_clone_mvp_mic_as(既存機構)は複製先ファイル自身の
+#      NameTableへの追記が不要になる(exportのobject nameが複製元と
+#      既に同名で一致するため、_mic_clone_rename_export0が早期リターン
+#      する=「既存インデックス流用」経路を通る)。
+#   2. 選択SK側は、Materials[]が参照するMaterial importの**outer(Package
+#      import)**のObjectName FName**1件だけ**を新パッケージパスへ向け直す。
+#      Import**エントリ数**は不変(新規importの追加ではなく、既存1件が
+#      指す文字列を差し替えるだけ)。SK自身のNameTableには新パス文字列
+#      1件だけを末尾追記する(_mic_clone_rename_export0と同型のNameMap
+#      追記+オフセットシフト機構を、export改名ではなくimport1件のFName
+#      差し替えへ転用)。
+#   3. uexpは一切触らない(Materials[]配列の中身はimportの**index**への
+#      参照(FPackageIndex)であり、importのindex自体は不変のため)。
+#
+# H1/H2(T1/T2旧設計、SKへの新規import追記方式)との質的な違い
+# (PROPOSAL.md §6.3の比較表):
+#   - PreloadDependencies配列: import**個数**が不変のため変更不要
+#     (H1=新規importのPreloadDependencies未登録、の震源が構造的に存在しない)
+#   - ClassName不一致(H2): 複製先はバニラMI自身のクローンであり、同一
+#     クラス(MaterialInstanceConstant)なので型不一致が原理的に起きない
+#   - ExportMap/オフセット: NameTableへの追加は「複製先パッケージパス
+#     文字列」1件のみ。Importエントリ数自体は不変
+# ただし「SKのimportテーブルという内部構造を書き換える」というクラス自体は
+# 完全には避けられない(FName1件の新規追加=NameTableサイズ変化=それに
+# 続くオフセット類の再計算は依然として必要)。H1/H2より狭いが、ゼロリスクでは
+# ない(PROPOSAL.md §6.3の評価どおり)。
+#
+# 安全設計(PROPOSAL.md §2.3の踏襲、本節すべてに適用):
+#   - 行/import選定は名前ベース(FName参照)。固定オフセットで「N番目の
+#     import」を仮定しない。
+#   - 書き込み前後の両方で構造検証を行う(name/import/exportテーブルの
+#     終端整合を書き込み前に確認し、書き込み後は再パースして検証する)。
+#   - どれか1つでも想定外なら例外を送出し変換全体を止める(スキップして
+#     続行しない)。
+#
+# なお本節はF3(装備限定、dev#165)が呼び出す「再配線の機構」だけを提供する。
+# 「どのSKを選択/未選択とするか」の判定(equipment_filter)自体、および
+# 既定ビルド(全装備選択)への配線は本WP(WP-B6)のスコープ外
+# (rd_1198_wpb/PROPOSAL.md §10.2、WP-B6の受入は機構の正しさとバイト検証まで)。
+# ============================================================================
+
+_AVATAR_BODY_MI_SUBFOLDER = "AvatarSelect"
+
+# WP-B6専用のモジュールレベル定数。_inject_outfit_body_parka_textures()
+# 内の同名ローカル変数(_FORCED_BODY_MI_SUFFIXES、関数ローカルでこの節から
+# 参照できない)と値は同一だが、既存関数への変更を避けるため独立に持つ
+# (値の二重管理を避けたい場合は将来どちらかへ統合してよいが、本WPの
+# スコープ外——既存コードへの不要な変更を避ける)。
+_BODY_MI_SUFFIXES = ("/MI_Player_Male_Body", "/MI_Player_Female_Body")
+
+
+def avatar_body_mi_package_path(old_full_path):
+    """WP-B6: 素体共有MI(MI_Player_{Male,Female}_Body)の複製先パッケージ
+    パスを計算する。_BODY_MI_SUFFIXESのいずれかで終わるパスのみ
+    受け付ける(名前ベースの安全ガード。他のMIパスを誤って対象にしない
+    ため即座に例外で停止する)。leafは元と同一のまま、直前に専用サブフォルダ
+    (_AVATAR_BODY_MI_SUBFOLDER)を1つ挟む——これにより_clone_mvp_mic_asは
+    複製先自身のNameTableへの追記が不要になる(モジュールdocstring参照)。"""
+    if not any(old_full_path.endswith(suf) for suf in _BODY_MI_SUFFIXES):
+        raise _OutfitMaterialPatchError(
+            f"WP-B6: not a body MI path (expected suffix in {_BODY_MI_SUFFIXES}): {old_full_path}")
+    parent, leaf = old_full_path.rsplit("/", 1)
+    return f"{parent}/{_AVATAR_BODY_MI_SUBFOLDER}/{leaf}"
+
+
+def clone_avatar_body_mi(src_uasset_bytes, src_uexp_bytes, old_full_path):
+    """WP-B6: バニラ素体MI(MI_Player_{Male,Female}_Body)のバイトを、
+    avatar_body_mi_package_path()が計算する新パッケージパスへ複製する
+    (既存の_clone_mvp_mic_asをそのまま利用、leaf名が同一のため複製先
+    自身へのNameTable追記は発生しない)。
+
+    戻り値: (new_uasset_bytes, new_uexp_bytes, new_full_path)。
+
+    実際のBase Texture差し替え(アバターのt00を参照させる)は呼び出し側の
+    責務(_patch_mi_base_texture等、既存の各MI編集機構をそのまま複製後の
+    バイトへ適用できる——このMICの構造自体は複製前後で変わらないため)。"""
+    new_full_path = avatar_body_mi_package_path(old_full_path)
+    new_uasset, new_uexp = _clone_mvp_mic_as(src_uasset_bytes, src_uexp_bytes, new_full_path)
+    return new_uasset, new_uexp, new_full_path
+
+
+def find_sk_body_mi_package_imports(uasset_bytes):
+    """WP-B6: SKのimportテーブルを読み取り専用でパースし、Package-class
+    importのうちObjectNameが_BODY_MI_SUFFIXESのいずれかに一致する
+    ものを列挙する。
+
+    戻り値: {full_path: import_0based_index}。このSKが素体共有MIを
+    一切参照していなければ空dict(単一マテリアル衣装や、参照が無い
+    ケース等。呼び出し元はこれを正常系として扱う——エラーではない)。"""
+    h = _parse_header_with_offsets(uasset_bytes)
+    names, names_end = _read_name_table(uasset_bytes, h.name_offset, h.name_count)
+    if names_end != h.import_offset:
+        raise _OutfitMaterialPatchError(
+            f"WP-B6: name table end ({names_end}) != import_offset ({h.import_offset})")
+    off = h.import_offset
+    imports = []
+    for _ in range(h.import_count):
+        imp, off = _parse_import(uasset_bytes, off)
+        imports.append(imp)
+    if off != h.export_offset:
+        raise _OutfitMaterialPatchError(
+            f"WP-B6: import table end ({off}) != export_offset ({h.export_offset})")
+
+    found = {}
+    for i, imp in enumerate(imports):
+        cn = names[imp["class_name_idx"]] if 0 <= imp["class_name_idx"] < len(names) else None
+        if cn != "Package":
+            continue
+        on = names[imp["object_name_idx"]] if 0 <= imp["object_name_idx"] < len(names) else None
+        if on is not None and any(on.endswith(suf) for suf in _BODY_MI_SUFFIXES):
+            found[on] = i
+    return found
+
+
+def retarget_sk_body_mi_imports(uasset_bytes, path_map):
+    """WP-B6(PROPOSAL.md §6.3): SKのimportテーブルのうち、path_mapのキー
+    (元の素体共有MIフルパス)に一致するPackage importのObjectName FName
+    だけを、対応する値(新パッケージパス)へ向け直す。
+
+    path_map: {old_full_path: new_full_path, ...}(通常は
+    avatar_body_mi_package_path()の戻り値をvalueに使う)。
+
+    path_mapに一致するimportが1件も無ければ、**無改変のまま**
+    `(uasset_bytes, 0, [])` を返す(このSKが素体共有MIを参照していない、
+    という正常系。呼び出し元はエラー扱いしない)。
+
+    uexpは一切変更しない(呼び出し側は入力uexpをそのまま使い回せる)
+    ——Materials[]配列の中身はimportの**index**を参照するのみで、
+    このindex自体は不変のため(モジュールdocstring参照)。"""
+    h = _parse_header_with_offsets(uasset_bytes)
+    names, names_end = _read_name_table(uasset_bytes, h.name_offset, h.name_count)
+    if names_end != h.import_offset:
+        raise _OutfitMaterialPatchError(
+            f"WP-B6: name table end ({names_end}) != import_offset ({h.import_offset})")
+    off = h.import_offset
+    imports = []
+    for _ in range(h.import_count):
+        imp, off = _parse_import(uasset_bytes, off)
+        imports.append(imp)
+    if off != h.export_offset:
+        raise _OutfitMaterialPatchError(
+            f"WP-B6: import table end ({off}) != export_offset ({h.export_offset})")
+
+    name_index = {s: i for i, s in enumerate(names)}
+    targets = []  # [(import_dict, new_full_path), ...]
+    for imp in imports:
+        cn = names[imp["class_name_idx"]] if 0 <= imp["class_name_idx"] < len(names) else None
+        if cn != "Package":
+            continue
+        on = names[imp["object_name_idx"]] if 0 <= imp["object_name_idx"] < len(names) else None
+        if on in path_map:
+            targets.append((imp, path_map[on]))
+
+    if not targets:
+        return uasset_bytes, 0, []
+
+    new_names = []
+    resolved = {}
+    for _imp, new_path in targets:
+        if new_path in name_index:
+            resolved[new_path] = name_index[new_path]
+        elif new_path not in resolved:
+            resolved[new_path] = h.name_count + len(new_names)
+            new_names.append(new_path)
+    name_insert_bytes = b"".join(_encode_name(s) for s in new_names)
+    name_delta = len(name_insert_bytes)
+
+    P1 = h.import_offset
+    new_data = bytearray(uasset_bytes[:P1] + name_insert_bytes + uasset_bytes[P1:])
+
+    def patch_i32(field_off, new_val):
+        struct.pack_into("<i", new_data, field_off, new_val)
+
+    def patch_i64(field_off, new_val):
+        struct.pack_into("<q", new_data, field_off, new_val)
+
+    # NameMap末尾追記に伴うオフセットシフト(_mic_clone_rename_export0と
+    # 同型。新規Importエントリは追加しないため import_count/export_count
+    # は不変)。
+    patch_i32(h.total_header_size_off, len(new_data))
+    patch_i32(h.name_count_off, h.name_count + len(new_names))
+    patch_i32(h.soft_object_paths_offset_off, P1 + name_delta)
+    patch_i32(h.import_offset_off, P1 + name_delta)
+    patch_i32(h.export_offset_off, h.export_offset + name_delta)
+    patch_i32(h.depends_offset_off, h.depends_offset + name_delta)
+    if h.soft_package_references_offset != 0:
+        patch_i32(h.soft_package_references_offset_off, h.soft_package_references_offset + name_delta)
+    if h.searchable_names_offset != 0:
+        patch_i32(h.searchable_names_offset_off, h.searchable_names_offset + name_delta)
+    if h.thumbnail_table_offset != 0:
+        patch_i32(h.thumbnail_table_offset_off, h.thumbnail_table_offset + name_delta)
+    if h.asset_registry_data_offset != 0:
+        patch_i32(h.asset_registry_data_offset_off, h.asset_registry_data_offset + name_delta)
+    patch_i64(h.bulk_data_start_offset_off, h.bulk_data_start_offset + name_delta)
+    if h.world_tile_info_data_offset != 0:
+        patch_i32(h.world_tile_info_data_offset_off, h.world_tile_info_data_offset + name_delta)
+    if h.preload_dependency_offset != 0:
+        patch_i32(h.preload_dependency_offset_off, h.preload_dependency_offset + name_delta)
+    if h.payload_toc_offset != -1:
+        patch_i64(h.payload_toc_offset_off, h.payload_toc_offset + name_delta)
+
+    # PreloadDependenciesは意図的に不変のまま(import個数・indexが変わら
+    # ないため。モジュールdocstring参照)。preload_dependency_count_off・
+    # preload_dependency配列の中身はどちらも一切パッチしない。
+
+    new_export_offset = h.export_offset + name_delta
+    eoff = new_export_offset
+    for _ in range(h.export_count):
+        entry, eoff = puh.parse_export_entry(new_data, eoff)
+        old_so = struct.unpack_from("<q", new_data, entry["serial_size_offset"] + 8)[0]
+        struct.pack_into("<q", new_data, entry["serial_size_offset"] + 8, old_so + name_delta)
+
+    retargeted = []
+    for imp, new_path in targets:
+        new_idx = resolved[new_path]
+        # _parse_importのレイアウト(32byte、_encode_importと対): cp(8)+
+        # cn(8)+outer(4) = 20byte目からObjectName FName(index@+0, number@+4)。
+        entry_off = imp["start"] + name_delta + 20
+        struct.pack_into("<i", new_data, entry_off, new_idx)
+        retargeted.append(new_path)
+
+    new_bytes = bytes(new_data)
+
+    # --- 書き込み後の構造検証(必須、PROPOSAL.md §2.3) ---
+    h2 = _parse_header_with_offsets(new_bytes)
+    if h2.import_count != h.import_count:
+        raise _OutfitMaterialPatchError(
+            f"WP-B6: post-write verification failed: import_count changed "
+            f"({h.import_count} -> {h2.import_count}), expected unchanged")
+    if h2.export_count != h.export_count:
+        raise _OutfitMaterialPatchError(
+            f"WP-B6: post-write verification failed: export_count changed "
+            f"({h.export_count} -> {h2.export_count}), expected unchanged")
+    names2, names2_end = _read_name_table(new_bytes, h2.name_offset, h2.name_count)
+    if names2_end != h2.import_offset:
+        raise _OutfitMaterialPatchError(
+            f"WP-B6: post-write verification failed: name table end ({names2_end}) "
+            f"!= import_offset ({h2.import_offset})")
+    off2 = h2.import_offset
+    imports2 = []
+    for _ in range(h2.import_count):
+        imp2, off2 = _parse_import(new_bytes, off2)
+        imports2.append(imp2)
+    if off2 != h2.export_offset:
+        raise _OutfitMaterialPatchError(
+            f"WP-B6: post-write verification failed: import table end ({off2}) "
+            f"!= export_offset ({h2.export_offset})")
+    off2e = h2.export_offset
+    for _ in range(h2.export_count):
+        _entry2, off2e = puh.parse_export_entry(new_bytes, off2e)
+    if off2e != h2.depends_offset:
+        raise _OutfitMaterialPatchError(
+            f"WP-B6: post-write verification failed: export table end ({off2e}) "
+            f"!= depends_offset ({h2.depends_offset})")
+    resolved_paths = set()
+    for imp2 in imports2:
+        cn2 = names2[imp2["class_name_idx"]] if 0 <= imp2["class_name_idx"] < len(names2) else None
+        if cn2 != "Package":
+            continue
+        on2 = names2[imp2["object_name_idx"]] if 0 <= imp2["object_name_idx"] < len(names2) else None
+        if on2 is not None:
+            resolved_paths.add(on2)
+    for new_path in retargeted:
+        if new_path not in resolved_paths:
+            raise _OutfitMaterialPatchError(
+                f"WP-B6: post-write verification failed: retargeted path not "
+                f"resolvable after re-parse: {new_path}")
+
+    return new_bytes, len(retargeted), retargeted
+
+
 # P1-2(案i採用): ShadowLiftをここで複製元uexpへ直接焼き込む。既存の
 # convert_noue.py:find_shadow_lift_offset/patch_shadow_lift(328-361行)と
 # 同一ロジックだが、convert_noue.pyはモジュールトップレベルでlive_template
@@ -2147,6 +2679,96 @@ def _clone_mvp_mic_as(src_uasset_bytes, src_uexp_bytes, target_package_path, for
 # その場でShadowLiftを焼き込む以外に整合を取る方法が無い(案iiは
 # build_pak_from_avatar.py側への設計の寄せ替えを要し、Phase1の最小実装
 # 方針に反すると判断した)。
+# ============================================================================
+# F3a(dev#1198系、work\rd_1198_wpb\PROPOSAL.md §6.3、WP-B6機構の呼び出し
+# 配線): equipment_filter有効時の共有素体MI巻き添え防止。
+#
+# `_inject_outfit_body_parka_textures()`内の`is_forced_body`分岐から呼ばれる。
+# 独立関数として切り出しているのは、周辺(pak抽出・Normal/ORM平坦化収集・
+# tmp_dir管理)の複雑さから隔離し、単体テスト可能にするため
+# (tests\equipment_filter_dev165\test_live_template_f3a_avatar_select_body_mi.py
+# 参照)。
+# ============================================================================
+def _f3a_avatar_select_body_mi(tmp_dir, dst_dir, full_path, target_full, target_short,
+                                vanilla_uasset_bytes, vanilla_uexp_bytes, owner_rels):
+    """共有素体MI(full_path)をAvatarSelect複製先へ複製・Base Texture焼き込みし、
+    owner_rels(このMIを参照する選択済みOutfit SKの.uasset相対パスのリスト、
+    denylist/equipment_filterで除外されたSKは含まれない前提)のimportテーブル
+    だけをそちらへretargetする。**full_path自体(共有ファイル)には一切
+    書き込まない**——呼び出し元はこの関数の後、通常の
+    「バニラMI抽出+_patch_mi_base_texture(target=full_path)」経路を
+    スキップしなければならない(_inject_outfit_body_parka_texturesの
+    `continue`参照)。
+
+    owner_relsが空、またはretarget_sk_body_mi_imports()がいずれかのSKで
+    1件もヒットしない場合は _OutfitMaterialPatchError で停止する
+    (想定外を静かに無視しない、PROPOSAL.md §2.3の安全設計)。
+
+    U46/U47(Normal/ORM/Subsurfaceテクスチャの平坦化)対応: clone_avatar_body_mi
+    はバニラMIのimport/uexpをそのまま複製する(_clone_mvp_mic_asのdocstring
+    「import/PreloadDependencies/uexpは無改変」参照)ため、複製先も元と
+    **同一のNormal/ORM/Subsurfaceテクスチャ参照**を持つ。共有パスへの
+    従来経路(このfull_path自体)が担っていたU46/U47の平坦化対象検出を、
+    ここでも同じ入力(バニラバイト、imports/uexpは複製後も不変なので
+    どちらから読んでも同じ結果)に対して行い、呼び出し元のflatten_targets
+    dictへ合流させる責務を返り値で果たす(検出失敗は安全側スキップ、
+    既存の generic 経路と同じtry/except方針)。
+
+    戻り値: (new_full_path, n_retargeted_sk, flatten_targets)。"""
+    if not owner_rels:
+        raise _OutfitMaterialPatchError(
+            f"F3a: no owning outfit SK given for forced body MI (unexpected): {full_path}")
+
+    # U46/U47: 平坦化対象の収集(パッチ前のバニラ状態から読み取り専用で検出。
+    # generic経路のU46コメント参照。複製先へ焼き込む前のバイトを使う)。
+    vanilla_rel = full_path[len("/Game/Pal/Model/Character/"):]
+    vanilla_safe = vanilla_rel.replace("/", "_")
+    vanilla_tmp_uasset = os.path.join(tmp_dir, vanilla_safe + ".uasset")
+    vanilla_tmp_uexp = os.path.join(tmp_dir, vanilla_safe + ".uexp")
+    _write_bytes_long(vanilla_tmp_uasset, vanilla_uasset_bytes)
+    _write_bytes_long(vanilla_tmp_uexp, vanilla_uexp_bytes)
+    flatten_targets = {}
+    try:
+        mi_h, mi_names, mi_imports = _read_header_and_tables_for_flatten(_win_long_path(vanilla_tmp_uasset))
+        with open(_win_long_path(vanilla_tmp_uexp), "rb") as f:
+            mi_uexp_bytes = f.read()
+        flatten_targets.update(_collect_flatten_targets(mi_uexp_bytes, mi_names, mi_imports))
+    except _OutfitMaterialPatchError:
+        pass  # 検出失敗は安全側スキップ(generic経路と同じ方針)
+
+    clone_uasset, clone_uexp, new_full_path = clone_avatar_body_mi(
+        vanilla_uasset_bytes, vanilla_uexp_bytes, full_path)
+    new_rel = new_full_path[len("/Game/Pal/Model/Character/"):]
+    safe = new_rel.replace("/", "_")
+    clone_tmp_uasset = os.path.join(tmp_dir, safe + ".uasset")
+    clone_tmp_uexp = os.path.join(tmp_dir, safe + ".uexp")
+    _write_bytes_long(clone_tmp_uasset, clone_uasset)
+    _write_bytes_long(clone_tmp_uexp, clone_uexp)
+    out_path = os.path.join(dst_dir, *new_rel.split("/"))
+    _patch_mi_base_texture(_win_long_path(clone_tmp_uasset), _win_long_path(clone_tmp_uexp),
+                            out_path + ".uasset", out_path + ".uexp",
+                            target_full, target_short)
+
+    n_retargeted_sk = 0
+    for owner_rel in owner_rels:
+        sk_uasset_path = os.path.join(dst_dir, *owner_rel.split("/"))
+        with _open_long(sk_uasset_path, "rb") as f:
+            sk_uasset_bytes = f.read()
+        new_sk_bytes, n_hits, _retargeted_paths = retarget_sk_body_mi_imports(
+            sk_uasset_bytes, {full_path: new_full_path})
+        if n_hits == 0:
+            raise _OutfitMaterialPatchError(
+                f"F3a: SK {owner_rel} was detected referencing {full_path} but "
+                f"retarget_sk_body_mi_imports() found no matching import (unexpected)")
+        _write_bytes_long(sk_uasset_path, new_sk_bytes)
+        n_retargeted_sk += 1
+
+    print(f"[{TAG}] F3a: equipment_filter active - cloned {full_path} -> {new_full_path}, "
+          f"retargeted {n_retargeted_sk} selected outfit SK import(s), "
+          f"shared vanilla MI left byte-unchanged")
+    return new_full_path, n_retargeted_sk, flatten_targets
+
+
 def _mic_find_shadow_lift_offset(data):
     """clone_mic_proto.py/convert_noue.pyのfind_shadow_lift_offsetと
     同一ロジック(移植のみ)。FMaterialParameterInfoのIndex(-1、4byteの
@@ -2165,6 +2787,72 @@ def _mic_patch_shadow_lift(uexp_bytes, value):
     off = _mic_find_shadow_lift_offset(bytes(data))
     struct.pack_into("<f", data, off, float(value))
     return bytes(data)
+
+
+def _win_long_path(path):
+    r"""Windows拡張長パス(`\\?\` 接頭辞)を付与し、MAX_PATH(260)制限を回避する。
+
+    dev#458(実ユーザー報告JB5ZGBJC): work_rootがUNC共有配下等の深い場所にあると、
+    T3のMI(Material Instance)差し替えで使う一時uasset/uexp(`_mi_tmp_src`配下、
+    ファイル名はMIパッケージ相対パスの `/` を `_` に置換したもの)の書き込みパスが
+    260文字を超え、`FileNotFoundError` で失敗した(ログは伏字化されており
+    `len=256 unc=true` のみ判明)。
+
+    `\\?\` 接頭辞はNTのファイルI/O API自体が昔からサポートする拡張長パス指定で、
+    絶対・正規化済み(区切りは`\`統一、`.`/`..`を含まない)パスにしか使えないため、
+    まず`os.path.abspath()`で正規化する。UNCパス(`\\server\share\...`)は素の
+    `\\?\` 直付けでは機能せず、`\\?\UNC\server\share\...` という別形式が必要
+    (Win32の既知仕様。実報告が`unc=true`のためここを外すと直らない)。
+    既に`\\?\`済みならそのまま返す。非Windowsではパス表現が異なるため何もしない。
+    """
+    if os.name != "nt":
+        return path
+    ap = os.path.abspath(path)
+    if ap.startswith("\\\\?\\"):
+        return ap
+    if ap.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + ap[2:]
+    return "\\\\?\\" + ap
+
+
+def _open_long(path, mode="r", **kwargs):
+    """MAX_PATH対策込みのopen()(dev#458/dev#1101)。
+
+    `_win_long_path()`は`_inject_outfit_body_parka_textures`内の一時ファイル
+    (`_mi_tmp_src`)にしか適用されておらず、`write_unified_mis()`
+    (U50-single統一MI経路)を含む他の書き込み/コピー経路は未対策のまま
+    残っていた(dev#1101実報告FJRHUZVY: `write_unified_mis()`が
+    `FileNotFoundError len=257 unc=true`で失敗)。dst_dir/build_dir/out_dir/
+    tmp_dirはいずれもwork_root(可変・UNC等)を基底に持つため、そこから
+    組み立てるパスはすべて260文字超のリスクがある。個別のopen()呼び出し
+    箇所へ`_win_long_path()`を都度書くのは3箇所を超えたため(入口で正規化
+    の原則)、この関数へ集約する。"""
+    return open(_win_long_path(path), mode, **kwargs)
+
+
+def _makedirs_long(path, exist_ok=True):
+    """MAX_PATH対策込みのos.makedirs()(`_open_long`と対の入口)。"""
+    if not path:
+        return
+    os.makedirs(_win_long_path(path), exist_ok=exist_ok)
+
+
+def _write_bytes_long(path, data):
+    """出力先ディレクトリの作成込みで、MAX_PATH対策済みにバイト列を書き出す。
+
+    dst_dir/build_dir/out_root配下の出力パスはmanifest由来のgame path
+    (`Player/Outfit/...`)を連結するため深くなりやすく、書き込み先が
+    260文字を超えるケースが実報告されている(dev#458原報告JB5ZGBJC、
+    dev#1101追加報告FJRHUZVY)。"""
+    _makedirs_long(os.path.dirname(path))
+    with _open_long(path, "wb") as f:
+        f.write(data)
+
+
+def _copy2_long(src, dst):
+    """出力先ディレクトリの作成込みで、MAX_PATH対策済みにshutil.copy2する。"""
+    _makedirs_long(os.path.dirname(dst))
+    shutil.copy2(_win_long_path(src), _win_long_path(dst))
 
 
 def _inject_outfit_body_parka_textures(dst_dir, pak, manifest, job=None):
@@ -2195,17 +2883,31 @@ def _inject_outfit_body_parka_textures(dst_dir, pak, manifest, job=None):
     # (責任者指摘「v1のマテリアルが差替えモデルのマテリアルになってしまっている」)。
     # 実測(work\u50_purepy\analyze_excluded_mi.py): 除外SKが参照するMI 6件は
     # **どれも非除外SKと共有されていない**ため、外しても他の統一に影響しない。
+    # dev#165第2期: job.get("equipment_filter")で未選択の装備も同じ扱い
+    # (_effective_extra_excluded_sk_names、グローバル状態は変更しない)。
+    # 共有MIの巻き添え防止は、この関数のこの後の「非除外SKだけからpath_targets
+    # を構築する」構造(下のfor rel in outfit_uassets:ループ)がそのまま担う
+    # ——除外されなかった側のSKが同じMIを参照していれば、そのMIは
+    # path_targets/mi_target_for_pathへ引き続き入る。
     import vp_exclusions
+    extra_excluded = _effective_extra_excluded_sk_names(manifest, job)
     _n_excluded_sk = 0
     for rel in list(outfit_uassets):
-        if vp_exclusions.is_excluded(rel):
+        if vp_exclusions.is_excluded(rel, extra_excluded=extra_excluded):
             outfit_uassets.remove(rel)
             _n_excluded_sk += 1
     if _n_excluded_sk:
-        print(f"[{TAG}] U50: {_n_excluded_sk} unsupported (collab) SK excluded from "
-              f"MI replacement targets (included in the pak with the vanilla MI unchanged)")
+        print(f"[{TAG}] U50: {_n_excluded_sk} unsupported (collab) or equipment-filter-excluded "
+              f"SK excluded from MI replacement targets "
+              f"(included in the pak with the vanilla MI unchanged)")
 
     path_targets = {}
+    # F3a(dev#1198系、WP-B6の後継配線): full_path -> このMIを参照するOutfit SK
+    # (.uasset相対パス)のリスト。equipment_filter有効時、選択SKだけを
+    # AvatarSelect複製MIへretargetするために必要(下のforced_body_paths処理)。
+    # 既存の path_targets/mi_target_for_path の計算には一切影響しない
+    # (追加の記帳のみ)。
+    path_owners = {}
     n_skip = 0
     skip_list = []
     for rel in outfit_uassets:
@@ -2224,6 +2926,7 @@ def _inject_outfit_body_parka_textures(dst_dir, pak, manifest, job=None):
         for slot_idx, full_path in slots.items():
             target = slot_target[slot_idx]
             path_targets.setdefault(full_path, set()).add(target)
+            path_owners.setdefault(full_path, []).append(rel)
 
     conflict_paths = {p: t for p, t in path_targets.items() if len(t) > 1}
     mi_target_for_path = {
@@ -2277,6 +2980,19 @@ def _inject_outfit_body_parka_textures(dst_dir, pak, manifest, job=None):
     # 使えない)、それ以外(unlit=True または force_two_sided=False)は
     # 安全側で旧挙動へフォールバックする(スコープを勝手に広げない)。
     job = job or {}
+
+    # F3a(dev#1198系WP-B6の後継配線、work\rd_1198_wpb\PROPOSAL.md §6.3):
+    # equipment_filterが有効なとき、共有素体MI(MI_Player_{Gender}_Body、
+    # forced_body_paths)を**同一パスへ上書きしない**。上書きすると322件の
+    # 衣装が共有するファイル自体が変わるため、equipment_filterで未選択の
+    # 衣装にもアバターの肌色が巻き添えで乗ってしまう(§6.1、オーナー原文
+    # 「アバター差し替えしていない装備はpak未適用と遜色なきこと=肌色も
+    # ここに含まれる」への違反)。requested_equipment is None(既定、
+    # フィルタ無し)なら以降のforced_body分岐は一切通らず、既存の
+    # 「共有パスへ直接_patch_mi_base_texture」経路のみが実行される
+    # (④無退行の根拠)。
+    requested_equipment = vp_equipment_filter.normalize_equipment_filter(
+        job.get("equipment_filter"))
     _p1_unlit = bool(job.get("unlit", False))
     _p1_two_sided = bool(job.get("force_two_sided", True))
     _p1_shadow_lift = max(0.0, min(1.0, float(job.get("shadow_lift", 0.0))))
@@ -2328,9 +3044,11 @@ def _inject_outfit_body_parka_textures(dst_dir, pak, manifest, job=None):
     extracted = pak_live_extract.extract_files(pak, pak_paths)
 
     tmp_dir = dst_dir.rstrip("\\/") + "_mi_tmp_src"
-    if os.path.isdir(tmp_dir):
-        shutil.rmtree(tmp_dir)
-    os.makedirs(tmp_dir, exist_ok=True)
+    # dev#458: tmp_dir自体がwork_root(可変・UNC等)+固定オーバーヘッドで
+    # 260文字に迫りうるため、isdir/rmtree/makedirsも拡張長パス経由にする。
+    if os.path.isdir(_win_long_path(tmp_dir)):
+        shutil.rmtree(_win_long_path(tmp_dir))
+    os.makedirs(_win_long_path(tmp_dir), exist_ok=True)
 
     n_ok = 0
     n_ssp_patched = 0
@@ -2349,6 +3067,47 @@ def _inject_outfit_body_parka_textures(dst_dir, pak, manifest, job=None):
         # 複製先に最初から存在しない)。
         is_forced_body = any(full_path.endswith(suf) for suf in _FORCED_BODY_MI_SUFFIXES)
 
+        # F3a(dev#1198系、work\rd_1198_wpb\PROPOSAL.md §6.3、WP-B6機構の
+        # 呼び出し配線): equipment_filterが有効なとき、共有素体MI
+        # (full_path、322件の衣装が参照する単一ファイル)への直接上書きを
+        # 完全にスキップし、代わりに:
+        #   1. avatar_body_mi_package_path()が計算するAvatarSelect複製先へ
+        #      バニラMIバイトを複製する(clone_avatar_body_mi、既存機構)。
+        #   2. その複製バイトへ_patch_mi_base_texture()でBase Texture=t00を
+        #      焼く(共有パスに対して従来行っていたのと同じ処理を、複製先へ
+        #      行うだけ)。
+        #   3. このMIを実際に参照する選択済みOutfit SK(path_owners[full_path]、
+        #      denylist/equipment_filterで既に除外されたSKは含まれない)の
+        #      importテーブルだけを retarget_sk_body_mi_imports() で
+        #      AvatarSelectパスへ向け直す。
+        # これにより共有ファイル自体は本関数内で一切書き込まれず(Phase Aで
+        # 抽出されたバニラバイトのまま)、未選択の衣装は常にバニラ肌のまま
+        # ——オーナー原文(§6.2)の「アバター差し替えしていない装備はpak未
+        # 適用と遜色なきこと=肌色もここに含まれる」を満たす。
+        # なおこの後に走る _unify_slot_materials() は選択SKの(retarget後の)
+        # importテーブルを再スキャンしてAvatarSelectパスも統一MI対象に含める
+        # ため、最終的な見た目は非フィルタビルドの共有パスと同じ「統一MI」
+        # 由来になる(ここでの_patch_mi_base_texture書き込みは
+        # D2P_U50_DISABLE_UNIFY=1で統一が無効化された場合のフォールバックと
+        # して安全側に必要——依存を作らない)。
+        # requested_equipment is None(既定、フィルタ無し)ならこの分岐には
+        # 一切入らず、既存の全分岐(この下のU50実験含む)が従来どおり動作
+        # する(④無退行の根拠)。
+        if is_forced_body and requested_equipment is not None:
+            src_uasset_pak = PAK_PREFIX + rel + ".uasset"
+            src_uexp_pak = PAK_PREFIX + rel + ".uexp"
+            if src_uasset_pak not in extracted or src_uexp_pak not in extracted:
+                raise _OutfitMaterialPatchError(
+                    f"F3a: body MI not found in vanilla pak: {full_path}")
+            _new_full_path, _n_retargeted, _f3a_flatten_targets = _f3a_avatar_select_body_mi(
+                tmp_dir, dst_dir, full_path, target_full, target_short,
+                extracted[src_uasset_pak], extracted[src_uexp_pak],
+                path_owners.get(full_path, []))
+            flatten_targets.update(_f3a_flatten_targets)
+            n_ok += 1
+            n_mic_cloned += 1
+            continue
+
         # U50 単体Material実験(D2P_U50_SINGLE_MATERIAL=1、他の2モードより
         # 最優先): UEモードが本日このマシンでcookした自己完結Material
         # (work\u50_diag\mvp\alive\M_VP_m00.uasset/.uexp)を、既存のクローン・
@@ -2357,18 +3116,16 @@ def _inject_outfit_body_parka_textures(dst_dir, pak, manifest, job=None):
         # バイトパッチは行わない(単体Materialは定数として焼かれておりMIC用の
         # スカラーパッチ機構が適用できない・する必要もない)。
         if is_forced_body and _U50_SINGLE_MATERIAL:
-            with open(_u50_single_material_src_uasset, "rb") as f:
+            with _open_long(_u50_single_material_src_uasset, "rb") as f:
                 _sm_src_uasset_bytes = f.read()
-            with open(_u50_single_material_src_uexp, "rb") as f:
+            with _open_long(_u50_single_material_src_uexp, "rb") as f:
                 _sm_src_uexp_bytes = f.read()
             _new_uasset, _new_uexp = _clone_mvp_mic_as(
                 _sm_src_uasset_bytes, _sm_src_uexp_bytes, full_path)
+            # dev#1101: dst_dir配下の出力パス(MAX_PATH対策)。
             out_path = os.path.join(dst_dir, *rel.split("/"))
-            os.makedirs(os.path.dirname(out_path), exist_ok=True)
-            with open(out_path + ".uasset", "wb") as f:
-                f.write(_new_uasset)
-            with open(out_path + ".uexp", "wb") as f:
-                f.write(_new_uexp)
+            _write_bytes_long(out_path + ".uasset", _new_uasset)
+            _write_bytes_long(out_path + ".uexp", _new_uexp)
             n_ok += 1
             n_mic_cloned += 1
             continue
@@ -2389,30 +3146,26 @@ def _inject_outfit_body_parka_textures(dst_dir, pak, manifest, job=None):
             _exp_src_uexp_bytes = extracted[src_uexp_pak]
             _new_uasset, _new_uexp = _clone_mvp_mic_as(
                 _exp_src_uasset_bytes, _exp_src_uexp_bytes, full_path, force_rename_insert=True)
+            # dev#1101: dst_dir配下の出力パス(MAX_PATH対策)。
             out_path = os.path.join(dst_dir, *rel.split("/"))
-            os.makedirs(os.path.dirname(out_path), exist_ok=True)
-            with open(out_path + ".uasset", "wb") as f:
-                f.write(_new_uasset)
-            with open(out_path + ".uexp", "wb") as f:
-                f.write(_new_uexp)
+            _write_bytes_long(out_path + ".uasset", _new_uasset)
+            _write_bytes_long(out_path + ".uexp", _new_uexp)
             n_ok += 1
             n_mic_cloned += 1
             continue
 
         if is_forced_body and p1_body_mic_clone_eligible:
-            with open(_p1_src_uasset, "rb") as f:
+            with _open_long(_p1_src_uasset, "rb") as f:
                 _src_uasset_bytes = f.read()
-            with open(_p1_src_uexp, "rb") as f:
+            with _open_long(_p1_src_uexp, "rb") as f:
                 _src_uexp_bytes = f.read()
             # P1-2: ShadowLiftをここで焼き込む(案i、複製元uexpへ直接適用)。
             _src_uexp_bytes = _mic_patch_shadow_lift(_src_uexp_bytes, _p1_shadow_lift)
             _new_uasset, _new_uexp = _clone_mvp_mic_as(_src_uasset_bytes, _src_uexp_bytes, full_path)
+            # dev#1101: dst_dir配下の出力パス(MAX_PATH対策)。
             out_path = os.path.join(dst_dir, *rel.split("/"))
-            os.makedirs(os.path.dirname(out_path), exist_ok=True)
-            with open(out_path + ".uasset", "wb") as f:
-                f.write(_new_uasset)
-            with open(out_path + ".uexp", "wb") as f:
-                f.write(_new_uexp)
+            _write_bytes_long(out_path + ".uasset", _new_uasset)
+            _write_bytes_long(out_path + ".uexp", _new_uexp)
             n_ok += 1
             n_mic_cloned += 1
             continue
@@ -2424,24 +3177,38 @@ def _inject_outfit_body_parka_textures(dst_dir, pak, manifest, job=None):
         safe = rel.replace("/", "_")
         tmp_uasset = os.path.join(tmp_dir, safe + ".uasset")
         tmp_uexp = os.path.join(tmp_dir, safe + ".uexp")
-        with open(tmp_uasset, "wb") as f:
-            f.write(extracted[src_uasset_pak])
-        with open(tmp_uexp, "wb") as f:
-            f.write(extracted[src_uexp_pak])
+        # dev#458: work_root(可変・UNC等)+固定オーバーヘッドでtmp_uasset/
+        # tmp_uexpが260文字を超えFileNotFoundErrorになりうるため、この一時
+        # ファイルを開く4箇所(直下2回の書き込み+後続の読み取り2回、
+        # _read_header_and_tables_for_flatten/_patch_mi_base_texture内部含む)
+        # は全て _win_long_path() 経由にする。tmp_uasset/tmp_uexp自体は生の
+        # ままにする(_win_long_path適用後は先頭が`\\`になりUNC=Trueへ
+        # 誤判定されるため、path_privacy.path_facts()での診断表示には
+        # このraw変数を使う)。
+        try:
+            with open(_win_long_path(tmp_uasset), "wb") as f:
+                f.write(extracted[src_uasset_pak])
+            with open(_win_long_path(tmp_uexp), "wb") as f:
+                f.write(extracted[src_uexp_pak])
+        except OSError as e:
+            raise _OutfitMaterialPatchError(
+                "failed to write MI temp file (dev#458 MAX_PATH diagnostics): "
+                f"{_path_facts(tmp_uasset)} original_error={type(e).__name__}: {e}"
+            ) from e
 
         # U46: Normal/ORM対象の収集(パッチ前のバニラ状態から読み取り専用で検出。
         # MI側のimport table自体はこの後も一切変更しない — 参照先テクスチャの
         # 中身だけを別途差し替える)
         try:
-            mi_h, mi_names, mi_imports = _read_header_and_tables_for_flatten(tmp_uasset)
-            with open(tmp_uexp, "rb") as f:
+            mi_h, mi_names, mi_imports = _read_header_and_tables_for_flatten(_win_long_path(tmp_uasset))
+            with open(_win_long_path(tmp_uexp), "rb") as f:
                 mi_uexp_bytes = f.read()
             flatten_targets.update(_collect_flatten_targets(mi_uexp_bytes, mi_names, mi_imports))
         except _OutfitMaterialPatchError:
             pass  # 検出失敗は安全側スキップ(Normal/ORM中和は対象外、他の処理は継続)
 
         out_path = os.path.join(dst_dir, *rel.split("/"))
-        info = _patch_mi_base_texture(tmp_uasset, tmp_uexp,
+        info = _patch_mi_base_texture(_win_long_path(tmp_uasset), _win_long_path(tmp_uexp),
                                        out_path + ".uasset", out_path + ".uexp",
                                        target_full, target_short)
         n_ok += 1
@@ -2455,7 +3222,7 @@ def _inject_outfit_body_parka_textures(dst_dir, pak, manifest, job=None):
         if sss_info.get("subsurface_color_neutralized", {}).get("patched"):
             n_sc_neutralized += 1
 
-    shutil.rmtree(tmp_dir, ignore_errors=True)
+    shutil.rmtree(_win_long_path(tmp_dir), ignore_errors=True)
     print(f"[{TAG}] T3: replaced {n_ok} MI (body->t00 / parka->t01, "
           f"of which {n_mic_cloned} via U50-P1 MIC clone)")
     print(f"[{TAG}] U42: applied SubsurfaceProfile->None (ShadingModel=5 only) to {n_ssp_patched}, "
@@ -2463,6 +3230,22 @@ def _inject_outfit_body_parka_textures(dst_dir, pak, manifest, job=None):
     if ssp_skip_reasons:
         print(f"[{TAG}]   skip reason breakdown: {ssp_skip_reasons}")
     print(f"[{TAG}] U46: neutralized Subsurface Color (Vector) to white for {n_sc_neutralized}")
+
+    # dev#165第2期バグ修正(2026-08-08、実機報告=equipment_filter使用時に
+    # 選択装備の顔・服へ別物の法線(皺)が乗る): _unify_slot_materials()は
+    # equipment_filterの状態に関わらず常にUNIFY_SRC_GAME_PATH(OldCloth001)の
+    # MIバイトを全選択装備へ複製するため、そのNormal Map/ORMも同じ条件
+    # (=unifyを実際に行うとき)で常にflatten対象へ加える。上のループは
+    # 除外集合(equipment_filterで未選択のSKを含む)をスキップするため、
+    # OldCloth001自身が未選択のときは単体では検出されない
+    # (unify_src_normal_orm_flatten_targets()のdocstring参照)。
+    if not _U50_UNIFY_DISABLE:
+        _unify_tmp_dir = dst_dir.rstrip("\\/") + "_unify_src_flatten_tmp"
+        try:
+            flatten_targets.update(unify_src_normal_orm_flatten_targets(pak, _unify_tmp_dir))
+        finally:
+            shutil.rmtree(_win_long_path(_unify_tmp_dir), ignore_errors=True)
+
     if flatten_targets:
         _flatten_normal_orm_textures(dst_dir, pak, flatten_targets)
 
@@ -2526,13 +3309,61 @@ def _live_template_fingerprint(pak, manifest, job):
     mtimeは「展開した瞬間の時刻」になり(Python zipfile.extractall()の
     挙動、2026-07-30実測)、mtimeベースの識別子は同一内容でもSandbox起動
     のたびに変わってしまう。内容sha256は展開位置・タイミングに依存しない。
+
+    dev#46: template_logic_hashは、_TEMPLATE_LOGIC_SOURCE_FILES(コメント
+    参照)に列挙したソースファイル群の内容ハッシュ。TEMPLATE_BUILD_VERSION
+    (手動版数、意図的な一斉無効化用に併存)を上げ忘れても、テンプレ生成
+    ロジックそのもの(このファイル+抽出/解析まわりの依存モジュール)への
+    変更は自動的にキャッシュを無効化する。
+
+    dev#165第2期(2026-08-08、装備限定): equipment_filterはテンプレートの
+    中身そのものを変える設定(collect_unified_mi_targets/
+    _inject_outfit_body_parka_textures が対象MI集合を変える)なので、
+    shadow_lift/unlitと違って**常に**キーへ含める(既定=job未設定/空
+    リストのときは常に`[]`という同じ値になるので、絞り込みを使わない
+    既存ユーザーの鍵は全員そろって1回だけ変わり、以後は安定する——
+    フィンガープリントの"形"が変わること自体はオーナー許容済み。実際の
+    生成ロジックは空集合のとき従来と一字一句同じ入力
+    (`vp_exclusions.is_excluded(rel, extra_excluded=set())`は
+    `is_excluded(rel)`と完全に同じ結果)になるため、最終的なテンプレート
+    内容・pakバイトは不変)。
+
+    dev#277第1弾④(2026-08-08、頭装備切り替え): headequip_showは
+    `_project_stub_sk_rels()`/`_project_skip_rels()`を通じてproject区分の
+    実際の収録集合そのものを変える設定(equipment_filterと同種、テンプレの
+    中身が変わる)ため、同じ理由で**常に**キーへ含める(既定=空リストは
+    常に`[]`という同じ値、初回1回だけキーが増えて以後安定。空集合のときの
+    生成ロジックはWP-B3までと一字一句同じ入力になるため、最終的な
+    テンプレート内容・pakバイトは不変=④無退行)。
+
+    dev#336(2026-08-08、性別限定、work\\rd_1198_wpb\\PROPOSAL.md §7):
+    gendersは`_effective_extra_excluded_sk_names()`経由でテンプレートの
+    中身そのものを変える設定(equipment_filter/headequip_showと同種)なので、
+    同じ理由で**常に**キーへ含める。既定(未設定/両性別)は常に`[]`という
+    同じ値になるため、genders未使用の既存ユーザーは初回1回だけキーが
+    増えて以後安定し、最終的なテンプレート内容・pakバイトは不変(④無退行)。
+
+    dev#1258(WP-E、2026-08-09): dt_flag_head_hideは`_project_stub_sk_rels()`
+    経由でHead/Hair 178件をスタブ生成対象に含めるか除外するかを切り替える
+    設定(headequip_show/equipment_filterと同種、テンプレの中身が変わる)
+    ため、同じ理由で**常に**キーへ含める。既定Falseは常に同じ値になる
+    ため、初回1回だけキーが増えて以後安定する(④無退行はPROPOSAL §4.3の
+    整理どおり、基準は本WP適用後のスタブ方式)。
     """
     fingerprint = {
         "pak_mtime": os.path.getmtime(pak),
         "pak_size": os.path.getsize(pak),
         "manifest_hash": core.sha256_file(MANIFEST_PATH),
         "template_build_version": TEMPLATE_BUILD_VERSION,
+        "template_logic_hash": _template_logic_hash(),
         "unify_disabled": _U50_UNIFY_DISABLE,
+        "equipment_filter": sorted(vp_equipment_filter.normalize_equipment_filter(
+            job.get("equipment_filter")) or []),
+        "headequip_show": sorted(vp_headequip_filter.normalize_headequip_selection(
+            job.get("headequip_show")) or []),
+        "genders": sorted(vp_gender_filter.normalize_gender_selection(
+            job.get("genders")) or []),
+        "dt_flag_head_hide": bool(job.get("dt_flag_head_hide", False)),
     }
     if _U50_UNIFY_DISABLE or _U50_P1_BODY_MIC_CLONE_ENABLE:
         fingerprint["shadow_lift"] = round(float(job.get("shadow_lift", 0.0) or 0.0), 6)
@@ -2561,9 +3392,11 @@ def probe_live_template(job):
     dst_dir = core.shared_cache_dir(work_root, "live_template", fingerprint)
     marker_path = dst_dir.rstrip("\\/") + ".fingerprint.json"
     fresh = False
-    if os.path.exists(marker_path):
+    # dev#1101(レビュー差し戻し): marker_pathはdst_dirの兄弟(同じ深さ)。
+    # 書き込み側と対にして読み取り側もMAX_PATH対策する。
+    if os.path.exists(_win_long_path(marker_path)):
         try:
-            with open(marker_path, encoding="utf-8") as f:
+            with _open_long(marker_path, encoding="utf-8") as f:
                 old = json.load(f)
             fresh = (old == fingerprint)
         except (OSError, ValueError):
@@ -2608,9 +3441,11 @@ def build_live_template(job, dst_dir=None):
     marker_path = dst_dir.rstrip("\\/") + ".fingerprint.json"
 
     def _reuse_if_fresh(note):
-        if not os.path.exists(marker_path):
+        # dev#1101(レビュー差し戻し): marker_pathはdst_dirの兄弟(同じ深さ)。
+        # 書き込み側と対にして読み取り側もMAX_PATH対策する。
+        if not os.path.exists(_win_long_path(marker_path)):
             return False
-        with open(marker_path, encoding="utf-8") as f:
+        with _open_long(marker_path, encoding="utf-8") as f:
             old = json.load(f)
         if old != fingerprint:
             return False
@@ -2625,7 +3460,8 @@ def build_live_template(job, dst_dir=None):
         # dst_dir明示指定(テスト/デバッグ用途): 共有キャッシュ機構(ロック/
         # 一時ディレクトリ/read-only施錠)を経由せず、従来どおり直接組み立てる。
         _assemble_live_template(dst_dir, dst_dir, pak, manifest, job)
-        with open(marker_path, "w", encoding="utf-8") as f:
+        # dev#1101: marker_pathはdst_dirの兄弟(同じ深さ)。MAX_PATH対策。
+        with _open_long(marker_path, "w", encoding="utf-8") as f:
             json.dump(fingerprint, f)
         n_total = len(manifest["vanilla"]) + len(manifest["project"])
         print(f"[{TAG}] live template assembly complete: {n_total} file(s) -> {dst_dir}")
@@ -2652,11 +3488,13 @@ def build_live_template(job, dst_dir=None):
             _assemble_live_template(tmp_dir, dst_dir, pak, manifest, job, phase_b=False)
             core.replace_dir_atomic(tmp_dir, dst_dir)
         except Exception:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            # dev#1101: tmp_dirはdst_dirの兄弟(同じ深さ)。MAX_PATH対策。
+            shutil.rmtree(_win_long_path(tmp_dir), ignore_errors=True)
             raise
         # Phase B: dst_dir(最終位置)に対して直接作用する(T3のMI差し替え+統一)
         _inject_outfit_body_parka_textures(dst_dir, pak, manifest, job)
-        with open(marker_path, "w", encoding="utf-8") as f:
+        # dev#1101: marker_pathはdst_dirの兄弟(同じ深さ)。MAX_PATH対策。
+        with _open_long(marker_path, "w", encoding="utf-8") as f:
             json.dump(fingerprint, f)
         core.lock_cache_dir_readonly(dst_dir)
         n_total = len(manifest["vanilla"]) + len(manifest["project"])
@@ -2665,6 +3503,81 @@ def build_live_template(job, dst_dir=None):
     finally:
         core.release_cache_lock(lock)
     return dst_dir
+
+
+def _is_head_or_hair_stub_rel(rel, dt_flag_head_hide=False):
+    """dev#1258(WP-E、2026-08-09オーナー裁定): Head/Hair系スタブの生成対象
+    判定(トグル対応)。
+
+    WP-B3(dev#1198)時代はHead(頭)/Hairの無条件常時スタブ廃止が既定
+    だったが、dev#1258で「未装備フォールバック描画がbIsFullBodyEquipment
+    フラグを見ない」ため丸腰(初期装備OldCloth001の未装備フォールバック
+    状態)でバニラHead/Hairが重複する不具合が確定した(オーナー実機確認)。
+    オーナー裁定(2026-08-09)「開始10分の全員の重複より、稀な衣装の首なし
+    の方が軽い」により、**既定を再びスタブ方式へ戻す**(work\\rd_1258\\
+    PROPOSAL.md §0/§4.1)。「未実装状態」の基準はこのWPを境に
+    「v2.6.0のDTフラグ方式」から「スタブ方式」へ入れ替わる(PROPOSAL §4.3)。
+
+    dt_flag_head_hide=False(既定、キー不在時と同じ): Head/HairをHeadEquip
+    (帽子)と同じ「常時空スタブ」方式にする(旧・pre-dev#1198方式の復活)。
+    可視性がデータ非依存になるため、未装備フォールバック描画がどんな経路で
+    Head/Hairを表示しようとしても表示対象の実体が無く、重複が構造的に
+    消える(PROPOSAL §3.2)。代償: 未注入衣装(コラボ除外、Yakushima001/
+    Octavia001の計8SK)を明示装備したときに限り首なしが再発する
+    (PROPOSAL §3.3、オーナー裁定済みの許容コスト)。
+
+    dt_flag_head_hide=True(ラボ機能「差替え中装備のみ頭OFF」ON時):
+    dev#1198のDTフラグ方式(bIsFullBodyEquipment)に戻す(v2.6.0までの
+    既定と同じ挙動)。未注入衣装での首なしを避けたいユーザー向け
+    (未装備フォールバックの重複は許容する側に戻る)。
+
+    **HeadEquip(帽子)は対象外**(この判定はdt_flag_head_hideの値に関わらず
+    常にFalseを返す)。帽子の常時非表示は別種の意図された既定挙動であり、
+    「頭装備切り替え」機能(dev#277第1弾④)の選択入力になるため、無条件
+    廃止の対象にしない(work\\rd_1198_wpb\\PROPOSAL.md §4.2)。"""
+    norm = rel.replace("\\", "/")
+    is_head_or_hair = norm.startswith("Player/Head/") or norm.startswith("Player/Hair/")
+    return is_head_or_hair and dt_flag_head_hide
+
+
+def _project_skip_rels(project_rels, headequip_show=None):
+    """dev#277第1弾④(2026-08-08、頭装備切り替え): 選択(チェックON=表示)
+    されたHeadEquipのrelを返す。呼び出し側(`_assemble_live_template`)は
+    このrel集合を、スタブ生成対象からもコピー対象からも完全に除外し、
+    出力pakへ一切含めない——Head/Hairの無条件廃止(WP-B3)と同じ「manifestに
+    無い扱い」にすることで、Palworld本体のバニラpakフォールバックにより
+    実際の帽子ジオメトリが描画される(`work\\rd_1198_wpb\\PROPOSAL.md` §8)。
+
+    headequip_show(job.get("headequip_show")の生値)がNone/空なら**必ず
+    空集合**(=既定、全HeadEquipが従来どおりスタブ生成される。④無退行)。
+    純粋関数(pak/IO不要)で、単体テストがproject_relsのリストだけを渡せば
+    検証できる。"""
+    headequip_rels = vp_headequip_filter.headequip_rels_from_manifest(
+        {"project": project_rels})
+    return vp_headequip_filter.shown_headequip_rels(headequip_rels, headequip_show)
+
+
+def _project_stub_sk_rels(project_rels, headequip_show=None, dt_flag_head_hide=False):
+    """manifest["project"]から、実行時SKスタブ生成の対象relだけを抜き出す
+    (dev#26案B: SK系はスタブ生成、それ以外は同梱コピー)。
+
+    dev#1258(WP-E)既定: Head/Hairはmanifestの"project"リストに復元
+    (178件)されており、`_is_head_or_hair_stub_rel(rel, dt_flag_head_hide)`
+    がdt_flag_head_hide=False(既定)のとき常にFalseを返すため、Head/Hairも
+    HeadEquipと同じくここでスタブ生成対象に含まれる。dt_flag_head_hide=True
+    (ラボ機能ON)のときだけ、v2.6.0までと同じくHead/Hairをスタブ生成対象
+    から除外する。
+    dev#277第1弾④(頭装備切り替え)で、選択(チェックON)されたHeadEquipの
+    relも`_project_skip_rels()`経由でここから除外する(スタブ生成もしない
+    =表示される。headequip_showがNone/空なら`_project_skip_rels`は必ず
+    空集合を返すため、既定挙動は不変)。
+    `_assemble_live_template`本体から切り出した純粋関数(pak/IO不要)で、
+    単体テストがproject_relsのリストだけを渡せば検証できる。"""
+    skip = _project_skip_rels(project_rels, headequip_show)
+    return [rel for rel in project_rels
+            if "/SK_" in rel.replace("\\", "/")
+            and not _is_head_or_hair_stub_rel(rel, dt_flag_head_hide)
+            and rel not in skip]
 
 
 def _assemble_live_template(build_dir, final_dst_dir, pak, manifest, job, phase_b=True):
@@ -2676,42 +3589,60 @@ def _assemble_live_template(build_dir, final_dst_dir, pak, manifest, job, phase_
     へアトミックrenameするため(4.4)。dst_dir明示指定の従来経路では
     build_dir==final_dst_dirで、Phase Aも直接その場所へ組み立てる
     (共有キャッシュを経由しないので一時ディレクトリは不要)。"""
+    # dev#1101: build_dir/final_dst_dirはwork_root配下(可変・UNC等)であり、
+    # 以降このディレクトリへ書き出す全ファイル(vanilla抽出444件+project資産+
+    # SKスタブ)がMAX_PATH対策の対象(write_unified_mis()と同じ問題の
+    # 別発現、実報告FJRHUZVY)。
     if os.path.isdir(build_dir) and build_dir == final_dst_dir:
-        shutil.rmtree(build_dir)
-    os.makedirs(build_dir, exist_ok=True)
+        shutil.rmtree(_win_long_path(build_dir))
+    _makedirs_long(build_dir)
 
     pak_paths = [PAK_PREFIX + rel for rel in manifest["vanilla"]]
     extracted = pak_live_extract.extract_files(pak, pak_paths)
     for rel, pak_path in zip(manifest["vanilla"], pak_paths):
         out_path = os.path.join(build_dir, *rel.split("/"))
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        with open(out_path, "wb") as f:
-            f.write(extracted[pak_path])
+        _write_bytes_long(out_path, extracted[pak_path])
 
     # dev#26 案B(2026-07-28): project区分のうちSK系スタブ306件は同梱をやめ、
     # ここで実行時生成する(uasset=バイト完全一致の完全生成、uexp=ライブ抽出した
     # バニラRefBonePose等の注入。生成器と根拠: pipeline\py\stub_skeletal_mesh.py、
     # 検証: work\wp_stub\verify_optionB.py)。残り(M_VP_*/t00/t01/anchor等の
     # 自作資産)は従来どおり同梱コピー。
-    sk_rels = [rel for rel in manifest["project"] if "/SK_" in rel.replace("\\", "/")]
+    # dev#277第1弾④(2026-08-08、頭装備切り替え): 選択(チェックON=表示)
+    # されたHeadEquipのrelはスタブ生成対象からもコピー対象からも除外し、
+    # 出力pakへ一切含めない(headequip_showがNone/空なら空集合=既定、
+    # 従来と完全一致)。
+    # dev#1258(WP-E、2026-08-09): dt_flag_head_hide=True(ラボ機能ON)の
+    # ときは、Head/Hair 178件をスタブ生成対象からも(_project_stub_sk_rels
+    # がdt_flag_head_hideを見て除外する)コピー対象からも外し、出力pakへ
+    # 一切含めない(=v2.6.0までの既定と同じ「manifestに無い扱い」を、
+    # 静的なmanifestの中身を変えずにjob設定だけで再現する)。これは
+    # HeadEquip専用の`_project_skip_rels()`とは独立した経路(PROPOSAL
+    # §4.1(b): 「呼び出し元は無改修でよい」はこの2関数自体の話であり、
+    # ここ=呼び出し側の主ループに専用の除外条件を1本追加する)。
+    dt_flag_head_hide = bool(job.get("dt_flag_head_hide", False))
+    headequip_show = job.get("headequip_show")
+    sk_rels = _project_stub_sk_rels(manifest["project"], headequip_show, dt_flag_head_hide)
+    skip_rels = _project_skip_rels(manifest["project"], headequip_show)
     for rel in manifest["project"]:
         if rel in sk_rels:
+            continue
+        if rel in skip_rels:
+            continue
+        if dt_flag_head_hide and _is_head_or_hair_stub_rel(rel, dt_flag_head_hide):
             continue
         src = os.path.join(PROJECT_ASSET_DIR, *rel.split("/"))
         if not os.path.exists(src):
             core.die(TAG, f"project-specific asset not found: {src}")
         out_path = os.path.join(build_dir, *rel.split("/"))
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        shutil.copy2(src, out_path)
+        _copy2_long(src, out_path)
     if sk_rels:
         print(f"[{TAG}] generating {len(sk_rels)} SK stub(s) at runtime (dev#26: no longer bundled, "
               f"skeleton info is live-extracted from the user's Palworld)")
         stub_files = stub_skeletal_mesh.build_stub_files(pak, sk_rels)
         for rel, data in stub_files.items():
             out_path = os.path.join(build_dir, *rel.split("/"))
-            os.makedirs(os.path.dirname(out_path), exist_ok=True)
-            with open(out_path, "wb") as f:
-                f.write(data)
+            _write_bytes_long(out_path, data)
 
     if not phase_b:
         return

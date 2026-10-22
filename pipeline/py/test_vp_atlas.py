@@ -15,6 +15,7 @@ import json
 import math
 import os
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vp_atlas  # noqa: E402
@@ -28,11 +29,16 @@ failures = []
 
 
 def check(label, cond, detail=""):
+    """dev#739: 従来はここでfailuresへ記録するだけでassertしておらず、
+    pytest経由では常に緑になっていた(main()を直接実行したときしか
+    有効でなかった)。呼び出し側(50件超)は無改変のまま、ここでassertする
+    ことでpytest収集時にも実際に効くようにする。"""
     if cond:
         print(f"[PASS] {label}")
     else:
         print(f"[FAIL] {label} {detail}")
         failures.append(label)
+    assert cond, f"{label} {detail}".rstrip()
 
 
 # ---------------------------------------------------------------- classify_material
@@ -343,10 +349,16 @@ def test_plan_label_no_atlas_when_single_texture():
 
 
 def make_synthetic_meta(pairs):
-    """pairs: [(slot_id, orig_name, texture_filename), ...] からavatar_meta.json風dictを作る"""
+    """pairs: [(slot_id, orig_name, texture_filename), ...] または
+    [(slot_id, orig_name, texture_filename, base_color), ...] からavatar_meta.json風dictを作る
+    (dev#505: base_colorはオプションの4要素目、既存呼び出し=3要素は無改修で動く)。"""
     slots = {}
-    for slot_id, orig_name, tex in pairs:
-        slots[slot_id] = {"orig_name": orig_name, "texture": tex}
+    for pair in pairs:
+        slot_id, orig_name, tex = pair[0], pair[1], pair[2]
+        entry = {"orig_name": orig_name, "texture": tex}
+        if len(pair) >= 4:
+            entry["base_color"] = pair[3]
+        slots[slot_id] = entry
     return {"slots": slots}
 
 
@@ -407,6 +419,59 @@ def test_plan_avatar_skips_non_png():
           and "t01.jpg" not in plan["parka"]["texture_order"])
 
 
+def test_plan_avatar_without_tex_dir_ignores_content():
+    """負の対照(既存呼び出しの無改修確認、dev#990): tex_dirを渡さない
+    plan_avatar(meta)単体呼び出しは、拡張子が.pngなら中身を一切見ない
+    (従来どおり)。実体が非PNGでもエラーにならず、通常どおり計画に含まれる。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        fake_png = os.path.join(tmp, "t00.png")
+        with open(fake_png, "wb") as f:
+            f.write(b"not a real png at all")
+        meta = make_synthetic_meta([("m00", "body", "t00.png")])
+        plan, skipped = vp_atlas.plan_avatar(meta)
+        check("plan_avatar(no tex_dir): fake-content .png is not skipped "
+              "(content is not checked without tex_dir)", skipped == [])
+        check("plan_avatar(no tex_dir): fake-content .png stays in texture_order",
+              "t00.png" in plan["body"]["texture_order"])
+
+
+def test_plan_avatar_with_tex_dir_rejects_renamed_non_png():
+    """正の対照(dev#990、実報告3JMQWCNS): 拡張子だけ.pngにリネームされた
+    非PNG(例: JPEGの中身)は、tex_dirを渡すとマジックナンバー検証で弾かれ、
+    `<not-actually-png:...>`としてskippedへ記録され、計画から除外される。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        fake_png = os.path.join(tmp, "t00.png")
+        with open(fake_png, "wb") as f:
+            f.write(b"\xff\xd8\xff\xe0JFIF-fake-jpeg-bytes")  # JPEGマジック風、PNGではない
+        real_png = os.path.join(tmp, "t01.png")
+        vp_tex.encode_png(real_png, __import__("numpy").zeros((2, 2, 4), dtype="uint8"))
+        meta = make_synthetic_meta([
+            ("m00", "body", "t00.png"),
+            ("m01", "face", "t01.png"),
+        ])
+        plan, skipped = vp_atlas.plan_avatar(meta, tex_dir=tmp)
+        check("plan_avatar(tex_dir): fake-content .png is recorded in skipped "
+              "with the not-actually-png marker",
+              skipped == [("m00", "<not-actually-png:t00.png>")], str(skipped))
+        check("plan_avatar(tex_dir): fake-content .png is excluded from texture_order",
+              "t00.png" not in plan["body"]["texture_order"])
+        check("plan_avatar(tex_dir): the genuine PNG slot is kept",
+              "t01.png" in plan["body"]["texture_order"])
+
+
+def test_plan_avatar_with_tex_dir_accepts_real_png():
+    """負の対照(dev#990): tex_dir指定時でも、本物のPNGは従来どおり
+    計画に含まれる(誤検知しない)。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        real_png = os.path.join(tmp, "t00.png")
+        vp_tex.encode_png(real_png, __import__("numpy").zeros((2, 2, 4), dtype="uint8"))
+        meta = make_synthetic_meta([("m00", "body", "t00.png")])
+        plan, skipped = vp_atlas.plan_avatar(meta, tex_dir=tmp)
+        check("plan_avatar(tex_dir): a genuine PNG is not skipped", skipped == [])
+        check("plan_avatar(tex_dir): a genuine PNG stays in texture_order",
+              "t00.png" in plan["body"]["texture_order"])
+
+
 # ---------------------------------------------------------------- 実データ(alicia)での検証
 
 def test_plan_avatar_alicia_real_data():
@@ -442,6 +507,219 @@ def test_plan_avatar_alicia_real_data():
             print("[SKIP] some alicia real textures are missing (build_atlas_from_paths real-data check)")
 
 
+# --------------------------------------------------- dev#505: 非白tintの乗算
+#
+# 実報告CFLSKDWM(韓国語ユーザー): アバターの瞳(虹彩)がプレビュー・変換
+# 結果ともオレンジ色のはずが白目のみになる。原因: トゥーンシェーダーの
+# 「白/グレーのマスクテクスチャ」×「_Colorタイント」という一般的な構造に
+# 対し、本パイプラインはテクスチャが有るスロットのbase_color(Unityの
+# `_Color`)を常に無視していた(texture=nullの単色マテリアルにしか使って
+# いなかった)。眼球専用の特別扱いではなく、テクスチャの有無に関わらず
+# base_colorを一貫して乗算する構造修正。
+
+def test_is_white_tint():
+    check("is_white_tint((1,1,1,1)) is True", vp_atlas.is_white_tint((1.0, 1.0, 1.0, 1.0)) is True)
+    check("is_white_tint((1,1,1,0.3)) is True (alpha ignored)",
+          vp_atlas.is_white_tint((1.0, 1.0, 1.0, 0.3)) is True)
+    check("is_white_tint(just under 1/255) is True",
+          vp_atlas.is_white_tint((1.0 - 0.99 / 255, 1.0, 1.0, 1.0)) is True)
+    check("is_white_tint(orange) is False", vp_atlas.is_white_tint((1.0, 0.5, 0.0, 1.0)) is False)
+    check("is_white_tint(black) is False", vp_atlas.is_white_tint((0.0, 0.0, 0.0, 1.0)) is False)
+
+
+def test_tinted_texture_key_roundtrip():
+    key = vp_atlas.tinted_texture_key("t02.png", (1.0, 0.5, 0.0, 1.0))
+    check("tinted_texture_key: is_tinted_texture_key -> True",
+          vp_atlas.is_tinted_texture_key(key) is True)
+    check("tinted_texture_key: is_solid_color_key -> False (別種のキー)",
+          vp_atlas.is_solid_color_key(key) is False)
+    path, rgba = vp_atlas.parse_tinted_texture_key(key)
+    check("tinted_texture_key: path round-trips", path == "t02.png", path)
+    check("tinted_texture_key: rgba round-trips", rgba == (1.0, 0.5, 0.0, 1.0), str(rgba))
+    # Windowsの絶対パス(コロン・バックスラッシュを含む)でも壊れないこと
+    key2 = vp_atlas.tinted_texture_key(r"C:\work\wp_505\textures\t02.png", (0.2, 0.2, 0.2, 1.0))
+    path2, rgba2 = vp_atlas.parse_tinted_texture_key(key2)
+    check("tinted_texture_key: absolute Windows path round-trips",
+          path2 == r"C:\work\wp_505\textures\t02.png", path2)
+    check("is_solid_color_key/is_tinted_texture_key: plain filename is neither",
+          vp_atlas.is_solid_color_key("t02.png") is False
+          and vp_atlas.is_tinted_texture_key("t02.png") is False)
+
+
+def test_apply_tint_white_is_noop():
+    """負の対照の逆: tint=白は既存アバターの大多数(G4無退行)。
+    ピクセルが一切変わらないことを固定する。"""
+    import numpy as np
+    rng_img = np.zeros((4, 4, 4), np.uint8)
+    rng_img[:, :, 0] = [10, 80, 160, 255]
+    rng_img[:, :, 1] = [255, 160, 80, 10]
+    rng_img[:, :, 2] = 128
+    rng_img[:, :, 3] = 200
+    out = vp_atlas.apply_tint(rng_img, (1.0, 1.0, 1.0, 1.0))
+    check("apply_tint(white tint): output is bit-identical to input",
+          (out == rng_img).all(), f"max diff={np.abs(out.astype(int) - rng_img.astype(int)).max()}")
+
+
+def test_apply_tint_matches_linear_to_srgb_reference():
+    """apply_tint(ベクトル化)が、既存の信頼済みスカラー実装linear_to_srgbと
+    同じ数式で動いていることをクロス検証する(魔法の数値の埋め込みを避ける)。"""
+    import numpy as np
+    white = np.full((2, 2, 4), 255, np.uint8)
+    tint = (1.0, 0.5, 0.0, 1.0)
+    out = vp_atlas.apply_tint(white, tint)
+    # 白(sRGB 1.0)をtintで乗算 == tintそのものをlinear_to_srgbで符号化した値
+    expect_r = round(vp_atlas.linear_to_srgb(1.0) * 255)
+    expect_g = round(vp_atlas.linear_to_srgb(0.5) * 255)
+    expect_b = round(vp_atlas.linear_to_srgb(0.0) * 255)
+    got = out[0, 0]
+    check("apply_tint(white x orange tint): R matches linear_to_srgb reference",
+          int(got[0]) == expect_r, f"got={got[0]} want={expect_r}")
+    check("apply_tint(white x orange tint): G matches linear_to_srgb reference",
+          abs(int(got[1]) - expect_g) <= 1, f"got={got[1]} want={expect_g}")
+    check("apply_tint(white x orange tint): B matches linear_to_srgb reference",
+          int(got[2]) == expect_b, f"got={got[2]} want={expect_b}")
+    check("apply_tint: this is genuinely not white/grey (the CFLSKDWM bug would leave it white)",
+          not (got[0] == got[1] == got[2]), str(got))
+
+
+def test_apply_tint_alpha_is_linear_multiply():
+    import numpy as np
+    img = np.zeros((1, 1, 4), np.uint8)
+    img[0, 0] = (255, 255, 255, 200)
+    out = vp_atlas.apply_tint(img, (1.0, 1.0, 1.0, 0.5))
+    check("apply_tint: alpha is a direct linear multiply (200*0.5=100)",
+          abs(int(out[0, 0, 3]) - 100) <= 1, str(out[0, 0]))
+
+
+def test_plan_avatar_white_tint_unchanged():
+    """G4無退行: base_colorが実質白なら、従来どおりプレーンなファイル名の
+    ままtexture_orderへ入る(tinted_texture_keyへ包まれない)。"""
+    meta = make_synthetic_meta([
+        ("m00", "eye", "t00.png", [1.0, 1.0, 1.0, 1.0]),
+    ])
+    plan, skipped = vp_atlas.plan_avatar(meta)
+    check("plan_avatar(white tint): texture_order stays a plain filename",
+          plan["body"]["texture_order"] == ["t00.png"], str(plan["body"]["texture_order"]))
+    check("plan_avatar(white tint): skipped is empty", skipped == [])
+
+
+def test_plan_avatar_no_base_color_unchanged():
+    """負の対照: base_colorフィールド自体が無い(旧形式meta)場合も従来どおり
+    プレーンなファイル名のまま(クラッシュしない)。"""
+    meta = make_synthetic_meta([("m00", "eye", "t00.png")])
+    plan, skipped = vp_atlas.plan_avatar(meta)
+    check("plan_avatar(no base_color): texture_order stays a plain filename",
+          plan["body"]["texture_order"] == ["t00.png"], str(plan["body"]["texture_order"]))
+
+
+def test_plan_avatar_non_white_tint_wraps_key():
+    """本題(CFLSKDWM再現の核): テクスチャが有るスロットでも非白tintは
+    tinted_texture_keyへ包まれ、プランに正規に組み込まれる。"""
+    meta = make_synthetic_meta([
+        ("m03", "RadDollV3_Eye", "t02.png", [1.0, 0.5, 0.0, 1.0]),
+    ])
+    plan, skipped = vp_atlas.plan_avatar(meta)
+    check("plan_avatar(orange tint): skipped is empty", skipped == [])
+    check("plan_avatar(orange tint): texture_order has exactly 1 entry",
+          len(plan["body"]["texture_order"]) == 1, str(plan["body"]["texture_order"]))
+    only = plan["body"]["texture_order"][0]
+    check("plan_avatar(orange tint): entry is a tinted_texture_key",
+          vp_atlas.is_tinted_texture_key(only) is True, only)
+    path, rgba = vp_atlas.parse_tinted_texture_key(only)
+    check("plan_avatar(orange tint): embedded path is the original filename",
+          path == "t02.png", path)
+    check("plan_avatar(orange tint): embedded tint matches base_color",
+          rgba == (1.0, 0.5, 0.0, 1.0), str(rgba))
+    check("plan_avatar(orange tint): slot_texture[m03] is the same key",
+          plan["body"]["slot_texture"]["m03"] == only)
+
+
+def test_plan_avatar_same_texture_different_tint_not_deduped():
+    """第2の退行に対する回帰テスト: 同じ白マスクテクスチャを異なる色へ
+    タイントした2マテリアルが、ファイル名だけの同一視で1セルへ丸め込まれ
+    片方の色が消える、という事態を防ぐ。"""
+    meta = make_synthetic_meta([
+        ("m00", "eye_l", "mask.png", [1.0, 0.0, 0.0, 1.0]),   # 赤
+        ("m01", "eye_r", "mask.png", [0.0, 0.0, 1.0, 1.0]),   # 青
+    ])
+    plan, skipped = vp_atlas.plan_avatar(meta)
+    order = plan["body"]["texture_order"]
+    check("plan_avatar(same file, different tint): 2 distinct entries (not deduped)",
+          len(order) == 2, str(order))
+    check("plan_avatar(same file, different tint): both entries are tinted keys",
+          all(vp_atlas.is_tinted_texture_key(o) for o in order), str(order))
+    check("plan_avatar(same file, different tint): m00 != m01 slot_texture",
+          plan["body"]["slot_texture"]["m00"] != plan["body"]["slot_texture"]["m01"])
+
+
+def test_plan_avatar_same_texture_same_tint_deduped():
+    """同一ファイル+同一tintは、従来どおり1セルへ共有される(無駄なく詰める、
+    solid_color_keyの既存挙動と対称)。"""
+    meta = make_synthetic_meta([
+        ("m00", "eye_l", "mask.png", [1.0, 0.5, 0.0, 1.0]),
+        ("m01", "eye_r", "mask.png", [1.0, 0.5, 0.0, 1.0]),
+    ])
+    plan, skipped = vp_atlas.plan_avatar(meta)
+    order = plan["body"]["texture_order"]
+    check("plan_avatar(same file, same tint): deduped to 1 entry", len(order) == 1, str(order))
+    check("plan_avatar(same file, same tint): m00 == m01 slot_texture",
+          plan["body"]["slot_texture"]["m00"] == plan["body"]["slot_texture"]["m01"])
+
+
+def test_plan_avatar_malformed_base_color_falls_back_gracefully():
+    """負の対照: base_colorが壊れた形(数値でない・要素不足)でも、
+    タイント適用をあきらめてプレーンなファイル名へ寛容にフォールバックする
+    (AvatarMetaErrorは送出しない。base_colorはtexture有りスロットでは
+    必須情報ではないため)。"""
+    for bad in ([1.0, 1.0], ["red", "green", "blue", 1.0],
+                {"r": 1, "g": 2, "b": 3, "a": 4}, None):
+        meta = make_synthetic_meta([("m00", "eye", "t00.png", bad)]) if bad is not None \
+            else make_synthetic_meta([("m00", "eye", "t00.png")])
+        plan, skipped = vp_atlas.plan_avatar(meta)
+        check(f"plan_avatar(malformed base_color={bad!r}): no crash, plain filename kept",
+              plan["body"]["texture_order"] == ["t00.png"], str(plan["body"]["texture_order"]))
+
+
+def test_build_atlas_from_paths_applies_tint():
+    """統合試験: tinted_texture_key を含む paths から build_atlas_from_paths が
+    実際にタイント済みピクセルを合成すること(=眼球が白ではなくオレンジに
+    なることをコード全体の経路で確認する、CFLSKDWMの直接回帰テスト)。"""
+    import numpy as np
+    with tempfile.TemporaryDirectory() as tmp:
+        white_path = os.path.join(tmp, "mask.png")
+        white_img = np.full((16, 16, 4), 255, np.uint8)
+        vp_tex.encode_png(white_path, white_img)
+
+        red_path = os.path.join(tmp, "solid_red.png")
+        red_img = np.zeros((16, 16, 4), np.uint8)
+        red_img[:, :, 0] = 255
+        red_img[:, :, 3] = 255
+        vp_tex.encode_png(red_path, red_img)
+
+        paths = [
+            red_path,
+            vp_atlas.tinted_texture_key(white_path, (1.0, 0.5, 0.0, 1.0)),
+        ]
+        canvas, rows, cols, cs = vp_atlas.build_atlas_from_paths(paths, cell_size=16)
+        check("build_atlas_from_paths(tinted): grid==(1,2)", (rows, cols) == (1, 2))
+
+        def cell(r, c):
+            return canvas[r * cs:(r + 1) * cs, c * cs:(c + 1) * cs]
+
+        c0, c1 = cell(0, 0), cell(0, 1)
+        check("build_atlas_from_paths(tinted): cell0 is the untouched red texture",
+              (c0[:, :, 0] == 255).all() and (c0[:, :, 1] == 0).all())
+        check("build_atlas_from_paths(tinted): cell1 is NOT white (tint was applied)",
+              not (c1[:, :, 0] == 255).all() or not (c1[:, :, 1] == 255).all()
+              or not (c1[:, :, 2] == 255).all())
+        check("build_atlas_from_paths(tinted): cell1 red channel stays ~white (tint R=1.0)",
+              int(c1[0, 0, 0]) == 255, str(c1[0, 0]))
+        check("build_atlas_from_paths(tinted): cell1 blue channel is driven to 0 (tint B=0.0)",
+              int(c1[0, 0, 2]) == 0, str(c1[0, 0]))
+        check("build_atlas_from_paths(tinted): cell1 green channel is between (tint G=0.5, not clipped)",
+              0 < int(c1[0, 0, 1]) < 255, str(c1[0, 0]))
+
+
 def main():
     test_classify_material_single()
     test_to_blender_transform()
@@ -457,7 +735,22 @@ def main():
     test_plan_avatar_two_material_single_atlas()
     test_plan_avatar_multi_material_single()
     test_plan_avatar_skips_non_png()
+    test_plan_avatar_without_tex_dir_ignores_content()
+    test_plan_avatar_with_tex_dir_rejects_renamed_non_png()
+    test_plan_avatar_with_tex_dir_accepts_real_png()
     test_plan_avatar_alicia_real_data()
+    test_is_white_tint()
+    test_tinted_texture_key_roundtrip()
+    test_apply_tint_white_is_noop()
+    test_apply_tint_matches_linear_to_srgb_reference()
+    test_apply_tint_alpha_is_linear_multiply()
+    test_plan_avatar_white_tint_unchanged()
+    test_plan_avatar_no_base_color_unchanged()
+    test_plan_avatar_non_white_tint_wraps_key()
+    test_plan_avatar_same_texture_different_tint_not_deduped()
+    test_plan_avatar_same_texture_same_tint_deduped()
+    test_plan_avatar_malformed_base_color_falls_back_gracefully()
+    test_build_atlas_from_paths_applies_tint()
 
     print()
     if failures:

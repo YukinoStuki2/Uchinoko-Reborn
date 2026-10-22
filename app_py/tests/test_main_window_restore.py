@@ -24,6 +24,8 @@ _APP_PY_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _APP_PY_DIR not in sys.path:
     sys.path.insert(0, _APP_PY_DIR)
 
+import pytest  # noqa: E402
+
 import pipeline_runner as pr  # noqa: E402
 import settings  # noqa: E402
 from ui import main_window as mw  # noqa: E402
@@ -106,6 +108,12 @@ class _FakeSelf:
             "vrmBox": _FakeEntry(),
             "dropBonesBox": _FakeEntry(),
             "shadowBar": _FakeScale(30),
+            "heightScaleBar": _FakeScale(100),  # dev#560 第③段
+            # dev#1572(2026-08-18裁定、案C): 「揺れの度合い」4択の復元。
+            # 既定index=mw._SWAY_INTENSITY_DEFAULT_INDEX("normal")を反映した
+            # フェイク(tk.Scale/tk.Label互換の既存フェイクを再利用)。
+            "swayIntensityBar": _FakeScale(mw._SWAY_INTENSITY_DEFAULT_INDEX),
+            "swayIntensityValueLabel": _FakeLabel(),
             "statusLabel": _FakeLabel(),
             "pakList": _FakePakList(None),
         }
@@ -202,6 +210,7 @@ def test_apply_restored_settings_restores_all_fields(tmp_path):
         shoulder_offset_deg=12, merge_fingers=True, unlit=True,
         force_two_sided=False, shadow_lift=0.4,
         drop_bones=["Bone_L", "Bone_R"], license_confirmed=True,
+        uniform_scale=1.6,
     )
     _write_previews(job_dir)
     fake = _FakeSelf(str(tmp_path / "app_root"), work_root)
@@ -217,8 +226,44 @@ def test_apply_restored_settings_restores_all_fields(tmp_path):
     assert fake.widgets["dropBonesBox"].get() == "Bone_L, Bone_R"
     # shadow_lift=0.4 -> value = round(100 - 0.4*100) = 60 (L.1646-1648相当)
     assert fake.widgets["shadowBar"].get() == 60
+    # uniform_scale=1.6 -> heightScaleBar = 160 (dev#560 第③段)
+    assert fake.widgets["heightScaleBar"].get() == 160
     # vrmBoxはset_vrm_path=Falseなので変更されない
     assert fake.widgets["vrmBox"].get() == ""
+
+
+def test_apply_restored_settings_uniform_scale_missing_key_keeps_current(tmp_path):
+    """dev#560第③段より前に書かれたjob.json(uniform_scaleキー欠落)を
+    読み込んでも、heightScaleBarの現在値を維持する(既存ユーザー影響ゼロ、
+    shoulder_offset_degと同じ「キー欠落=現在値維持」の流儀)。"""
+    work_root = str(tmp_path / "work")
+    job_dir = _write_job_dir(work_root, "LegacyAvatar", "C:/avatars/LegacyAvatar.vrm")
+    assert "uniform_scale" not in pr.read_job(os.path.join(job_dir, "job.json"))
+    fake = _FakeSelf(str(tmp_path / "app_root"), work_root)
+    fake.widgets["heightScaleBar"] = _FakeScale(140)  # ユーザーが以前触った値
+
+    mw.MainWindow._apply_restored_settings(fake, job_dir, set_vrm_path=False)
+
+    assert fake.widgets["heightScaleBar"].get() == 140
+
+
+def test_apply_restored_settings_uniform_scale_clamped_to_dev158_range(tmp_path):
+    """(4c): 手書き/旧バージョンのjob.jsonに範囲外値(dev#158裁定0.5〜2.0外)が
+    あってもクランプして復元する。"""
+    work_root = str(tmp_path / "work")
+    job_dir_low = _write_job_dir(
+        work_root, "LowAvatar", "C:/avatars/LowAvatar.vrm", uniform_scale=0.1,
+    )
+    fake_low = _FakeSelf(str(tmp_path / "app_root"), work_root)
+    mw.MainWindow._apply_restored_settings(fake_low, job_dir_low, set_vrm_path=False)
+    assert fake_low.widgets["heightScaleBar"].get() == 50
+
+    job_dir_high = _write_job_dir(
+        work_root, "HighAvatar", "C:/avatars/HighAvatar.vrm", uniform_scale=9.9,
+    )
+    fake_high = _FakeSelf(str(tmp_path / "app_root"), work_root)
+    mw.MainWindow._apply_restored_settings(fake_high, job_dir_high, set_vrm_path=False)
+    assert fake_high.widgets["heightScaleBar"].get() == 200
 
 
 def test_apply_restored_settings_sets_vrm_box_when_requested(tmp_path):
@@ -289,6 +334,108 @@ def test_apply_restored_settings_clamps_shoulder_offset_to_widget_range(tmp_path
     mw.MainWindow._apply_restored_settings(fake, job_dir, set_vrm_path=False)
 
     assert fake._shoulder_offset_deg == 20
+
+
+# ---------------------------------------------------------------------------
+# sway_intensity (dev#1572、2026-08-18裁定「かたさが配線されていない問題」
+# 案C: v2.11方式の復元「移行規則」): 新job.jsonの`sway_intensity`キーを
+# そのまま反映するケース、dev#1508 W2b期に書かれた旧`sway_enabled`(bool)
+# キーからの移行判定ケース、どちらも無いさらに古いjob.jsonのケース。
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("intensity", ["none", "soft", "normal", "hard"])
+def test_apply_restored_settings_sway_intensity_new_key_used_verbatim(tmp_path, intensity):
+    """新形式job.json(sway_intensity明記)は、4択のうちどれであってもその
+    まま反映する。"""
+    work_root = str(tmp_path / "work")
+    job_overrides = {}
+    if intensity != "none":
+        job_overrides = {"sway_intensity": intensity, "sway_enable": True}
+    job_dir = _write_job_dir(
+        work_root, "MyAvatar", "C:/avatars/MyAvatar.vrm", **job_overrides,
+    )
+    fake = _FakeSelf(str(tmp_path / "app_root"), work_root)
+    # 復元前は必ず異なる値から始める(誤爆確認、既定"normal"以外を初期値に)。
+    fake.widgets["swayIntensityBar"].set(mw.SWAY_INTENSITY_VALUES.index("soft"))
+
+    mw.MainWindow._apply_restored_settings(fake, job_dir, set_vrm_path=False)
+
+    idx = fake.widgets["swayIntensityBar"].get()
+    assert mw.SWAY_INTENSITY_VALUES[idx] == intensity
+
+
+def test_apply_restored_settings_sway_migration_legacy_enabled_true_becomes_normal(tmp_path):
+    """移行規則: `sway_intensity`キーが無く、dev#1508 W2b期の
+    `sway_enabled`=True(bool)がある場合、中立値"normal"へ移行する
+    (W2b期はON/OFFのみで4段の情報を持たなかったため)。"""
+    work_root = str(tmp_path / "work")
+    job_dir = _write_job_dir(
+        work_root, "MyAvatar", "C:/avatars/MyAvatar.vrm", sway_enabled=True,
+    )
+    fake = _FakeSelf(str(tmp_path / "app_root"), work_root)
+    fake.widgets["swayIntensityBar"].set(mw.SWAY_INTENSITY_VALUES.index("none"))
+
+    mw.MainWindow._apply_restored_settings(fake, job_dir, set_vrm_path=False)
+
+    idx = fake.widgets["swayIntensityBar"].get()
+    assert mw.SWAY_INTENSITY_VALUES[idx] == "normal"
+
+
+def test_apply_restored_settings_sway_migration_legacy_enabled_false_becomes_none(tmp_path):
+    """移行規則: `sway_intensity`キーが無く、dev#1508 W2b期の
+    `sway_enabled`=False(bool)がある場合、"none"へ移行する。"""
+    work_root = str(tmp_path / "work")
+    job_dir = _write_job_dir(
+        work_root, "MyAvatar", "C:/avatars/MyAvatar.vrm", sway_enabled=False,
+    )
+    fake = _FakeSelf(str(tmp_path / "app_root"), work_root)
+    fake.widgets["swayIntensityBar"].set(mw.SWAY_INTENSITY_VALUES.index("hard"))
+
+    mw.MainWindow._apply_restored_settings(fake, job_dir, set_vrm_path=False)
+
+    idx = fake.widgets["swayIntensityBar"].get()
+    assert mw.SWAY_INTENSITY_VALUES[idx] == "none"
+
+
+def test_apply_restored_settings_sway_migration_both_keys_missing_becomes_none(tmp_path):
+    """移行規則: `sway_intensity`も旧`sway_enabled`も無い(=どちらのWPより
+    前に書かれたごく古いjob.json)場合は"none"へ倒す。"""
+    work_root = str(tmp_path / "work")
+    job_dir = os.path.join(work_root, "LegacyAvatar")
+    os.makedirs(job_dir, exist_ok=True)
+    legacy_job = {"vrm_path": "C:/avatars/LegacyAvatar.vrm"}  # sway系キー無し
+    with open(os.path.join(job_dir, "job.json"), "w", encoding="utf-8") as f:
+        json.dump(legacy_job, f)
+    fake = _FakeSelf(str(tmp_path / "app_root"), work_root)
+    fake.widgets["swayIntensityBar"].set(mw.SWAY_INTENSITY_VALUES.index("hard"))  # 誤爆確認
+
+    mw.MainWindow._apply_restored_settings(fake, job_dir, set_vrm_path=False)
+
+    idx = fake.widgets["swayIntensityBar"].get()
+    assert mw.SWAY_INTENSITY_VALUES[idx] == "none"
+
+
+def test_apply_restored_settings_sway_migration_unknown_intensity_value_becomes_none(tmp_path):
+    """負の対照: `sway_intensity`が未知の値(壊れた/手書きのjob.json)の
+    場合も安全側の"none"へ倒す(write_job()側の「未知の値は書かない」
+    フォールバックと対称)。"""
+    work_root = str(tmp_path / "work")
+    job_dir = os.path.join(work_root, "LegacyAvatar")
+    os.makedirs(job_dir, exist_ok=True)
+    legacy_job = {
+        "vrm_path": "C:/avatars/LegacyAvatar.vrm",
+        "sway_intensity": "bogus",
+    }
+    with open(os.path.join(job_dir, "job.json"), "w", encoding="utf-8") as f:
+        json.dump(legacy_job, f)
+    fake = _FakeSelf(str(tmp_path / "app_root"), work_root)
+    fake.widgets["swayIntensityBar"].set(mw.SWAY_INTENSITY_VALUES.index("hard"))
+
+    mw.MainWindow._apply_restored_settings(fake, job_dir, set_vrm_path=False)
+
+    idx = fake.widgets["swayIntensityBar"].get()
+    assert mw.SWAY_INTENSITY_VALUES[idx] == "none"
 
 
 def test_apply_restored_settings_negative_shadow_lift_is_ignored(tmp_path):

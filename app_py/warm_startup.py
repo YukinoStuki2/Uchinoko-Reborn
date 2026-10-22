@@ -46,9 +46,12 @@
 #          if ok:
 #              blender_exe = blender_setup.find_blender(app_root)
 #              paks_dir = pak_manager.paks_dir_quiet(app_root)
+#              # dev#229続報: 単一名決め打ちではなくpak_manager.resolve_pak_filename()
+#              # (Steam/Xbox App両対応)で実在するファイル名を解決する。
+#              pak_filename = pak_manager.resolve_pak_filename(paks_dir) if paks_dir else None
 #              pak_path = (
-#                  os.path.join(paks_dir, pak_manager.PAL_WINDOWS_PAK_NAME)
-#                  if paks_dir else None
+#                  os.path.join(paks_dir, pak_filename)
+#                  if paks_dir and pak_filename else None
 #              )
 #              warm_startup.warm_startup_after_blender_ready(
 #                  app_root, work_root, blender_exe, pak_path,
@@ -139,12 +142,114 @@ def find_blender_python(blender_exe: str) -> Optional[str]:
     return None
 
 
+class WarmCacheStatus:
+    """dev#45 ②: warm_cache()(--warm-cacheサブプロセス)のライフサイクルを
+    スレッドセーフに保持する、tkinter非依存の状態オブジェクト。
+
+    GUI(app_py\\ui\\main_window.py)はこれをポーリング(root.after()ループ)
+    して「共通データ準備中…」の表示/復元や、変換開始時の「初回準備のため
+    数分かかります」相当の案内可否を判断する。tkウィジェットへは一切触れ
+    ないため、実tk窓を開かずにこのクラス単体・あるいは呼び出し側の結線
+    メソッドを直接呼ぶ形で状態遷移を検証できる(共通契約「実tk窓を開かない
+    (fake-self/withdraw方式)」)。
+
+    状態は3つだけ: 未開始(is_pending=False, is_incomplete=True) ->
+    実行中(is_pending=True, is_incomplete=True) ->
+    完了(is_pending=False, is_incomplete=False)。ガード条件で起動されな
+    かった場合(pak未解決等)は「未開始」のまま留まる(is_incomplete()は
+    Trueのまま=「まだ準備が整っていない」という意味では正しい)。"""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._running = False
+        self._completed = False
+        self._exit_code: Optional[int] = None
+
+    def mark_started(self) -> None:
+        with self._lock:
+            self._running = True
+            self._completed = False
+            self._exit_code = None
+
+    def mark_done(self, exit_code: Optional[int]) -> None:
+        with self._lock:
+            self._running = False
+            self._completed = True
+            self._exit_code = exit_code
+
+    def is_pending(self) -> bool:
+        """GUIが「共通データ準備中…」を出すべきか(起動済みかつ未完了)。"""
+        with self._lock:
+            return self._running
+
+    def is_incomplete(self) -> bool:
+        """変換開始時のガード用: 完了通知をまだ受け取っていないかどうか
+        (実行中/未開始のいずれも対象。「未完なら明示する」の判定条件)。"""
+        with self._lock:
+            return not self._completed
+
+    @property
+    def exit_code(self) -> Optional[int]:
+        with self._lock:
+            return self._exit_code
+
+
+class _WarmDiagReport:
+    """app_py\\shared_cache_gc.py(dev#45b移設前はdevtools\\disk_guard.py)の
+    関数群が要求する report.log(text, echo=True) インタフェースの薄い実装。
+    GCの実施内容もwarm_startup.log(warm_diag_log())へそのまま集約する
+    (専用ログファイルを増やさない)。"""
+
+    def __init__(self, work_root: str) -> None:
+        self._work_root = work_root
+
+    def log(self, text: str, echo: bool = True) -> None:  # noqa: ARG002 -- report.logのI/Fに合わせる
+        warm_diag_log(self._work_root, text)
+
+
+def _run_shared_cache_gc_after_warm(app_root: str, work_root: str) -> None:  # noqa: ARG001 -- 後方互換のため引数形状を維持(下記dev#45b注記)
+    """dev#45 ①: warm_cache()完了(exit code=0)直後に、work\\_shared_cache
+    の旧世代を掃除する(app_py\\shared_cache_gc.py::gc_shared_cache_after_warm、
+    PR #748で実装済みの保持ポリシーをそのまま使う。本関数はその呼び出しの
+    配線のみを担う)。
+
+    dev#45b(2026-08-02、WP wp_45b_followup)の是正: 旧実装は
+    `app_root\\devtools\\disk_guard.py` をapp_root相対で動的importしていた。
+    devtools\\は配布zipに同梱されない(app_py\\build.py実測、
+    app_py\\/pipeline\\/unity\\/assets\\/res\\licensesのみが対象)ため、
+    エンドユーザーの配布版では常にこの動的importが失敗し、
+    「静かにスキップされる」= dev#45 item③(旧世代キャッシュ約700MBの死蔵
+    掃除)が実質未達になっていた(「実装したと効いているは別」の再発、
+    CLAUDE.md)。
+
+    本関数は app_py\\shared_cache_gc.py を通常のPythonモジュールとして
+    直接importする——本関数自身が定義されているwarm_startup.pyと同じ
+    app_py\\ディレクトリに同居する兄弟ファイルなので、開発リポジトリ直下
+    実行でもビルド後の配布物(res\\app\\配下、app_py\\build.py::
+    _copy_app_sources()がapp_py\\の全ファイルをそのままコピーする)でも
+    app_root の値に関わらず常に解決できる。app_root引数は呼び出し元
+    (_on_exit closure、warm_shared_cache_on_startup)との既存シグネチャ
+    互換のために残しているが、本関数自体はもう使わない。"""
+    try:
+        import shared_cache_gc  # noqa: PLC0415 -- 遅延import(GUI起動コスト回避、app_pyの兄弟モジュール)
+
+        report = _WarmDiagReport(work_root)
+        shared_cache_gc.gc_shared_cache_after_warm(report, work_root)
+    except Exception as ex:  # noqa: BLE001 -- GC失敗でwarm_cache完了処理そのものを壊さない
+        try:
+            warm_diag_log(work_root, f"warm-cache-gc: exception {ex}")
+        except Exception:  # noqa: BLE001 -- ログ自体の失敗で二重に握りつぶさない対象を広げない
+            pass
+
+
 def _spawn_fire_and_forget(
     popen: PopenFactory,
     args: List[str],
     log_path: str,
     work_root: str,
     prefix: str,
+    *,
+    on_exit: Optional[Callable[[Optional[int]], None]] = None,
 ) -> None:
     """プロセスを起動し、完了を待たずに戻る(撃ちっぱなし)。標準出力/エラーは
     行単位でlog_pathへ追記する(C#のOutputDataReceivedハンドラがFile.
@@ -155,7 +260,14 @@ def _spawn_fire_and_forget(
     ハンドラ相当)。popen()自体が投げた例外はここでは吸収せずそのまま
     呼び出し元へ伝播させる(呼び出し元の外側try/exceptが「失敗は無視」を
     担う設計、warm_shared_cache_on_startup/warm_blender_process_on_startup
-    を参照)。"""
+    を参照)。
+
+    on_exit(dev#45): 指定されていれば、完了ログ記録の直後(同じバック
+    グラウンドスレッド上)でproc.returncodeを渡して呼ぶ。GC配線
+    (warm_shared_cache_on_startup)や状態オブジェクト更新(WarmCacheStatus)
+    に使う。on_exit自体が例外を投げても外側のtry/exceptで吸収され、完了
+    ログの記録そのものは妨げない(呼び出し側が自前で例外処理する設計、
+    _run_shared_cache_gc_after_warm参照)。"""
     proc = popen(
         args,
         stdout=subprocess.PIPE,
@@ -183,6 +295,8 @@ def _spawn_fire_and_forget(
             warm_diag_log(
                 work_root, f"{prefix}: exited code={proc.returncode} elapsed={elapsed:.2f}s"
             )
+            if on_exit is not None:
+                on_exit(proc.returncode)
         except Exception:  # noqa: BLE001 -- 完了ログ用スレッドの失敗で本処理を止めない
             pass
 
@@ -197,13 +311,21 @@ def warm_shared_cache_on_startup(
     pak_path: Optional[str],
     *,
     popen: PopenFactory = subprocess.Popen,
+    status: Optional[WarmCacheStatus] = None,
+    run_gc_after_complete: bool = True,
 ) -> None:
     """WarmSharedCacheOnStartup() L.2219-2285の移植。バニラ準備
     (extract_vanilla.py)とライブテンプレート(live_template.py)の事前計算を
     Blender本体プロセスとは別に(bpy非依存のpure-Python経路、convert_noue.py
     --warm-cache)バックグラウンドで撃ちっぱなしにする。ガード条件を1つでも
     満たさなければ理由をwarm_startup.logへ記録して即returnする(C#の
-    「以前は完全に無音だった」に対するdev#288の是正をそのまま踏襲)。"""
+    「以前は完全に無音だった」に対するdev#288の是正をそのまま踏襲)。
+
+    status(dev#45 ②、任意): 渡されればサブプロセスの開始/完了を
+    WarmCacheStatusへ反映する(main_window.pyのGUI可視化配線が使う)。
+    run_gc_after_complete(dev#45 ①、既定True): サブプロセスが正常終了
+    (exit code=0)した直後に_run_shared_cache_gc_after_warm()を呼び、旧世代
+    shared_cacheを掃除する。負の対照試験用にFalseで無効化できる。"""
     try:
         if not blender_ready:
             warm_diag_log(work_root, "warm-cache: skip (blenderReady=false)")
@@ -230,11 +352,25 @@ def warm_shared_cache_on_startup(
         os.makedirs(work_root, exist_ok=True)
         args = [bpython, script, "--warm-cache", "--pak", pak_path, "--work-root", work_root]
         log_path = os.path.join(work_root, "warm_cache.log")
-        _spawn_fire_and_forget(popen, args, log_path, work_root, "warm-cache")
+
+        if status is not None:
+            status.mark_started()
+
+        def _on_exit(code: Optional[int]) -> None:
+            if status is not None:
+                status.mark_done(code)
+            if run_gc_after_complete and code == 0:
+                _run_shared_cache_gc_after_warm(app_root, work_root)
+
+        _spawn_fire_and_forget(popen, args, log_path, work_root, "warm-cache", on_exit=_on_exit)
         warm_diag_log(work_root, f"warm-cache: started pak={pak_path}")
         # 意図的にwait()しない(撃ちっぱなし)。失敗してもUIには一切出さない
         # (ログファイルのみ、4.5の「失敗は無視」規定)。
     except Exception as ex:  # noqa: BLE001 -- C#実装(L.2279-2284)と同じ「失敗は無視」方針
+        if status is not None:
+            # 起動自体に失敗した(popen()が例外を投げた等)場合もGUI側が
+            # 「準備中」表示のまま固まらないよう、完了(失敗)扱いにする。
+            status.mark_done(None)
         try:
             warm_diag_log(work_root, f"warm-cache: exception {ex}")
         except Exception:  # noqa: BLE001 -- ログ自体の失敗で二重に握りつぶさない対象を広げない
@@ -288,12 +424,20 @@ def warm_startup_after_blender_ready(
     *,
     conversion_pending: bool = False,
     popen: PopenFactory = subprocess.Popen,
+    status: Optional[WarmCacheStatus] = None,
 ) -> None:
     """DoEnsureBlenderReady() L.2073-2089の呼び出し順序(blenderReady=true
     確定直後にwarm_shared_cache_on_startup→(保留中の変換が無ければ)
     warm_blender_process_on_startupの順で呼ぶ)をそのまま再現する
     まとめ関数。D1が呼ぶべき唯一のエントリポイント(上記ファイル冒頭の
-    「D1への結線手順」参照)。"""
-    warm_shared_cache_on_startup(app_root, work_root, True, blender_exe, pak_path, popen=popen)
+    「D1への結線手順」参照)。
+
+    status(dev#45 ②、任意): warm_shared_cache_on_startup()へそのまま
+    渡す(GUI可視化用。warm_blender_process_on_startup側は対象外——
+    ②の要件「共通データ準備中」はshared_cache側の文言であり、Blender本体
+    プリウォームには別の可視化要件が無いため)。"""
+    warm_shared_cache_on_startup(
+        app_root, work_root, True, blender_exe, pak_path, popen=popen, status=status
+    )
     if not conversion_pending:
         warm_blender_process_on_startup(work_root, True, False, blender_exe, popen=popen)

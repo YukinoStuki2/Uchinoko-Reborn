@@ -101,3 +101,55 @@ def test_rmtree_robust_ignore_errors_true_swallows_still_locked_file(tmp_path):
     if target.exists():
         os.chmod(str(locked_path), stat.S_IWRITE)
         shutil.rmtree(str(target), ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# dev#1636: vp_core.remove_path_robust() の単体テスト。
+#
+# devtools\\disk_guard.py の年齢規則(work直下削除)はディレクトリと素の
+# ファイル(*_progress.md等)の両方を同じ削除関数に渡すが、rmtree_robustは
+# shutil.rmtreeベースでディレクトリ専用のため、ファイルには必ず
+# NotADirectoryError(WinError 267)で失敗していた。remove_path_robust()が
+# ファイル/ディレクトリ両対応であることと、read-only施錠済みディレクトリ
+# (rmtree_robustの存在理由そのもの、dev#642)への委譲が壊れていないこと
+# (負の対照)を検証する。
+# ---------------------------------------------------------------------------
+
+def test_remove_path_robust_removes_plain_file(tmp_path):
+    """素のファイル(work直下の*_progress.md等)を削除できる。"""
+    target = tmp_path / "wp_foo_progress.md"
+    target.write_text("x", encoding="utf-8")
+
+    vp_core.remove_path_robust(str(target))
+
+    assert not target.exists()
+
+
+def test_remove_path_robust_removes_readonly_file(tmp_path):
+    """read-only属性の素のファイルも、chmodして再試行し削除できる。"""
+    target = tmp_path / "readonly.md"
+    target.write_text("x", encoding="utf-8")
+    os.chmod(str(target), stat.S_IREAD)
+
+    vp_core.remove_path_robust(str(target))
+
+    assert not target.exists()
+
+
+def test_remove_path_robust_still_removes_readonly_locked_dir(tmp_path):
+    """負の対照: ディレクトリはこれまでどおりrmtree_robust相当の経路で削除
+    される。read-only施錠済みshared_cache/live_template配下(dev#642の存在
+    理由)を壊していないことを確認する。"""
+    target = tmp_path / "locked_dir"
+    target.mkdir()
+    _make_readonly_tree(str(target))
+
+    vp_core.remove_path_robust(str(target))
+
+    assert not target.exists()
+
+
+def test_remove_path_robust_on_missing_path_is_noop(tmp_path):
+    """存在しないパスは例外を投げず静かに戻る。"""
+    missing = tmp_path / "does_not_exist.md"
+    vp_core.remove_path_robust(str(missing))  # 例外なしで戻ればOK

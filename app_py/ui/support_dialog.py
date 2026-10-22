@@ -60,6 +60,13 @@ class SupportContext:
     get_avatar_name: Callable[[], str]
     get_status_text: Callable[[], str]
     build_diagnostics_text: Callable[[], str]
+    # dev#921全ログ添付版(2026-08-03オーナー裁定「全部サニタイズしておくれば
+    # いいだけ」): 呼び出し元(main_window.py)がwork_root\<name>\配下+Unity
+    # 輸出ディレクトリ+launch.logをまとめた全文添付テキストを返すコールバック。
+    # 省略時(既定Noneを返す)は従来どおり添付無し送信。取得失敗時にNoneを
+    # 返す/例外を投げるのは呼び出し元・on_ok双方の責務(「ログが無い/読めない
+    # ことを理由に問い合わせ送信自体を失敗させない」設計、issue #921踏襲)。
+    get_attachment_log_text: Callable[[], Optional[str]] = field(default=lambda: None)
     append_log: Callable[[str], None] = field(default=lambda msg: None)
     copy_to_clipboard: Optional[Callable[[str], None]] = None
     open_url: Callable[[str], None] = field(default=webbrowser.open)
@@ -77,46 +84,66 @@ def _resolve_log_font() -> tuple:
 def show_support_dialog(parent: tk.Misc, state: SupportDialogState, ctx: SupportContext) -> tk.Toplevel:
     """ShowSupportDialog (L.4462-4661) 相当。呼び出しごとにToplevelを1個作る
     (C#版もローカル変数のFormを毎回newしている)。"""
+    # dev#1367(2026-08-15、実報告B5357788): 旧実装は resizable(False, False)
+    # + 全ウィジェットplace(固定height)で、info_label/confirm_labelが長い
+    # 翻訳文で見切れる恐れがあった(「送信時の同意文言が読めない」報告)。
+    # pack()ベースへ全面変更: ①ウィンドウをリサイズ可能にする
+    # (resizable()を呼ばない=既定True)②各段のLabelは高さを固定せず内容量
+    # に応じて自動で伸びる③ログ本文(log_edit_box)は元々Textでスクロール
+    # 可能だったが、Scrollbarを明示追加して視認可能にする。段の切替は
+    # place_forget/place→pack_forget/packへ置き換え(振る舞いは同一)。
     dlg = tk.Toplevel(parent)
     dlg.title(i18n.S("BtnReport"))
-    dlg.resizable(False, False)
-    dlg.geometry("520x340")
     dlg.transient(parent)
 
+    # ---- 常設(全段で表示): ログ手動コピー + 閉じる(先にpackして
+    # 下端を確保。以降packされる各段フレームが残り領域を使う) ----
+    bottom_bar = tk.Frame(dlg)
+    bottom_bar.pack(side="bottom", fill="x", padx=12, pady=(0, 12))
+    copy_log_btn = tk.Button(bottom_bar, text=i18n.S("BtnCopyLogManually"))
+    copy_log_btn.pack(side="left")
+    close_btn = tk.Button(bottom_bar, text=i18n.S("BtnClose"), command=dlg.destroy)
+    close_btn.pack(side="right")
+
     # ---- 第1段: 説明 + 開始ボタン ----
-    stage1 = tk.Frame(dlg, width=496, height=280)
-    info_label = tk.Label(stage1, text=i18n.S("SupportStage1Info"), justify="left", anchor="nw", wraplength=464)
-    info_label.place(x=8, y=8, width=464, height=90)
+    stage1 = tk.Frame(dlg)
+    info_label = tk.Label(stage1, text=i18n.S("SupportStage1Info"), justify="left", anchor="nw", wraplength=440)
+    info_label.pack(fill="x", pady=(0, 10))
     open_form_btn = tk.Button(stage1, text=i18n.S("BtnOpenInquiryForm"))
-    open_form_btn.place(x=8, y=106, width=240, height=34)
+    open_form_btn.pack(anchor="w")
 
     # ---- 第2段: 送信内容の確認(編集可能) ----
-    stage2 = tk.Frame(dlg, width=496, height=280)
-    confirm_label = tk.Label(stage2, text="", justify="left", anchor="nw", wraplength=464)
-    confirm_label.place(x=8, y=8, width=464, height=72)
-    log_edit_box = tk.Text(stage2, wrap="word", font=_resolve_log_font())
-    log_edit_box.place(x=8, y=84, width=464, height=136)
-    ok_btn = tk.Button(stage2, text=i18n.S("BtnOk"))
-    ok_btn.place(x=8, y=226, width=100, height=32)
-    stage2_status_lbl = tk.Label(stage2, text="", anchor="w")
-    stage2_status_lbl.place(x=116, y=230, width=356, height=24)
+    stage2 = tk.Frame(dlg)
+    confirm_label = tk.Label(stage2, text="", justify="left", anchor="nw", wraplength=440)
+    confirm_label.pack(fill="x", pady=(0, 8))
+    log_frame = tk.Frame(stage2)
+    log_frame.pack(fill="both", expand=True, pady=(0, 8))
+    log_edit_box = tk.Text(log_frame, wrap="word", font=_resolve_log_font(), height=14, width=62)
+    log_scrollbar = tk.Scrollbar(log_frame, orient="vertical", command=log_edit_box.yview)
+    log_edit_box.configure(yscrollcommand=log_scrollbar.set)
+    log_edit_box.pack(side="left", fill="both", expand=True)
+    log_scrollbar.pack(side="right", fill="y")
+    stage2_btn_row = tk.Frame(stage2)
+    stage2_btn_row.pack(fill="x")
+    ok_btn = tk.Button(stage2_btn_row, text=i18n.S("BtnOk"))
+    ok_btn.pack(side="left")
+    stage2_status_lbl = tk.Label(stage2_btn_row, text="", anchor="w")
+    stage2_status_lbl.pack(side="left", padx=(10, 0), fill="x", expand=True)
 
     # ---- 第3段: 送信済み(いつでも同じ場所を開ける+手動再送) ----
-    stage3 = tk.Frame(dlg, width=496, height=280)
-    sent_label = tk.Label(stage3, text="", justify="left", anchor="nw", wraplength=464)
-    sent_label.place(x=8, y=8, width=464, height=50)
+    stage3 = tk.Frame(dlg)
+    sent_label = tk.Label(stage3, text="", justify="left", anchor="nw", wraplength=440)
+    sent_label.pack(fill="x", pady=(0, 8))
     sent_url_box = tk.Entry(stage3)
-    sent_url_box.place(x=8, y=64, width=464, height=24)
-    open_again_btn = tk.Button(stage3, text=i18n.S("BtnOpenSamePlace"))
-    open_again_btn.place(x=8, y=100, width=200, height=32)
-    resend_btn = tk.Button(stage3, text=i18n.S("BtnResendLog"))
-    resend_btn.place(x=8, y=140, width=200, height=32)
+    sent_url_box.pack(fill="x", pady=(0, 10))
+    stage3_btn_row = tk.Frame(stage3)
+    stage3_btn_row.pack(fill="x")
+    open_again_btn = tk.Button(stage3_btn_row, text=i18n.S("BtnOpenSamePlace"))
+    open_again_btn.pack(side="left")
+    resend_btn = tk.Button(stage3_btn_row, text=i18n.S("BtnResendLog"))
+    resend_btn.pack(side="left", padx=(8, 0))
 
-    # ---- 常設(全段で表示): ログ手動コピー + 閉じる ----
-    copy_log_btn = tk.Button(dlg, text=i18n.S("BtnCopyLogManually"))
-    copy_log_btn.place(x=12, y=300, width=160, height=28)
-    close_btn = tk.Button(dlg, text=i18n.S("BtnClose"), command=dlg.destroy)
-    close_btn.place(x=396, y=300, width=112, height=28)
+    dlg.minsize(420, 260)
 
     def do_copy_log() -> None:
         masked = inquiry.sanitize_for_clipboard(ctx.build_diagnostics_text())
@@ -130,8 +157,8 @@ def show_support_dialog(parent: tk.Misc, state: SupportDialogState, ctx: Support
 
     def show_stage(which: tk.Frame) -> None:
         for frame in (stage1, stage2, stage3):
-            frame.place_forget()
-        which.place(x=12, y=12, width=496, height=280)
+            frame.pack_forget()
+        which.pack(fill="both", expand=True, padx=12, pady=12)
 
     def show_sent_stage(report_id: Optional[str], view_url: Optional[str]) -> None:
         sent_label.config(text=i18n.F("SupportSentLabelFormat", report_id))
@@ -140,9 +167,26 @@ def show_support_dialog(parent: tk.Misc, state: SupportDialogState, ctx: Support
         show_stage(stage3)
 
     def show_confirm_stage(changed_notice: bool, is_append: bool) -> None:
+        """dev#921全ログ添付版(2026-08-03オーナー追加裁定「送付ログは現状の
+        UIそのままで全部表示し『一応ユーザーが事前に承認した』体を保つこと」):
+        work_root配下の全診断ファイルも、ここで(送信前に)伏字化した上で
+        同じlog_edit_boxへ追記して見せる。「ユーザーの目に触れないまま裏で
+        追加のログが送られる」形を禁じる指示のため、on_ok()側は新たに
+        添付を取得し直さず、ここで一度だけ組み立てた(=画面に出た)テキストを
+        そのまま送信対象にする(表示=送信内容を構造的に一致させる)。
+        伏字化はmask_full_log_for_attachment(inquiry.build_layer2_attachment_
+        block経由、1行ずつ失敗しても壊さない設計)を再利用するだけで、新規の
+        マスキングは書かない。"""
         diag_text = ctx.build_diagnostics_text()
+        try:
+            attachment_raw = ctx.get_attachment_log_text()
+        except Exception as ex:  # noqa: BLE001 -- 添付の取得失敗で送信自体を止めない
+            ctx.append_log("[report] attachment log unavailable (continuing without it): " + str(ex))
+            attachment_raw = None
+        attachment_block, _dropped = inquiry.build_layer2_attachment_block(attachment_raw)
+        full_text = diag_text + ("\n\n" + attachment_block if attachment_block else "")
         log_edit_box.delete("1.0", tk.END)
-        log_edit_box.insert("1.0", diag_text)
+        log_edit_box.insert("1.0", full_text)
         notice = i18n.S("SupportChangedNotice") if changed_notice else ""
         body = i18n.S("SupportConfirmAppendBody") if is_append else i18n.S("SupportConfirmNewBody")
         confirm_label.config(text=notice + body)
@@ -155,13 +199,19 @@ def show_support_dialog(parent: tk.Misc, state: SupportDialogState, ctx: Support
         try:
             ctx.open_url(url)
         except Exception as ex:  # noqa: BLE001 -- C#版も握りつぶしてログにだけ残す
-            ctx.append_log("[report] ページを開けませんでした: " + str(ex))
+            ctx.append_log("[report] failed to open page: " + str(ex))
 
     open_form_btn.config(command=lambda: show_confirm_stage(False, False))
     resend_btn.config(command=lambda: show_confirm_stage(False, True))
     open_again_btn.config(command=lambda: open_url_safe(sent_url_box.get()))
 
     def on_ok() -> None:
+        # dev#921全ログ添付版(2026-08-03オーナー裁定「送るものは全部、送信前の
+        # UI画面に表示しろ」): edited_logはlog_edit_boxの中身そのもの
+        # (show_confirm_stageで診断文+伏字化済み添付を両方書き込み済み)。
+        # ここで改めて添付を取得・追加しない——「画面に出た内容と送る内容が
+        # 完全に一致する」ことを、同じ文字列を使い回す構造で保証する
+        # (attachment_log_textは渡さない=既定Noneのまま、二重追加を避ける)。
         edited_log = log_edit_box.get("1.0", "end-1c")
         try:
             payload, _masked_log = inquiry.build_report_payload_json(
@@ -174,7 +224,7 @@ def show_support_dialog(parent: tk.Misc, state: SupportDialogState, ctx: Support
                 log_text=edited_log,
             )
         except Exception as ex:  # noqa: BLE001
-            ctx.append_log("[report] 送信データの作成に失敗: " + str(ex))
+            ctx.append_log("[report] failed to build send payload: " + str(ex))
             stage2_status_lbl.config(text=i18n.S("SupportSendFailedUseManualCopy"))
             return
 
@@ -204,7 +254,7 @@ def show_support_dialog(parent: tk.Misc, state: SupportDialogState, ctx: Support
                 return
             res = result_box[0]
             if res.ok:
-                ctx.append_log(f"[report] 送信完了 報告ID: {res.id} {res.view_url}")
+                ctx.append_log(f"[report] send complete, report ID: {res.id} {res.view_url}")
                 state.report_id = res.id
                 state.report_view_url = res.view_url
                 # dev#42b: 次回の変化検出用に「その時点の素の診断文」を保存する
@@ -213,7 +263,7 @@ def show_support_dialog(parent: tk.Misc, state: SupportDialogState, ctx: Support
                 show_sent_stage(res.id, res.view_url)
                 open_url_safe(res.view_url or "")
             else:
-                ctx.append_log("[report] 送信できませんでした: " + str(res.error))
+                ctx.append_log("[report] failed to send: " + str(res.error))
                 stage2_status_lbl.config(text=i18n.S("SupportSendFailedOffline"))
                 ok_btn.config(state="normal")
                 log_edit_box.config(state="normal")

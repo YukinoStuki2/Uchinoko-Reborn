@@ -106,6 +106,13 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import vp_atlas  # noqa: E402
 
+# dev#472: save_as_mainfile失敗時の生の例外露出対策(vp_bl.save_mainfile_or_die)
+# を再利用するため、pipeline\blender も検索対象に追加する
+_BLENDER_DIR = os.path.join(HERE, "..", "blender")
+if _BLENDER_DIR not in sys.path:
+    sys.path.insert(0, _BLENDER_DIR)
+import vp_bl  # noqa: E402
+
 TAG = "vp_atlas_uvbake"
 
 argv = sys.argv[sys.argv.index("--") + 1:]
@@ -122,7 +129,7 @@ bpy.ops.wm.open_mainfile(filepath=blend_in)
 
 mesh_objs = [o for o in bpy.data.objects if o.type == "MESH"]
 if not mesh_objs:
-    raise RuntimeError(f"MESHオブジェクトが見つからない: {blend_in}")
+    raise RuntimeError(f"no MESH object found: {blend_in}")
 
 
 # find_uv_islands()はvp_atlas.py(bpy非依存の純粋モジュール)へ移設した
@@ -384,13 +391,13 @@ for slot_name, xf in transform_map.items():
 
     if n_shifted:
         n_wrap_normalized += 1
-        print(f"[{TAG}] {slot_name}: {n_shifted}面のUVを隣のタイルから [0,1] へ"
-              f"戻した(WRAP等価の整数シフト) 生bbox={[round(x, 6) for x in bbox]}"
-              f" -> 正規化後={[round(x, 6) for x in nbox]}")
+        print(f"[{TAG}] {slot_name}: shifted {n_shifted} face(s) UV from the adjacent tile"
+              f" back into [0,1] (integer shift equivalent to WRAP) raw bbox={[round(x, 6) for x in bbox]}"
+              f" -> after normalization={[round(x, 6) for x in nbox]}")
     if n_face_clamped:
         n_clamped += 1
-        print(f"[{TAG}] {slot_name}: {n_face_clamped}/{n_faces}面のセル境界への"
-              f"わずかなはみ出しをクランプして救済した(上限 "
+        print(f"[{TAG}] {slot_name}: clamped a slight overshoot past the cell boundary"
+              f" for {n_face_clamped}/{n_faces} face(s) (tolerance "
               f"{vp_atlas.UV_CELL_CLAMP_TOL})")
     # 2026-07-29追加(指揮者裁定): 記録(report.json)と警報(##AVATAR_WARNING##)を
     # 分離する。ケース3(縮小フィット)は常に report.json へ処置内容を残すが、
@@ -410,18 +417,18 @@ for slot_name, xf in transform_map.items():
     if case3_islands:
         n_island_fit_slots += 1
         level = "WARN" if significant_islands else "INFO"
-        print(f"[{TAG}][{level}] {slot_name}: {len(case3_islands)}個のUV島"
-              f"({n_faces_island_fit}/{n_faces}面)が本物のタイリング"
-              "(セルを大きく超えるUVアイランド)のため、等倍縮小フィットで"
-              "近似表示した(柄の縮尺が変わる。正確な表示は今後対応) "
-              f"詳細={island_fit_details}"
+        print(f"[{TAG}][{level}] {slot_name}: {len(case3_islands)} UV island(s)"
+              f" ({n_faces_island_fit}/{n_faces} face(s)) are genuine tiling"
+              " (UV islands far exceeding the cell), so uniform shrink-fit"
+              " approximation was applied (pattern scale changes; accurate display is future work) "
+              f"details={island_fit_details}"
               + ("" if significant_islands else
-                 " (歪み量が上限以下のため実害なしと判定、警告は出さない)"))
+                 " (distortion below tolerance judged harmless, no warning issued)"))
     if n_face_excluded:
         n_overshoot_excluded += 1
-        print(f"[{TAG}][WARN] {slot_name}: {n_face_excluded}/{n_faces}面はUV島の"
-              "同定に失敗したため個別除外した(元のUVのまま。見た目崩れの"
-              "可能性あり。最大overshoot="
+        print(f"[{TAG}][WARN] {slot_name}: {n_face_excluded}/{n_faces} face(s) failed"
+              " UV island identification and were individually excluded (kept original UV;"
+              " visual glitches possible. max overshoot="
               f"{max_excluded_overshoot:.6f})")
 
     r = {"bbox": bbox, "bbox_normalized": nbox,
@@ -455,13 +462,13 @@ for slot_name, xf in transform_map.items():
         notes = []
         if significant_islands:
             notes.append(
-                f"{len(significant_islands)}個のUV島"
-                f"({sum(d['n_faces'] for d in significant_islands)}面)を"
-                "等倍縮小フィットで近似表示した(柄の縮尺が変わります。"
-                "正確な表示は今後対応)")
+                f"approximated {len(significant_islands)} UV island(s)"
+                f" ({sum(d['n_faces'] for d in significant_islands)} face(s)) via"
+                " uniform shrink-fit (pattern scale changes."
+                " Accurate display is future work)")
         if n_face_excluded:
-            notes.append(f"{n_face_excluded}面はUV島の同定に失敗し個別除外した"
-                          "(元のUVのまま。見た目崩れの可能性あり)")
+            notes.append(f"{n_face_excluded} face(s) failed UV island identification and were"
+                          " individually excluded (kept original UV; visual glitches possible)")
         r["note"] = "; ".join(notes)
     else:
         r["overshoot_after_shift"] = vp_atlas.bbox_overshoot(nbox) if nbox else 0.0
@@ -496,12 +503,12 @@ for slot_name, xf in transform_map.items():
     r["cell_ue"] = [ou, ou + su, ov, ov + sv]
     r["out_of_cell"] = not inside
     if not inside:
-        print(f"[{TAG}][ERROR] {slot_name}: 焼き込み後のUVが意図したセルの外 "
-              f"UE空間bbox=u[{umin:.4f},{umax:.4f}] v[{vmin:.4f},{vmax:.4f}] "
-              f"期待セル=u[{ou:.4f},{ou + su:.4f}] v[{ov:.4f},{ov + sv:.4f}]")
+        print(f"[{TAG}][ERROR] {slot_name}: baked UV is outside the intended cell "
+              f"UE-space bbox=u[{umin:.4f},{umax:.4f}] v[{vmin:.4f},{vmax:.4f}] "
+              f"expected cell=u[{ou:.4f},{ou + su:.4f}] v[{ov:.4f},{ov + sv:.4f}]")
 
 os.makedirs(os.path.dirname(os.path.abspath(blend_out)) or ".", exist_ok=True)
-bpy.ops.wm.save_as_mainfile(filepath=blend_out)
+vp_bl.save_mainfile_or_die(TAG, blend_out)
 
 with open(report_json, "w", encoding="utf-8") as f:
     json.dump(report, f, ensure_ascii=False, indent=1)

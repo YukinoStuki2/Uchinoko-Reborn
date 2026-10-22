@@ -21,6 +21,7 @@ if _APP_PY_DIR not in sys.path:
     sys.path.insert(0, _APP_PY_DIR)
 
 import i18n  # noqa: E402
+import noue_full_build  # noqa: E402
 from ui import main_window as mw  # noqa: E402
 
 
@@ -294,10 +295,26 @@ def test_set_running_ui_state_reenables_normally_when_not_failed(tmp_path):
     ようになった。ここでは実在するVRMパス+blenderReady=Trueのfakeを使い、
     workRootFailedに邪魔されず「hasVrm/blenderReady判定を満たせば通常どおり
     normalになる」ことを確認する(hasVrm=False等の個別ゲートは
-    test_preview_freshness.py/test_button_gates.pyの担当)。"""
+    test_preview_freshness.py/test_button_gates.pyの担当)。
+
+    2026-08-02 dev#648統合: matsButtonの有効化にはさらに
+    noue_full_build.has_noue_full_build()(フルビルド成果物一式の存在)も
+    必要になったため、fake.work_rootとフルビルド成果物一式を用意する
+    (このテストの関心事はworkRootFailedガードであり、フルビルド判定自体の
+    単体試験はtest_noue_full_build.py・matsButton専用ゲートの試験は
+    test_button_gates.pyのdev#648セクションが担当)。"""
     vrm = tmp_path / "a.vrm"
     vrm.write_bytes(b"")
+    build = noue_full_build.build_dir_path(str(tmp_path), str(vrm))
+    os.makedirs(os.path.join(build, "noue_work", "variant"), exist_ok=True)
+    os.makedirs(os.path.join(build, "atlas"), exist_ok=True)
+    os.makedirs(os.path.join(build, "noue_mat_override"), exist_ok=True)
+    with open(
+        os.path.join(build, "build_provenance.json"), "w", encoding="utf-8"
+    ) as fh:
+        fh.write("{}")
     fake = _bare_window()
+    fake.work_root = str(tmp_path)
     fake._work_root_failed = False
     fake._blender_ready = True
     fake._active_handle = None

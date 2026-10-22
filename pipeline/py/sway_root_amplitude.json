@@ -1,0 +1,113 @@
+{
+  "_schema": "divetopalworld-sway-root-amplitude-1",
+  "_docstring": "16種のKPノードroot骨名(sway_hub.all_kp_node_root_names())それぞれの実測振幅(cm、対humanoid親の相対位置の基準フレームからの最大偏差)。dev#1508 laneA4(work/night_20260817/briefs/laneA4_amplitude_assign.md)が作成。手法: pipeline/py/sway_pivot_axiom.relative_vector()で(子, 親)の相対ベクトルを各フレーム算出し、window先頭フレームを基準とした距離の最大値(cm)。measured=trueは実機ダンプ(KP不活性pak、sway_intensity='none'、アニメーション由来の動きのみを純粋に見る)からの直接算出。measured=falseはF/M同じ装飾ファミリー(_slot_key、性別接頭辞F_/M_を剥がした名前)の実測値を代用した推定値(男性アバターの実機ダンプが本レーンの時間予算内で採取できなかったため。将来レーンで男性アバター実機ダンプが採れたらこの推定を実測へ差し替えること)。NPC_GrassBoss001_Skin001_tail_01(v2.11で実際に使われたしっぽroot)は本レーンで直接測定した実機ダンプが存在しない(work配下に痕跡なし、laneA3確認済み)ため、同じ「tail」カテゴリの実測値(F_Kigurumi001_tail_01)を代理値として使う。",
+  "sources": {
+    "measured_dump": "work/sway_run/run_20260816_230300/bonedump_window.csv (flatHaoriKpOff, sway_intensity=none)",
+    "measured_dump_kp_on_crosscheck": "work/sway_run/run_20260816_212641/bonedump_window.csv (flatHaori KP-on, used only for F_Ancient001_waistClothA_01 since it was absent from the KP-off topology export at the time; values agree within ~1.3cm across both dumps for all 7 overlapping names)",
+    "topology": "work/night_20260817/laneA2/kp_inactive_flathaori/topology.json",
+    "method_script": "work/night_20260817/laneA4/build_root_amplitude_rank.py"
+  },
+  "v2_11_approved_levels": {
+    "_docstring": "v2.11(2026-08-15公開、耳=かため・しっぽ=ふつう)は官能『美しい』判定を得た実績がある。そのとき実際に使われたroot名の振幅を『既に出荷して問題なかった』水準としてマークする(brief item1)。以後の割当は、可視性の高いグループ(耳・頭部)がこの水準を超えないことを目標にする。",
+    "ear": {
+      "root_names": [
+        "HeadEquip062_ear_01_l",
+        "HeadEquip062_ear_01_r"
+      ],
+      "approved_max_cm": 36.505321,
+      "approved_mean_cm": 33.905,
+      "measured": true,
+      "note": "v2.11当時の実機ダンプ自体は発掘できなかった(laneA3 2d節)が、これは16root名簿で唯一『耳』を意味する名前であり(sway_abp_templatesのroot_bones固定集合)、現行アーキテクチャでも同名のまま存在し続けている。したがって現行実機ダンプ(flatHaoriKpOff)でのこの名前の実測値を、v2.11が実際に晒していた振幅の代理として使う。"
+    },
+    "tail": {
+      "root_names": [
+        "NPC_GrassBoss001_Skin001_tail_01"
+      ],
+      "approved_max_cm": 50.471209,
+      "measured": false,
+      "note": "work/dev19_final_verify/job.json (sway_cloth_donor_family='NPC_GrassBoss001_Skin001_tail')がv2.11と同一系譜のfastpatchアーキテクチャでこの名前を使ったことをlaneA3が確認済み。しかし直接の実機ダンプは発掘できなかった(laneA3 2d節)。ここでは同じ『tail』カテゴリの実測値(F_Kigurumi001_tail_01)を代理値として使う(laneA3構造分析: 16root全てが同じ『バニラが用意した装備物理専用骨』であり、同カテゴリなら振幅は同程度のオーダーになるという前提)。"
+    }
+  },
+  "roots": {
+    "F_Ancient001_waistClothA_01": {
+      "amplitude_cm": 24.304652,
+      "measured": true,
+      "topology_parent": "head"
+    },
+    "M_Ancient001_waistClothA_01": {
+      "amplitude_cm": 24.304652,
+      "measured": false,
+      "inferred_from": "F_Ancient001_waistClothA_01"
+    },
+    "HeadEquip062_ear_01_l": {
+      "amplitude_cm": 31.304798,
+      "measured": true,
+      "topology_parent": "lowerarm_l"
+    },
+    "HeadEquip062_ear_01_r": {
+      "amplitude_cm": 36.505321,
+      "measured": true,
+      "topology_parent": "lowerarm_r"
+    },
+    "F_OldCloth001_04": {
+      "amplitude_cm": 41.744597,
+      "measured": true,
+      "topology_parent": "pelvis"
+    },
+    "M_OldCloth001_04": {
+      "amplitude_cm": 41.744597,
+      "measured": false,
+      "inferred_from": "F_OldCloth001_04"
+    },
+    "F_Kigurumi001_tail_01": {
+      "amplitude_cm": 50.471209,
+      "measured": true,
+      "topology_parent": "clavicle_l"
+    },
+    "M_Kigurumi001_tail_01": {
+      "amplitude_cm": 50.471209,
+      "measured": false,
+      "inferred_from": "F_Kigurumi001_tail_01"
+    },
+    "NPC_GrassBoss001_Skin001_tail_01": {
+      "amplitude_cm": 50.471209,
+      "measured": false,
+      "inferred_from": "F_Kigurumi001_tail_01 (same donor category: tail)"
+    },
+    "F_Hunter001_06": {
+      "amplitude_cm": 58.239436,
+      "measured": true,
+      "topology_parent": "clavicle_r"
+    },
+    "M_Hunter001_06": {
+      "amplitude_cm": 58.239436,
+      "measured": false,
+      "inferred_from": "F_Hunter001_06"
+    },
+    "F_OldCloth001_01": {
+      "amplitude_cm": 68.549123,
+      "measured": true,
+      "topology_parent": "upperarm_r"
+    },
+    "M_OldCloth001_01": {
+      "amplitude_cm": 68.549123,
+      "measured": false,
+      "inferred_from": "F_OldCloth001_01"
+    },
+    "F_Hunter001_14": {
+      "amplitude_cm": 85.305561,
+      "measured": true,
+      "topology_parent": "upperarm_l"
+    },
+    "M_Hunter001_14": {
+      "amplitude_cm": 85.305561,
+      "measured": false,
+      "inferred_from": "F_Hunter001_14"
+    },
+    "M_Hunter001_17": {
+      "amplitude_cm": 71.772499,
+      "measured": false,
+      "inferred_from": "mean(F_Hunter001_06, F_Hunter001_14) -- same family, never used as a hub slot (permanent reserve, discover_hub_slots() trims it), listed only for all_kp_node_root_names() completeness"
+    }
+  }
+}

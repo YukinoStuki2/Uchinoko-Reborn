@@ -34,11 +34,16 @@ failures = []
 
 
 def check(label, cond, detail=""):
+    """dev#739: 従来はここでfailuresへ記録するだけでassertしておらず、
+    pytest経由では常に緑になっていた(main()を直接実行したときしか
+    有効でなかった)。呼び出し側は無改変のまま、ここでassertすることで
+    pytest収集時にも実際に効くようにする。"""
     if cond:
         print(f"[PASS] {label}")
     else:
         print(f"[FAIL] {label} {detail}")
         failures.append(label)
+    assert cond, f"{label} {detail}".rstrip()
 
 
 # --------------------------------------------------------- テスト用合成データ
@@ -396,6 +401,372 @@ def test_decode_png_negative_control_mutation_detected():
             os.remove(tmp_path)
 
 
+# --------------------------------------------------------------------------
+# dev#564(問い合わせHV57UZBQ): 16bit PNGはdecode_png()がRuntimeErrorで拒否して
+# いたため変換不能だった。方針(issue本文「入口で正規化の原則」)どおり、
+# 16bit→8bit正規化(上位バイト採用)で受理するよう変更。ここでは:
+#   1. 8bit経路が完全に無退行であること(ピクセルハッシュの固定値比較)
+#   2. 16bit PNG(colortype 6=RGBA、全フィルタ種別)が例外を投げず、
+#      期待どおり上位バイトへ正規化されること(赤→緑)
+#   3. 16bit経路の負の対照(1サンプルだけ変えれば出力が追随して変わる=
+#      decode_pngが実際に16bitサンプルを読んでいることの確認)
+#   4. 既存の防御(非PNGヘッダ・未対応bitdepth)がこの変更後も維持されて
+#      いること(拒否ロジックを丸ごと壊していないことの確認)
+
+def _encode_test_png16(samples16, filter_types, colortype=6):
+    """samples16: (h,w,ch) uint16 ndarray(big-endianでエンコードする値そのもの)。
+    _encode_test_png(8bit版)と同じ独立実装のforward filterを、PNG仕様どおり
+    bpp=ch*2バイト距離で適用する16bit版(vp_tex.decode_pngとは独立記述)。"""
+    h, w, ch = samples16.shape
+    bpp = ch * 2
+    stride = w * bpp
+    raw_rows = []
+    for y in range(h):
+        row_bytes = bytearray()
+        for x in range(w):
+            for c in range(ch):
+                row_bytes += struct.pack(">H", int(samples16[y, x, c]))
+        raw_rows.append(bytes(row_bytes))
+    out = bytearray()
+    prev = bytes(stride)
+    for y in range(h):
+        f = filter_types[y]
+        cur = raw_rows[y]
+        row = bytearray(stride)
+        for x in range(stride):
+            left = cur[x - bpp] if x >= bpp else 0
+            up = prev[x]
+            up_left = prev[x - bpp] if x >= bpp else 0
+            v = cur[x]
+            if f == 0:
+                row[x] = v
+            elif f == 1:
+                row[x] = (v - left) & 0xFF
+            elif f == 2:
+                row[x] = (v - up) & 0xFF
+            elif f == 3:
+                row[x] = (v - ((left + up) >> 1)) & 0xFF
+            elif f == 4:
+                row[x] = (v - _png_paeth_predictor(left, up, up_left)) & 0xFF
+            else:
+                raise ValueError(f)
+        out.append(f)
+        out.extend(row)
+        prev = bytes(cur)
+    idat = zlib.compress(bytes(out), 6)
+
+    def chunk(ctype, body):
+        c = ctype + body
+        return struct.pack(">I", len(body)) + c + struct.pack(">I", zlib.crc32(c))
+
+    ihdr = struct.pack(">IIBBBBB", w, h, 16, colortype, 0, 0, 0)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+            + chunk(b"IDAT", idat) + chunk(b"IEND", b""))
+
+
+def test_decode_png_8bit_pixel_hash_unchanged():
+    """8bit経路の無退行確認: 固定シード・固定フィルタ混在の合成PNGをデコード
+    したピクセルSHA1が、あらかじめ固定した既知値(EXPECTED_SHA1、このテスト
+    作成時にvp_tex.pixel_sha1()で実測して埋め込んだ値)と一致すること。
+    bpp導入(ch→bpp)はbitdepth==8のときbpp==chで完全に恒等な変更のはずで、
+    将来ここが崩れれば即座に赤くなる(dev#564: 16bit対応追加でも8bit出力は
+    1バイトも変えない、という受入条件の直接検証)。"""
+    tmp_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "_tmp_test_decode_png_8bit_hash.png")
+    EXPECTED_SHA1 = "957554eee681d2ea1f7b894fde0a2ed95159e63a"
+    try:
+        import numpy as np
+        rng = np.random.default_rng(564_08)
+        h, w = 23, 17  # 4の倍数でない=境界条件込み
+        rgba = rng.integers(0, 256, size=(h, w, 4), dtype=np.uint8)
+        filters = [(y * 3 + 1) % 5 for y in range(h)]  # 0..4混在
+        png_bytes = _encode_test_png(rgba, filters)
+        with open(tmp_path, "wb") as f:
+            f.write(png_bytes)
+        _, _, decoded = vp_tex.decode_png(tmp_path)
+        check("8bit path: decoded pixel bytes match original input (roundtrip)",
+              decoded.tobytes() == rgba.tobytes())
+        check("8bit path: pixel_sha1 matches fixed known-good hash (no-regression)",
+              vp_tex.pixel_sha1(decoded) == EXPECTED_SHA1,
+              f"got {vp_tex.pixel_sha1(decoded)}")
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def test_decode_png_16bit_normalizes_to_8bit():
+    """dev#564 赤→緑: 16bit PNG(colortype RGBA)はRuntimeErrorを投げず、
+    各16bitサンプルの上位バイトへ正規化された8bit RGBAを返す。
+    全フィルタ種別(0..4)+行ごと混在で確認する。"""
+    import numpy as np
+    tmp_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "_tmp_test_decode_png_16bit.png")
+    try:
+        rng = np.random.default_rng(564_16)
+        h, w = 12, 9  # 4の倍数でない=境界条件込み
+        samples16 = rng.integers(0, 65536, size=(h, w, 4), dtype=np.uint16)
+        expected8 = (samples16 >> 8).astype(np.uint8)
+
+        for ftype, name in ((0, "None"), (1, "Sub"), (2, "Up"),
+                             (3, "Average"), (4, "Paeth")):
+            png_bytes = _encode_test_png16(samples16, [ftype] * h)
+            with open(tmp_path, "wb") as f:
+                f.write(png_bytes)
+            w2, h2, decoded = vp_tex.decode_png(tmp_path)
+            check(f"16bit PNG (filter={name}): decode_png does not raise, dims match",
+                  (w2, h2) == (w, h))
+            check(f"16bit PNG (filter={name}): pixels normalized to high byte of each sample",
+                  decoded.tobytes() == expected8.tobytes())
+
+        mixed = [y % 5 for y in range(h)]
+        png_bytes = _encode_test_png16(samples16, mixed)
+        with open(tmp_path, "wb") as f:
+            f.write(png_bytes)
+        _, _, decoded = vp_tex.decode_png(tmp_path)
+        check("16bit PNG (mixed filters per row): pixels normalized to high byte",
+              decoded.tobytes() == expected8.tobytes())
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def test_decode_png_16bit_negative_control_mutation_detected():
+    """負の対照: 16bitサンプルの上位バイトを1画素だけ変えれば、decode_png
+    出力もその画素だけ追随して変わる(=常に固定値を返す等のダミー実装で
+    偶然PASSしていないことの確認)。下位バイトのみの変更は上位バイト採用の
+    正規化により出力へ影響しない(=正規化が実際に上位バイトを見ている
+    ことの確認、両方向)。"""
+    import numpy as np
+    tmp_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "_tmp_test_decode_png_16bit_negctrl.png")
+    try:
+        rng = np.random.default_rng(564_17)
+        h, w = 6, 6
+        samples16 = rng.integers(0, 65536, size=(h, w, 4), dtype=np.uint16)
+        filters = [4] * h  # Paeth固定(実テクスチャで支配的な種別)
+
+        def decode(samples):
+            png_bytes = _encode_test_png16(samples, filters)
+            with open(tmp_path, "wb") as f:
+                f.write(png_bytes)
+            _, _, decoded = vp_tex.decode_png(tmp_path)
+            return decoded
+
+        base = decode(samples16)
+
+        # 上位バイトを変える → 出力が変わるはず
+        mutated_high = samples16.copy()
+        mutated_high[3, 3, 1] = (int(mutated_high[3, 3, 1]) ^ 0x4000) & 0xFFFF
+        changed = decode(mutated_high)
+        check("negative control: mutating a sample's high byte changes decode_png output",
+              changed.tobytes() != base.tobytes())
+
+        # 下位バイトだけ変える → 正規化(上位バイト採用)により出力は不変のはず
+        mutated_low = samples16.copy()
+        mutated_low[3, 3, 1] = (mutated_low[3, 3, 1] & 0xFF00) | \
+            ((mutated_low[3, 3, 1] & 0x00FF) ^ 0x00FF)
+        unchanged = decode(mutated_low)
+        check("high-byte normalization: mutating only the low byte leaves decode_png output unchanged",
+              unchanged.tobytes() == base.tobytes())
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def test_decode_png_unsupported_bitdepth_still_rejected():
+    """負の対照: 拒否ロジックそのものを壊していないことの確認。
+    8/16以外のbitdepth(PNG仕様上は1/2/4も有効値だが本パイプラインは
+    未対応)、および非PNGヘッダ・インターレースPNGは引き続き明確な
+    RuntimeErrorで検出される。"""
+    import numpy as np
+
+    def chunk(ctype, body):
+        c = ctype + body
+        return struct.pack(">I", len(body)) + c + struct.pack(">I", zlib.crc32(c))
+
+    tmp_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "_tmp_test_decode_png_reject.png")
+    try:
+        # bitdepth=4 (colortype 3=palette。仕様上は有効値だが本コードは8/16のみ)
+        w, h = 2, 2
+        ihdr = struct.pack(">IIBBBBB", w, h, 4, 3, 0, 0, 0)
+        plte = bytes([0, 0, 0, 255, 255, 255])
+        idat = zlib.compress(b"\x00\x00" + b"\x00\x00")
+        png_bytes = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+                     + chunk(b"PLTE", plte) + chunk(b"IDAT", idat) + chunk(b"IEND", b""))
+        with open(tmp_path, "wb") as f:
+            f.write(png_bytes)
+        raised = False
+        try:
+            vp_tex.decode_png(tmp_path)
+        except RuntimeError as e:
+            raised = "bitdepth" in str(e)
+        check("negative control: bitdepth=4 (unsupported) still raises RuntimeError", raised)
+
+        # 非PNGヘッダ
+        with open(tmp_path, "wb") as f:
+            f.write(b"NOTAPNGHEADER0000")
+        raised = False
+        try:
+            vp_tex.decode_png(tmp_path)
+        except RuntimeError as e:
+            raised = "not a PNG" in str(e)
+        check("negative control: non-PNG header still raises RuntimeError", raised)
+
+        # インターレースPNG(8bit RGBA, interlace=1)
+        ihdr2 = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 1)
+        idat2 = zlib.compress(b"\x00" + b"\x00" * (w * 4))
+        png_bytes2 = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr2)
+                      + chunk(b"IDAT", idat2) + chunk(b"IEND", b""))
+        with open(tmp_path, "wb") as f:
+            f.write(png_bytes2)
+        raised = False
+        try:
+            vp_tex.decode_png(tmp_path)
+        except RuntimeError as e:
+            raised = "interlaced" in str(e)
+        check("negative control: interlaced PNG still raises RuntimeError", raised)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+# --------------------------------------------------------------------------
+# dev#990(実報告3JMQWCNS): 拡張子だけ.pngにリネームされた非PNG(JPEG/BMP等)が
+# 拡張子だけを信用する既存チェック(str.endswith(".png"))を素通りし、後段の
+# atlas_bakeまで運ばれて落ちていた。is_real_png()は先頭8バイトのPNGマジック
+# ナンバーで実体を判定する、拡張子を一切信用しない入口ガード。
+
+def test_is_real_png_accepts_genuine_png():
+    """正の対照: encode_png()で書いた本物のPNGはTrue。"""
+    import numpy as np
+    tmp_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "_tmp_test_is_real_png_genuine.png")
+    try:
+        vp_tex.encode_png(tmp_path, np.zeros((4, 4, 4), dtype=np.uint8))
+        check("is_real_png: a genuine PNG file returns True",
+              vp_tex.is_real_png(tmp_path) is True)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def test_is_real_png_rejects_renamed_jpeg():
+    """負の対照(症状の再現): JPEGの先頭バイトを.png拡張子で保存しても、
+    is_real_png()はFalseを返す(拡張子は信用しない)。"""
+    tmp_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "_tmp_test_is_real_png_fake_jpeg.png")
+    try:
+        with open(tmp_path, "wb") as f:
+            f.write(b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01" + b"\x00" * 32)
+        check("is_real_png: a JPEG renamed to .png returns False",
+              vp_tex.is_real_png(tmp_path) is False)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def test_is_real_png_rejects_renamed_bmp():
+    """負の対照: BMPの先頭バイト('BM')を.png拡張子で保存してもFalse。"""
+    tmp_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "_tmp_test_is_real_png_fake_bmp.png")
+    try:
+        with open(tmp_path, "wb") as f:
+            f.write(b"BM" + b"\x00" * 32)
+        check("is_real_png: a BMP renamed to .png returns False",
+              vp_tex.is_real_png(tmp_path) is False)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def test_is_real_png_missing_file_returns_false():
+    """負の対照(境界条件): 存在しないファイル・空ファイル・8バイト未満でも
+    例外を投げずFalseを返す(呼び出し側での例外ハンドリングを不要にする)。"""
+    missing = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "_tmp_test_is_real_png_does_not_exist.png")
+    check("is_real_png: a nonexistent path returns False (no exception)",
+          vp_tex.is_real_png(missing) is False)
+
+    tmp_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "_tmp_test_is_real_png_short.png")
+    try:
+        with open(tmp_path, "wb") as f:
+            f.write(b"\x89PN")  # 8バイト未満
+        check("is_real_png: a file shorter than 8 bytes returns False",
+              vp_tex.is_real_png(tmp_path) is False)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def test_decode_png_uses_same_signature_constant():
+    """decode_png()のマジックナンバー判定がPNG_SIGNATURE定数に統一されている
+    ことの確認(is_real_pngと二重実装にならないこと)。"""
+    check("PNG_SIGNATURE constant matches the canonical PNG magic number",
+          vp_tex.PNG_SIGNATURE == b"\x89PNG\r\n\x1a\n")
+
+
+# --------------------------------------------------- dev#1417: tex_fallback_diagnostics
+
+def test_tex_fallback_diagnostics_not_actually_png():
+    """dev#1417本丸: <not-actually-png:>(tex_dir丸ごと欠落を含む、
+    is_real_png()がFalseを返したケース)で、診断ログに[TEX_FALLBACK]タグと
+    元ファイル名が入り、GUI警告本文にもファイル名が入ること。"""
+    diag, warn = vp_tex.tex_fallback_diagnostics("m00", "<not-actually-png:t00.png>")
+    check("tex_fallback_diagnostics(not-actually-png): diag has [TEX_FALLBACK] tag",
+          "[TEX_FALLBACK]" in diag, diag)
+    check("tex_fallback_diagnostics(not-actually-png): diag has grep-friendly reason=",
+          "reason=not_actually_png" in diag, diag)
+    check("tex_fallback_diagnostics(not-actually-png): diag has fallback=template_default",
+          "fallback=template_default" in diag, diag)
+    check("tex_fallback_diagnostics(not-actually-png): diag has slot id",
+          "slot=m00" in diag, diag)
+    check("tex_fallback_diagnostics(not-actually-png): diag has original filename",
+          "t00.png" in diag, diag)
+    check("tex_fallback_diagnostics(not-actually-png): warning text has filename",
+          "t00.png" in warn, warn)
+    check("tex_fallback_diagnostics(not-actually-png): warning text mentions template default",
+          "template's default texture" in warn, warn)
+
+
+def test_tex_fallback_diagnostics_not_png_extension():
+    """拡張子自体が.pngでない場合(FBX入力のjpg/tga等)も同様にfail-loud。"""
+    diag, warn = vp_tex.tex_fallback_diagnostics("m01", "t01.jpg")
+    check("tex_fallback_diagnostics(not-png): diag has [TEX_FALLBACK] tag",
+          "[TEX_FALLBACK]" in diag, diag)
+    check("tex_fallback_diagnostics(not-png): diag has reason=not_png",
+          "reason=not_png" in diag, diag)
+    check("tex_fallback_diagnostics(not-png): diag has original filename",
+          "t01.jpg" in diag, diag)
+    check("tex_fallback_diagnostics(not-png): warning text has filename",
+          "t01.jpg" in warn, warn)
+
+
+def test_tex_fallback_diagnostics_no_texture_no_basecolor_unchanged():
+    """負の対照(既存挙動の無退行): <no-texture-no-basecolor:>のGUI警告文言は
+    dev#939が導入した既存テキスト・正規表現とバイト単位で完全一致し続ける
+    (pipeline_runner.pyの既存翻訳テーブルを壊さないため、1文字も変えない)。"""
+    diag, warn = vp_tex.tex_fallback_diagnostics(
+        "m02", "<no-texture-no-basecolor:Beret>")
+    check("tex_fallback_diagnostics(no-texture-no-basecolor): diag has [TEX_FALLBACK] tag",
+          "[TEX_FALLBACK]" in diag, diag)
+    check("tex_fallback_diagnostics(no-texture-no-basecolor): warning text unchanged "
+          "(dev#939 regex compatibility)",
+          warn == "Color information for some materials could not be retrieved, "
+          "so they may not display correctly (material=Beret)", warn)
+
+
+def test_tex_fallback_diagnostics_tag_constant_matches():
+    """TEX_FALLBACK_TAG定数と実際に出力されるタグ文字列が一致すること
+    (定数を変え忘れて表記だけ古いまま残る事故の検出)。"""
+    diag, _ = vp_tex.tex_fallback_diagnostics("m00", "t00.jpg")
+    check("tex_fallback_diagnostics: uses TEX_FALLBACK_TAG constant",
+          f"[{vp_tex.TEX_FALLBACK_TAG}]" in diag, diag)
+    check("TEX_FALLBACK_TAG is the literal 'TEX_FALLBACK' (grep target)",
+          vp_tex.TEX_FALLBACK_TAG == "TEX_FALLBACK")
+
+
 def main():
     test_noop_when_fully_opaque()
     test_noop_when_fully_transparent()
@@ -406,6 +777,19 @@ def main():
     test_encode_dxt1_reference_is_sensitive_negative_control()
     test_decode_png_all_filters_roundtrip()
     test_decode_png_negative_control_mutation_detected()
+    test_decode_png_8bit_pixel_hash_unchanged()
+    test_decode_png_16bit_normalizes_to_8bit()
+    test_decode_png_16bit_negative_control_mutation_detected()
+    test_decode_png_unsupported_bitdepth_still_rejected()
+    test_is_real_png_accepts_genuine_png()
+    test_is_real_png_rejects_renamed_jpeg()
+    test_is_real_png_rejects_renamed_bmp()
+    test_is_real_png_missing_file_returns_false()
+    test_decode_png_uses_same_signature_constant()
+    test_tex_fallback_diagnostics_not_actually_png()
+    test_tex_fallback_diagnostics_not_png_extension()
+    test_tex_fallback_diagnostics_no_texture_no_basecolor_unchanged()
+    test_tex_fallback_diagnostics_tag_constant_matches()
 
     print()
     if failures:

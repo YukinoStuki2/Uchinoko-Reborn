@@ -155,3 +155,73 @@ def inject_texture_file(template_uexp_path, png_path, out_uexp_path, alpha_cover
         f.write(data)
     return {"pixel_format": pf, "size_x": sx, "size_y": sy, "psnr": psnr,
             "gain": gain, "gain_version": TEXINJECT_GAIN_VERSION}
+
+
+def inject_texture_file_vanilla_slot(template_uexp_path, template_ubulk_path, png_path,
+                                      out_uexp_path, out_ubulk_path, gain=1.0):
+    """dev#1170 WP-A: バニラ装備テクスチャ枠(ubulk分割ありうる形式、
+    work\\rd_1170_mesh\\FINDINGS.md 2節)へPNGを注入する。inject_texture_file()
+    と同じ画素処理(resize/不透明化/ゲイン)を、vp_core.parse_texture2d_mixed()
+    が返す各ミップのinline/非inline区分に応じてuexp/ubulkへ書き分ける
+    (work\\rd_1170_mesh\\scripts\\build_experiment_pak.py::
+    inject_ubulk_texture()の製品化移植)。
+
+    template_ubulk_path: 対象テクスチャに.ubulkが存在しない(全ミップinline、
+    t00/t01と同型)場合はNoneでよい。その場合out_ubulk_pathもNoneを渡すこと
+    (呼び出し側の責務、戻り値のused_ubulkで確認できる)。
+
+    既存のinject_texture_file()は無改変(この関数は新規追加のみ)。
+    戻り値: {"pixel_format","size_x","size_y","psnr","gain","gain_version",
+             "n_inline_mips","n_ubulk_mips","used_ubulk"}"""
+    with open(template_uexp_path, "rb") as f:
+        data = bytearray(f.read())
+    layout = vp_core.parse_texture2d_mixed(bytes(data))
+    pf, sx, sy = layout["pixel_format"], layout["size_x"], layout["size_y"]
+
+    needs_ubulk = any(not m["inline"] for m in layout["mips"])
+    if needs_ubulk and not template_ubulk_path:
+        raise RuntimeError(
+            f"{template_uexp_path}: has non-inline mip(s) but no .ubulk path was given")
+    ubulk = bytearray()
+    if template_ubulk_path:
+        with open(template_ubulk_path, "rb") as f:
+            ubulk = bytearray(f.read())
+
+    w, h, rgba = vp_tex.decode_png(png_path)
+    rgba = resize_nearest(rgba, sx, sy)
+    rgba = rgba.copy()
+    rgba = vp_tex.extend_opaque_color(rgba)
+    rgba[:, :, 3] = 255
+    rgba = apply_brightness_gain(rgba, gain)
+
+    mips = vp_tex.make_mips(rgba, len(layout["mips"]))
+    n_inline = 0
+    n_ubulk = 0
+    for m, img in zip(layout["mips"], mips):
+        blob = vp_tex.encode(img, pf)
+        if len(blob) != m["size"]:
+            raise RuntimeError(
+                f"encoded size mismatch {m['w']}x{m['h']}: {len(blob)} != {m['size']}")
+        if m["inline"]:
+            data[m["offset"]:m["offset"] + m["size"]] = blob
+            n_inline += 1
+        else:
+            ubulk[m["abs_off"]:m["abs_off"] + m["size"]] = blob
+            n_ubulk += 1
+
+    decoded0 = vp_tex.decode_dxt(vp_tex.encode(mips[0], pf), sx, sy, pf)
+    psnr = vp_tex.psnr(mips[0], decoded0)
+
+    os.makedirs(os.path.dirname(out_uexp_path) or ".", exist_ok=True)
+    with open(out_uexp_path, "wb") as f:
+        f.write(data)
+    used_ubulk = n_ubulk > 0
+    if used_ubulk:
+        if not out_ubulk_path:
+            raise RuntimeError("template has non-inline mip(s) but no out_ubulk_path was given")
+        os.makedirs(os.path.dirname(out_ubulk_path) or ".", exist_ok=True)
+        with open(out_ubulk_path, "wb") as f:
+            f.write(ubulk)
+    return {"pixel_format": pf, "size_x": sx, "size_y": sy, "psnr": psnr,
+            "gain": gain, "gain_version": TEXINJECT_GAIN_VERSION,
+            "n_inline_mips": n_inline, "n_ubulk_mips": n_ubulk, "used_ubulk": used_ubulk}

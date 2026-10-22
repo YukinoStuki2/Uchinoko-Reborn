@@ -46,6 +46,19 @@ if _APP_PY_DIR not in sys.path:
 
 import settings  # noqa: E402
 
+# dev#1170 WP-1(中間物ライブラリ基盤): app_py\shared_cache_gc.pyが確立した
+# 「app_py側は sys.path.insert(0, <root>/pipeline/py) してから通常import
+# する」パターン(dev#45b移設)をここでも踏襲する。ロジックの実体は
+# pipeline/py/vp_avatar_library.py 1箇所のみで、本モジュールは薄い
+# 再エクスポート関数だけを持つ(GUI層がpipeline\pyへ直接importしなくても
+# 到達できるようにするため。既存のGUI層/変換パイプライン層の分離方針
+# (本ファイル冒頭コメント)は崩さない — 依存の向きはGUI→pipelineの片方向)。
+_ROOT_DIR = os.path.dirname(_APP_PY_DIR)
+_PIPELINE_PY_DIR = os.path.join(_ROOT_DIR, "pipeline", "py")
+if _PIPELINE_PY_DIR not in sys.path:
+    sys.path.insert(0, _PIPELINE_PY_DIR)
+import vp_avatar_library  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # 定数(DiveToPalworld.cs L.700-703, L.2985)
 # ---------------------------------------------------------------------------
@@ -53,6 +66,24 @@ import settings  # noqa: E402
 INSTALL_NAME = "Uchinoko_P.pak"
 LEGACY_INSTALL_NAMES: Tuple[str, ...] = ("DiveToPalworld_P.pak", "VRM2Palworld_P.pak")
 PAL_WINDOWS_PAK_NAME = "Pal-Windows.pak"
+# 本体pakのファイル名候補(dev#229続報)。pipeline\py\palworld_locate.py の
+# PAK_FILENAME_CANDIDATES と同じ発想(先頭=Steam版が既定・最優先、末尾に
+# Xbox App/Microsoft Store版(Game Pass)名を追加)。app_pyはpipeline\pyを
+# importしない設計(GUI層と変換パイプライン層の分離、既存のPAL_WINDOWS_PAK_NAME
+# 重複と同じ理由)なので、ここに独自の候補タプルを持つ。
+#
+# dev#229の実報告(D2WNF224)は「変換前のバニラ抽出」がXbox App版の
+# Pal-WinGDK.pakを見つけられない件だったが、PR #734はpipeline\py\
+# palworld_locate.py(CLI/バニラ抽出側の探索)だけを直した。本モジュール
+# (GUIの「Paksフォルダ」手動選択・適用/解除・warm_startup連携)は独立した
+# 別の決め打ちを持っており、PR #734後もXbox App版利用者は手動でPaksフォルダを
+# 選んでも「Pal-Windows.pakが見つからない」で無言拒否され続けていた
+# (外部依存パスの原則の②手動指定フォールバックが、この経路でも同型に
+# 機能不全だった)。ここで両方のpak名を受理するよう揃える。
+PAK_FILENAME_CANDIDATES: Tuple[str, ...] = (
+    PAL_WINDOWS_PAK_NAME,  # Steam版(既定・最優先。既存挙動そのまま)
+    "Pal-WinGDK.pak",      # Xbox App / Microsoft Store版(Game Pass)
+)
 # devtools\apply_test_pak.py の GAME_PROCESS_NAME と同一値(2026-07-23修正済み、
 # tasklistのIMAGENAME列25文字切り詰め対策でCSV出力を使う点も踏襲)
 GAME_PROCESS_NAME = "Palworld-Win64-Shipping.exe"
@@ -70,10 +101,22 @@ def _noop_log(_msg: str) -> None:
 # 基礎ヘルパー (PaksDirHasPak/DistinctPreserveOrder L.2987-3004)
 # ---------------------------------------------------------------------------
 
+def resolve_pak_filename(dir_path: Optional[str]) -> Optional[str]:
+    """dir_path配下に PAK_FILENAME_CANDIDATES のいずれかが実在すれば、その
+    実ファイル名を返す(先頭=Steam版から順に確認。既存Steam環境では必ず
+    1件目にヒットするため、従来の判定結果は変わらない)。無ければNone。"""
+    if not dir_path or not os.path.isdir(dir_path):
+        return None
+    for filename in PAK_FILENAME_CANDIDATES:
+        if os.path.isfile(os.path.join(dir_path, filename)):
+            return filename
+    return None
+
+
 def paks_dir_has_pak(dir_path: Optional[str]) -> bool:
-    """PaksDirHasPak(L.2987)相当。"""
-    return bool(dir_path) and os.path.isdir(dir_path) \
-        and os.path.isfile(os.path.join(dir_path, PAL_WINDOWS_PAK_NAME))
+    """PaksDirHasPak(L.2987)相当。dev#229続報でPAK_FILENAME_CANDIDATES
+    (Steam/Xbox App両対応)の判定に拡張。"""
+    return resolve_pak_filename(dir_path) is not None
 
 
 def distinct_preserve_order(items: Iterable[str]) -> List[str]:
@@ -231,7 +274,8 @@ def resolve_paks_dir(
             settings.save_paksdir(app_root, chosen)
             log(f"[pak_manager] manual selection saved: {chosen}")
             return chosen
-        log(f"[pak_manager] manual selection invalid (no {PAL_WINDOWS_PAK_NAME}): {chosen}")
+        candidates_str = "/".join(PAK_FILENAME_CANDIDATES)
+        log(f"[pak_manager] manual selection invalid (no {candidates_str}): {chosen}")
         if on_invalid is not None:
             on_invalid(chosen)
 
@@ -320,7 +364,8 @@ def count_other_paks(paks_dir: Optional[str]) -> Optional[int]:
     バニラ本体を除いた他の.pak件数。判定不能ならNone。"""
     if not paks_dir or not os.path.isdir(paks_dir):
         return None
-    exclude = {INSTALL_NAME.lower(), PAL_WINDOWS_PAK_NAME.lower()}
+    exclude = {INSTALL_NAME.lower()}
+    exclude.update(name.lower() for name in PAK_FILENAME_CANDIDATES)
     exclude.update(name.lower() for name in LEGACY_INSTALL_NAMES)
     try:
         count = 0
@@ -464,3 +509,84 @@ def delete_avatar_artifacts(job_dir: str, ue_project_dir: Optional[str] = None) 
         shutil.rmtree(job_dir)
     if ue_project_dir and os.path.isdir(ue_project_dir):
         shutil.rmtree(ue_project_dir)
+
+
+# ---------------------------------------------------------------------------
+# 中間物ライブラリ(dev#1170 WP-1、vp_avatar_library.pyの薄い再エクスポート)
+# ---------------------------------------------------------------------------
+#
+# 「作成済みMOD一覧」の1エントリ(job_dir = <work_root>/<entry_id>)と中間物
+# (job_dir/library/)は1:1の運命共同体(オーナー確定仕様)。上のdelete_
+# avatar_artifacts()がjob_dir全体をshutil.rmtree()するため、library/は
+# job_dir直下に置かれている限り自動的に道連れ削除される(=このモジュールに
+# 削除連動のための追加コードは不要。tests\dev1170_avatar_library\で
+# 負の対照込みに検証済み)。ここでは列挙・有無判定だけを薄く再エクスポートする。
+
+def list_library_entries(work_root: str):
+    """vp_avatar_library.list_entries()の再エクスポート。「作成済みMOD一覧」
+    の全エントリを、中間物の有無・設定サマリ・作成日時つきで返す
+    (後続WP: 専用UI・合成エンジン向け)。"""
+    return vp_avatar_library.list_entries(work_root)
+
+
+def entry_has_library(job_dir: str) -> bool:
+    """vp_avatar_library.has_library()の再エクスポート。指定job_dirに中間物が
+    保存済みか(中間物保存より前の旧エントリはFalse)。"""
+    return vp_avatar_library.has_library(job_dir)
+
+
+def entry_is_multi_avatar(job_dir: str) -> bool:
+    """dev#1170 WP-3: manifest.jsonの"multi_avatar": trueフラグ判定
+    (合成エンジン=WP-2が、マルチアバターPAK作成で生まれたエントリへ書く
+    想定のキー)。manifest自体が無い/壊れている場合はFalse(=通常の単体
+    変換エントリとして扱う、安全側)。
+
+    用途1(ui\\multi_avatar_pak_dialog.py): このフラグがTrueのエントリは
+    「マルチアバターPAK作成」ダイアログの右ペイン(ライブラリ選択)には
+    出さない(オーナー確定仕様⑤——合成の材料に合成品自体を選べてしまうのを
+    構造的に防ぐ)。
+    用途2(「作成済みMOD一覧」表示、指示書項目⑦): 本関数はマルチ品判定の
+    唯一の判定源として用意した——一覧側(app_py\\ui\\main_window.py)への
+    実際の表示配線(マーク付与)は、本WPの書き込み許可範囲外
+    (main_window.pyは触らない)のため未接続のまま残る。WP-2が
+    manifest.jsonへ"multi_avatar": trueを書き始めた後、main_window.py側の
+    _on_refresh_pak_list()で `pak_manager.entry_is_multi_avatar(job_dir)`
+    を呼び、真なら一覧行の表示にマークを足す1行を差すだけで配線が完了する
+    設計にしてある(PR本文に明記)。
+    """
+    manifest = vp_avatar_library.read_manifest(job_dir)
+    if not manifest:
+        return False
+    return bool(manifest.get("multi_avatar") is True)
+
+
+def partition_library_entries_for_multi_avatar_pak(entries, multi_avatar_flags):
+    """dev#1170 WP-3: list_library_entries()の戻り値を、マルチアバターPAK
+    作成ダイアログの右ペイン向けに仕分ける純粋関数(ファイルI/Oを一切行わない
+    ——GUI/pipeline非依存なテストのため、判定材料は呼び出し側が先に集めて
+    渡す設計)。
+
+    entries: list_library_entries(work_root)の戻り値と同じ形の反復可能物
+        (各要素は少なくとも "job_dir"/"has_library" キーを持つdict)。
+    multi_avatar_flags: {job_dir: bool} 辞書(entry_is_multi_avatar()の結果を
+        あらかじめ引いたもの)。未登場のjob_dirはFalse扱い。
+
+    戻り値: (selectable, grayed) のタプル。
+      selectable: has_library=True かつ multi_avatar=False のエントリ
+        (右ペインで選択可能、entries の順序を保つ)。
+      grayed: has_library=False のエントリ(中間物保存より前の旧エントリ。
+        右ペインにはグレーアウト表示する対象、オーナー確定仕様⑤)。
+    multi_avatar=True のエントリは selectable/grayed どちらにも入らない
+    (右ペインに一切出さない、オーナー確定仕様⑤)。
+    """
+    selectable = []
+    grayed = []
+    for entry in entries:
+        job_dir = entry.get("job_dir")
+        if multi_avatar_flags.get(job_dir, False):
+            continue
+        if entry.get("has_library"):
+            selectable.append(entry)
+        else:
+            grayed.append(entry)
+    return selectable, grayed

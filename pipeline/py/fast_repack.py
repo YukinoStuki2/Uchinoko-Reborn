@@ -41,6 +41,27 @@ convert.ps1 の materials-only(noue)分岐と対になっている。片方だ�
 job.json の差分が shadow_lift / unlit **だけ**なら鮮度ゲートも通す
 (判定材料は build\job_snapshot.json = 最後のフル変換時点の job.json)。
 
+■ DT(dev#1198)・sway ABP(dev#19)の持ち越し(dev#1494、2026-08-16修正)
+影の濃さ以外は変えない設計のため、フル変換が生成した DT テーブル同梱
+(dev#1198、頭部/髪の修正)と sway ABP(dev#19、揺れもの)も毎回そのまま
+持ち越す。DT は直前フル変換が work\dt_patch\ へ書いた patched バイト列を
+再利用(Palworld本体pakは読み直さない)。sway ABP はアバター非依存の純
+関数なので sway_abp_build.sway_abp_pak_entries() を毎回もう一度呼ぶ
+(job.json は shadow_lift/unlit 以外フル変換時点と同一なので結果は
+バイト完全一致=実質的な持ち越し)。修正前はこの2資産が欠落し、
+preflight G13/G14 が検出するもののfail-open裁定(dev#1230)により壊れた
+pak がそのまま出荷されていた(実報告C8B8RH4W)。
+
+■ sway hub 共有骨格パッチ(dev#1508)の持ち越し(dev#1652、2026-08-22修正)
+上記2資産と同じ理由で、共有骨格 SK_PalHuman_Skeleton の reparent パッチ
+(dev#1508 W2a-2、揺れ有効アバターの共有骨格差し替え)も dev#1494 修正の
+時点では対象外のまま残っていた。揺れ有効アバターの「影のみ更新」で
+G3b/G15(揺れ源fail-closedゲート)がFAILし、揺れが実際に壊れたpakが
+出荷されていた(dev#1652)。直前フル変換が work\sway_hub_reparent\ へ
+書いたパッチ済みバイト列を _reuse_sway_hub_reparent() でDTと同じ方式で
+持ち越す(揺れ無効/ハブ割当0件アバターではファイル自体が存在せず、
+その場合は従来どおり空リスト=挙動不変)。
+
 ■ ★★ 使う前に必ず読むこと(危険性) ★★
 1. **キャッシュの鮮度がすべて。**再利用する live_template / noue_work\variant / atlas は
    アバターとテクスチャに依存する。VRM/FBX・アトラス・--tex-gain を変えたのに使い回すと
@@ -81,10 +102,16 @@ if os.path.isdir(_ue_exit):
     sys.path.insert(0, _ue_exit)
 
 import vp_pakwrite  # noqa: E402
+import vp_preflight_result  # noqa: E402 (dev#1230: preflight非ブロック化の結果JSON)
 import vp_texinject  # noqa: E402
 import vp_core  # noqa: E402
 import live_template  # noqa: E402 (U50-fast: 影の濃さMIの生成)
 import convert_noue  # noqa: E402 (U50-fast: M_VPバリアント選択をフル変換と共有する)
+# dev#1494: DT(dev#1198)・sway ABP(dev#19)の持ち越し欠落修正。フル変換
+# (build_pak_from_avatar.py Phase3.5/3.6)と同じ定数・同じ公開関数を使う
+# ためのimport(pipeline\ 配下のソースは一切変更しない、importして使うだけ)。
+import build_pak_from_avatar  # noqa: E402 (dev#1494: DT_PACKAGE_NAME定数の共有)
+import sway_abp_build  # noqa: E402 (dev#1494: sway_abp_pak_entries()の再利用)
 # dev#7: 生フルパス伏字化の共通実装。元は本ファイルにあった _path_facts/_display_path を
 # pipeline\py\path_privacy.py へ一般化して切り出した(convert.ps1/export_from_unity.ps1
 # からも使う。work\issue_zero\i7\NOTES.md参照)。エイリアス名(_で始まる)は
@@ -111,6 +138,29 @@ ATLAS_PNG = {"body": "atlas_body.png", "parka": "atlas_parka.png"}
 ERR_NO_FULL_BUILD = "##REPACK_ERROR## NO_FULL_BUILD"   # 一度もフル変換していない/中間成果が壊れている
 ERR_STALE = "##REPACK_ERROR## STALE"                   # 影の濃さ以外の設定が変わっている
 ERR_PREFLIGHT = "##REPACK_ERROR## PREFLIGHT_FAIL"      # 出来たpakが検品に落ちた
+
+# dev#67: GUI(app_py\noue_full_build.py の has_noue_full_build())が「影のみ更新」
+# ボタンを有効化する条件と、本ツールが実際に要求する前提を機械照合できるよう、
+# この3ディレクトリの組み立てをここへ切り出す(main()内に埋め込んだ元のリテラル
+# タプルを関数化しただけで、判定内容・呼び出し順は変えていない)。
+# noue_full_build.py の _NEED_SUBDIRS と一致させること(増減時は両方一緒に直す)。
+# live_templateを対象外とする理由はmain()側の同名コメント(dev#42 item7)を参照。
+def required_full_build_paths(build_dir):
+    """<build_dir> 配下で「フル変換が完走したか」の判定に使う (label, path) の組。
+    build_dir は job_dir/build(GUIの build_dir_path(work_root, vrm_path) と同じ
+    組み立て)。"""
+    work = os.path.join(build_dir, "noue_work")
+    return (
+        ("noue_work/variant", os.path.join(work, "variant")),
+        ("atlas", os.path.join(build_dir, "atlas")),
+        ("noue_mat_override", os.path.join(build_dir, "noue_mat_override")),
+    )
+
+
+def missing_full_build_labels(build_dir):
+    """required_full_build_paths()のうち実在しないものの label 一覧。
+    空リストなら中間成果が全て揃っている(dev#67 契約テスト用)。"""
+    return [label for label, p in required_full_build_paths(build_dir) if not os.path.exists(p)]
 
 # 鮮度ゲートに引っかかったとき「何が変わったのか」をエンドユーザーの言葉で出す。
 # GUI の表記に合わせる(app\DiveToPalworld.cs のラベル/ツールチップが正)。
@@ -171,6 +221,138 @@ def _log_reuse(label, path, bases=()):
     return newest
 
 
+# dev#1494: DTテーブル(dev#1198)・sway ABP(dev#19)の持ち越し。
+#
+# 症状(実報告C8B8RH4W): fast_repack.pyは live_template/variant/atlas/
+# mat_override だけを再利用資産として扱っており、後から追加された
+# dev#1198(頭部/髪の修正、DT_CharacterCreationMeshPresetTable_Equipments
+# の同梱)とdev#19(揺れものpak生成、sway ABP同梱)の2資産が持ち越されて
+# いなかった。preflight G13/G14はこれを正しくFAILとして検出するが、
+# fail-open裁定(dev#1230、job.json.preflight_nonblocking)により
+# エンドユーザーへ壊れたpakがそのまま渡っていた。
+#
+# 修正方針: 直前フル変換(build_pak_from_avatar.py)の結果を「完全に
+# 持ち越す」。
+
+
+def _reuse_dt_patch(dt_dir, bases):
+    """直前フル変換が `build_pak_from_avatar._run_dt_patch()` で
+    `work\\dt_patch\\` へ書いたDT(dev#1198)パッチ済み.uasset/.uexpを、
+    そのまま持ち越す。
+
+    DTパッチは**全フル変換で常時生成される**(dev#1198、オプトインでは
+    ない。preflight_pak.py G13コメント「the dev#1198 head/hair fix DT
+    copy is expected in every build」と同じ前提)。無ければキャッシュが
+    不完全(フル変換がdev#1198より前、または壊れている)とみなし
+    フェイルクローズで停止する(黙って欠落したまま出荷しない)。
+
+    Palworld本体pakは一切読み直さない(rel_pathは定数のみから組み立てる)
+    ため、Palworldインストールの大きさに関わらずコストは一定
+    (fast_repackの「速さ」を損なわない)。
+
+    戻り値: [(abs_path, rel_path_in_common_mount), ...] の2要素リスト
+    (uasset/uexp)。_run_dt_patch()の戻り値と同じ形。"""
+    dt_package_name = build_pak_from_avatar.DT_PACKAGE_NAME
+    uasset_src = os.path.join(dt_dir, dt_package_name + ".uasset")
+    uexp_src = os.path.join(dt_dir, dt_package_name + ".uexp")
+    if not (os.path.exists(uasset_src) and os.path.exists(uexp_src)):
+        raise SystemExit(
+            f"{ERR_NO_FULL_BUILD}\n"
+            f"no DT patch (dev#1198) to reuse: {_display_path(dt_dir, bases)}\n"
+            "Run a full conversion first (pipeline\\cli\\convert.ps1). "
+            "Every full conversion produces this DT copy (dev#1198 head/hair "
+            "fix) unconditionally -- its absence means the cached build is "
+            "incomplete or predates dev#1198 (dev#1494).")
+    dt_rel_uasset = vp_pakwrite.normalize_rel(
+        dt_package_name + ".uasset", vp_pakwrite.DT_PREFIX)
+    dt_rel_uexp = vp_pakwrite.normalize_rel(
+        dt_package_name + ".uexp", vp_pakwrite.DT_PREFIX)
+    return [(uasset_src, dt_rel_uasset), (uexp_src, dt_rel_uexp)]
+
+
+def _reuse_sway_hub_reparent(work, bases):
+    """dev#1652: sway hub 共有骨格reparentパッチ(dev#1508 W2a-2、
+    SK_PalHuman_Skeleton)の持ち越し。
+
+    症状(dev#1652、実報告): fast_repack.pyはdev#1494でDT(dev#1198)・
+    sway ABP(dev#19)の持ち越しには対応したが、後から追加された
+    sway_hub_reparent(dev#1508、揺れ有効アバターの共有骨格パッチ)は
+    対象外のままだった。揺れ有効アバターで「影のみ更新」を使うと、
+    揺れABP(G14はPASS)は同梱されるのに共有骨格パッチだけpakへ
+    0件のまま出荷され(G3b/G15がFAIL)、揺れが実際に壊れる。
+
+    直前フル変換(build_pak_from_avatar._run_sway_hub_reparent_patch())が
+    <work>\\sway_hub_reparent\\ へ書いたパッチ済み.uasset/.uexpを、
+    _reuse_dt_patch()と同じ「そのまま持ち越す」方針で使う。この資産は
+    job_dir/converted/sway_hub_reparent.json(パッチ計画、reparent steps)
+    と job_dir/converted/sway_hub_patch_manifest.json(G3bが比較する
+    計画manifest)だけから決まり、どちらもrepack実行では一切書き換え
+    られない(shadow_lift/unlitはもちろん、Palworld本体pakの再読込も
+    不要)ため、DTと同様に再計算せず安全に持ち越せる。
+
+    DTと異なり、この資産は**オプション**(揺れ無効/ハブ割当0件の
+    アバターでは、フル変換自身もこのフェーズをno-opにしてファイルを
+    書かない、_run_sway_hub_reparent_patch()のdocstring参照)。したがって
+    両ファイルとも存在しなければ「揺れ無効(またはハブ割当0件)」として
+    空リストを返す(=揺れ無効アバターの「影のみ更新」の挙動は不変、
+    dev#1652が要求する負の対照条件そのもの)。片方だけ存在する場合は
+    壊れたキャッシュとみなしフェイルクローズする(DTと同じ姿勢:
+    黙って欠落したまま出荷しない)。
+
+    戻り値: [(abs_path, rel_path_in_common_mount), ...] の2要素リスト
+    (uasset/uexp)、または揺れ無効時は空リスト。"""
+    name = build_pak_from_avatar.SWAY_HUB_SK_PACKAGE_NAME
+    stage_dir = os.path.join(work, "sway_hub_reparent")
+    uasset_src = os.path.join(stage_dir, name + ".uasset")
+    uexp_src = os.path.join(stage_dir, name + ".uexp")
+    have_uasset = os.path.exists(uasset_src)
+    have_uexp = os.path.exists(uexp_src)
+    if not have_uasset and not have_uexp:
+        return []
+    if not (have_uasset and have_uexp):
+        raise SystemExit(
+            f"{ERR_NO_FULL_BUILD}\n"
+            "incomplete sway hub shared-skeleton patch (dev#1508/dev#1652) "
+            f"to reuse: {_display_path(stage_dir, bases)} "
+            f"(uasset={have_uasset}, uexp={have_uexp})\n"
+            "Run a full conversion first (pipeline\\cli\\convert.ps1).")
+    rel_uasset = vp_pakwrite.normalize_rel(
+        "Skeleton/Human/" + name + ".uasset", vp_pakwrite.BODY_PREFIX)
+    rel_uexp = vp_pakwrite.normalize_rel(
+        "Skeleton/Human/" + name + ".uexp", vp_pakwrite.BODY_PREFIX)
+    return [(uasset_src, rel_uasset), (uexp_src, rel_uexp)]
+
+
+def _rebuild_sway_abp(job, work):
+    """sway ABP(dev#19)を持ち越す。
+
+    sway ABPはアバター非依存の純関数(job["sway_intensity"]/
+    job["lab_raw_sway_params"]と静的テンプレ
+    `pipeline\\py\\sway_abp_templates\\` だけで決まり、Palworld本体pakも
+    Blender成果も読まない、sway_abp_build.sway_abp_pak_entries()の
+    docstring参照)なので、フル変換(_run_sway_abp_patch())と**同じ公開
+    関数をそのままもう一度呼ぶ**。job.jsonはshadow_lift/unlit以外フル
+    変換時点と同一であることが鮮度ゲート(main()のjob_diff_keys比較)で
+    既に保証されているため、結果はフル変換時とバイト完全一致する
+    (=実質的に「持ち越し」と同義。Palworld本体pakを読まないため
+    再計算のコストも無視できる)。
+
+    job(--job-dir単独指定時はNone)が無ければ、フル変換側もこのフェーズを
+    実行できていない(_run_sway_abp_patch()もjob.json必須でdie()する)ため、
+    同じく何も付加しない(空リスト)。
+
+    戻り値: [(abs_path, rel_path_in_common_mount), ...]。sway無効/未指定
+    ならsway_abp_pak_entries()自身が空リストを返す(既存のno-op設計)。"""
+    if job is None:
+        return []
+    out_dir = os.path.join(work, "sway_abp")
+    try:
+        return sway_abp_build.sway_abp_pak_entries(job, out_dir)
+    except sway_abp_build.SwayAbpBuildError as e:
+        raise SystemExit(
+            f"failed to rebuild sway ABP pak entries (dev#19, dev#1494): {e}")
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="中間成果を再利用してpakだけ作り直す。"
@@ -210,6 +392,10 @@ def main():
     work = os.path.join(build, "noue_work")
     atlas = os.path.join(build, "atlas")
     mat_override = os.path.join(build, "noue_mat_override")
+    # dev#1494: build_pak_from_avatar.py の _run_dt_patch() が書く先と同じ
+    # パス(work = args.work = <job_dir>\build\noue_work、convert_noue.py
+    # の --work 配線と一致)。
+    dt_dir = os.path.join(work, "dt_patch")
 
     _bases = (job_dir, REPO_DIR)  # dev#7: 診断ログの表示専用。実パスはそのまま各変数で使う
     print(f"[repack] work area: {_display_path(job_dir, (REPO_DIR,))}")
@@ -217,9 +403,9 @@ def main():
     # (work\_shared_cache\live_template\<fp12>\)へ移った。このアバター固有のbuild\配下に
     # あるとは限らない(初回はここに無く、この後 live_template.build_live_template() が
     # 組み立てる)ので、「フル変換が完走したか」の必須リストからは外す。このアバター固有の
-    # 3ディレクトリだけを見る(app\DiveToPalworld.cs の HasNoueFullBuild() と厳密に一致させること)。
-    for label, p in (("noue_work/variant", os.path.join(work, "variant")),
-                     ("atlas", atlas), ("noue_mat_override", mat_override)):
+    # 3ディレクトリだけを見る(app_py\noue_full_build.py の has_noue_full_build() と
+    # 厳密に一致させること。dev#67で required_full_build_paths() へ切り出し済み)。
+    for label, p in required_full_build_paths(build):
         if not os.path.exists(p):
             raise SystemExit(
                 f"{ERR_NO_FULL_BUILD}\n"
@@ -253,7 +439,11 @@ def main():
     print("[repack] --- caches being reused (always check before judging the result) ---")
     newest = {}
     for label, p in (("live_template", template), ("variant", os.path.join(work, "variant")),
-                     ("atlas", atlas), ("mat_override", mat_override)):
+                     ("atlas", atlas), ("mat_override", mat_override),
+                     ("dt_patch", dt_dir),  # dev#1494: DT(dev#1198)持ち越しの鮮度も表示
+                     ("sway_hub_reparent", os.path.join(work, "sway_hub_reparent"))):
+                     # dev#1652: 共有骨格パッチ(dev#1508)持ち越しの鮮度も表示。
+                     # 揺れ無効/ハブ割当0件アバターでは実在しない(=n=0表示)のが正常。
         newest[label] = _log_reuse(label, p, _bases)
     fp = template.rstrip("\\/") + ".fingerprint.json"
     if os.path.exists(fp):
@@ -467,9 +657,32 @@ def main():
                          f"only {n_replaced}/{len(replace_map)} replacement target(s) matched "
                          "(live_template and the cache version may be out of sync)")
 
+    # dev#1198 WP-B5a: COMMON_MOUNT実配線。build_pak_from_avatar.py Phase3と
+    # 同じ配線(vp_pakwrite.to_common_mount_body_files参照)。
+    common_mount_files = vp_pakwrite.to_common_mount_body_files(final_files)
+
+    # dev#1494: DT(dev#1198)/sway ABP(dev#19)の持ち越し(実報告C8B8RH4W)。
+    # build_pak_from_avatar.py Phase3.5/3.6 と同じ、to_common_mount_body_files()
+    # を通さない別系統(DT_PREFIX)としてcommon_mount_filesへ直接合流させる
+    # (WP-B5b/dev#19申し送りどおり)。この2ステップを省略すると、preflight
+    # G13/G14が正しくFAILを検出する(fail-open裁定dev#1230のため壊れたpak
+    # がそのまま出荷される)。
+    dt_files = _reuse_dt_patch(dt_dir, _bases)
+    sway_abp_files = _rebuild_sway_abp(job, work)
+    # dev#1652: sway hub 共有骨格パッチ(dev#1508)の持ち越し。DT/sway ABPと
+    # 同じcommon_mount_files合流の第3の資産(build_pak_from_avatar.pyの
+    # Phase3.7と対になる。総点検の結果、common_mount_filesへ特別合流する
+    # 資産はこの3つで全てだった -- 詳細はPR本文の表を参照)。
+    sway_hub_files = _reuse_sway_hub_reparent(work, _bases)
+    print(f"[repack] carried over from last full build: DT (dev#1198) {len(dt_files)} file(s), "
+          f"sway ABP (dev#19) {len(sway_abp_files)} file(s), "
+          f"sway hub shared-skeleton patch (dev#1508, dev#1652) {len(sway_hub_files)} file(s)")
+    common_mount_files = common_mount_files + dt_files + sway_abp_files + sway_hub_files
+
     out_pak = os.path.abspath(a.out)
     os.makedirs(os.path.dirname(out_pak) or ".", exist_ok=True)
-    info = vp_pakwrite.build_pak(final_files, out_pak)
+    info = vp_pakwrite.build_pak(common_mount_files, out_pak,
+                                  mount_point=vp_pakwrite.COMMON_MOUNT)
     print(f"[repack] pak generated: {_display_path(out_pak, _bases)} (total entries {info['n_entries']}, "
           f"replaced {n_replaced}, size={info['size']:,})")
 
@@ -479,14 +692,39 @@ def main():
             raise SystemExit("--preflight requires --job (job.json)")
         preflight_py = os.path.join(REPO_DIR, "pipeline", "py", "preflight_pak.py")
         print("[repack] === preflight_pak.py (final check / ~17s) ===")
-        r = subprocess.run([sys.executable, preflight_py, job_path, out_pak,
-                            template, live_template.COOK_LOG])
-        if r.returncode != 0:
-            raise SystemExit(
-                f"{ERR_PREFLIGHT}\n"
-                f"final check failed (preflight_pak.py exit={r.returncode}). "
-                "Do not use this MOD.")
-        print("[repack] preflight PASS")
+        # dev#1230(2026-08-08オーナー裁定): GUIの「影のみ更新(高速)」も
+        # ユーザーサイド変換フローの一部(convert.ps1 -MaterialsOnly経由)。
+        # job.jsonのpreflight_nonblockingキー(app_py\pipeline_runner.pyの
+        # write_job()が常にTrueで書く)が立っていればブロックしない。
+        # jobがNone(load_job失敗、上のtry/except参照)のときは安全側
+        # (従来どおりブロック)に倒す。
+        preflight_nonblocking = bool(job.get("preflight_nonblocking", False)) if job else False
+        if not preflight_nonblocking:
+            r = subprocess.run([sys.executable, preflight_py, job_path, out_pak,
+                                template, live_template.COOK_LOG])
+            if r.returncode != 0:
+                raise SystemExit(
+                    f"{ERR_PREFLIGHT}\n"
+                    f"final check failed (preflight_pak.py exit={r.returncode}). "
+                    "Do not use this MOD.")
+            print("[repack] preflight PASS")
+        else:
+            r = subprocess.run([sys.executable, preflight_py, job_path, out_pak,
+                                template, live_template.COOK_LOG],
+                                capture_output=True, text=True)
+            for text in (r.stdout, r.stderr):
+                if text:
+                    sys.stdout.write(text if text.endswith("\n") else text + "\n")
+            failed_gates = vp_preflight_result.parse_preflight_failed_gate_lines(r.stdout)
+            status = "PASS" if r.returncode == 0 else "FAIL"
+            result_path = vp_preflight_result.write_preflight_result_json(
+                out_pak, status, r.returncode, failed_gates)
+            if r.returncode != 0:
+                print(f"[repack] preflight FAILED but job.json preflight_nonblocking "
+                      f"is set: keeping pak as-is and continuing "
+                      f"(n_fail_gates={len(failed_gates)}, result recorded to {result_path})")
+            else:
+                print("[repack] preflight PASS")
     else:
         print("[repack] Note: preflight was not run. Before showing this to the "
               "responsible person or recording it, always run "

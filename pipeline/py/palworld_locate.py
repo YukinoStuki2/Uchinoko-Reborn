@@ -24,6 +24,14 @@ C:\\Program Files (x86)\\Steam\\steamapps\\common\\Palworld という決め打�
 「探した場所」を含む文言をそのままユーザーに見せられるようにする
 (問い合わせ対応は「ログをコピー」の中身だけが頼りのため)。
 
+本体pakのファイル名は単一の決め打ちではなく `PAK_FILENAME_CANDIDATES`
+(先頭=Steam版が既定)から順に探す(dev#229、実報告D2WNF224: Xbox App/
+Microsoft Store版はpak名が`Pal-WinGDK.pak`でSteam版と異なり、手動指定
+フォールバックすら機能しなくなっていた欠陥の修理)。**自動発見に
+Xbox/Microsoft Store固有の探索(WindowsApps配下等)を追加するかどうかは
+本モジュールのスコープ外**(オーナー裁定待ち)。ここでは「名前が分かれば
+手動指定で解決できる」ところまでを保証する。
+
 標準ライブラリのみ使用(pip禁止。Blender同梱PythonでもシステムPythonでも
 動かすため。vp_core.pyと同じ制約)。
 """
@@ -33,8 +41,23 @@ import re
 
 APP_ID = "1623730"  # SteamのPalworld appid
 INSTALL_SUBPATH = os.path.join("steamapps", "common", "Palworld")
-PAK_REL = os.path.join("Pal", "Content", "Paks", "Pal-Windows.pak")
 PAKS_DIR_REL = os.path.join("Pal", "Content", "Paks")
+
+# 本体pakのファイル名候補(dev#229、実報告D2WNF224)。
+# Steam版が既定であり、既存挙動を1ミリも変えないため必ず先頭に置くこと
+# (判定は先頭から順に試すため、先頭=最優先。Steam版構成では従来どおり
+# 1件目で解決し、2件目以降は一切参照されない)。
+# 申し送り: 新しい配布経路のpakファイル名が判明したら末尾に追記するだけでよい。
+# Xbox App/Microsoft Store版(Game Pass)の**自動発見**(WindowsApps配下の探索)は
+# 本WPのスコープ外(オーナー裁定待ち)。ここは「名前さえ分かれば手動指定で
+# 解決できる」ようにするための候補追加のみ。
+PAK_FILENAME_CANDIDATES = (
+    "Pal-Windows.pak",   # Steam版(既定・最優先。既存挙動そのまま)
+    "Pal-WinGDK.pak",    # Xbox App / Microsoft Store版(Game Pass)
+)
+
+# 後方互換用: 既定(Steam版・先頭候補)のpak相対パス。
+PAK_REL = os.path.join("Pal", "Content", "Paks", PAK_FILENAME_CANDIDATES[0])
 
 # 従来からの決め打ち値。レジストリ/vdf探索が失敗したときの最後の保険として
 # 引き続き候補に含める(Steamが無いだけの環境や、探索が使えない場合の後方互換)。
@@ -150,37 +173,60 @@ def steam_library_roots(steam_roots):
     return _dedup_preserve_order(libs)
 
 
+def _resolve_pak_filename(install_dir):
+    """install_dir配下(Pal\\Content\\Paks\\)に、候補ファイル名
+    (PAK_FILENAME_CANDIDATES)のいずれかが実在すれば、その実ファイル名を
+    返す。無ければNone。
+
+    候補は先頭(Steam版=Pal-Windows.pak)から順に確認する。既存のSteam版
+    環境ではここで必ず1件目にヒットするため、従来の判定結果は変わらない
+    (dev#229: この関数を新設する前は単一ファイル名の決め打ちだった)。
+    """
+    if not install_dir or not os.path.isdir(install_dir):
+        return None
+    for filename in PAK_FILENAME_CANDIDATES:
+        if os.path.isfile(os.path.join(install_dir, PAKS_DIR_REL, filename)):
+            return filename
+    return None
+
+
 def _install_dir_has_pak(install_dir):
     """フォルダの実在だけでなく、バニラ抽出が実際に読む本体pak
-    (Pal\\Content\\Paks\\Pal-Windows.pak)まで実在するかを確認する。
+    (Pal\\Content\\Paks\\ 配下、PAK_FILENAME_CANDIDATESのいずれか)まで
+    実在するかを確認する。
 
     2026-07-27 コーディネータ追加要件: 「フォルダが見つかった」で解決済み
     扱いにすると、移動済み/アンインストール後の空フォルダや、途中までしか
     無い壊れたインストールに乗ってしまい、結局そのあとの工程で失敗する。
     フォルダはあるがpakが無い場合も「未解決」として扱い、次の候補を探す。
     """
-    if not install_dir or not os.path.isdir(install_dir):
-        return False
-    return os.path.isfile(os.path.join(install_dir, PAK_REL))
+    return _resolve_pak_filename(install_dir) is not None
 
 
 def find_palworld_install_dir(explicit=None, steam_roots=None):
     """Palworldのインストールディレクトリ(末尾が...\\Palworldなフォルダ)を解決する。
 
-    「フォルダの実在」だけでなく、本体pak(Pal\\Content\\Paks\\Pal-Windows.pak)の
-    実在まで確認できて初めて解決済みとする(フォルダだけあってpakが無い場合は
-    次の候補へ進む。それでも無ければ未解決としてエラーにする)。
+    「フォルダの実在」だけでなく、本体pak(Pal\\Content\\Paks\\ 配下、
+    PAK_FILENAME_CANDIDATESのいずれか)の実在まで確認できて初めて解決済みと
+    する(フォルダだけあってpakが無い場合は次の候補へ進む。それでも無ければ
+    未解決としてエラーにする)。候補ファイル名は先頭(Steam版)から順に試す。
 
     explicit: 呼び出し側が既に持っている明示指定(pakまで実在すれば最優先で採用)。
     steam_roots: Noneなら実環境からレジストリ+既定値で組み立てる。
                  テストではここに模擬ライブラリ群を渡して差し替える。
 
-    見つからなければ PalworldNotFoundError(探した場所つき)を送出する。
+    見つからなければ PalworldNotFoundError(探した場所つき。**どのpakファイル名を
+    探したか**も個別に記録される — dev#229: 従来は場所しかログに残らず、
+    Xbox App版利用者の「なぜ見つからないか」が診断できなかった)を送出する。
     """
     searched = []
 
+    def _record_dir(install_dir):
+        for filename in PAK_FILENAME_CANDIDATES:
+            searched.append(os.path.join(install_dir, PAKS_DIR_REL, filename))
+
     if explicit:
-        searched.append(_normalize(explicit))
+        _record_dir(_normalize(explicit))
         if _install_dir_has_pak(explicit):
             return _normalize(explicit)
 
@@ -191,7 +237,7 @@ def find_palworld_install_dir(explicit=None, steam_roots=None):
 
     for lib in steam_library_roots(roots):
         cand = os.path.join(lib, INSTALL_SUBPATH)
-        searched.append(cand)
+        _record_dir(cand)
         if _install_dir_has_pak(cand):
             return _normalize(cand)
 
@@ -199,10 +245,13 @@ def find_palworld_install_dir(explicit=None, steam_roots=None):
 
 
 def find_palworld_pak(explicit=None, explicit_install_dir=None, steam_roots=None):
-    """Pal-Windows.pak本体のフルパスを解決する(バニラ抽出用)。
+    """本体pak(PAK_FILENAME_CANDIDATESのいずれか)のフルパスを解決する
+    (バニラ抽出用)。戻り値のパスに実際に見つかったファイル名がそのまま
+    含まれるため、呼び出し側は追加の分岐なしに以後の工程へ渡せる。
 
     explicit: pak本体への明示指定パス(job.jsonのpaths.palworld_pak相当)。
-              存在すれば最優先。
+              存在すれば最優先(ファイル名は問わない。例えばXbox App版利用者が
+              Pal-WinGDK.pakへの直接パスを指定した場合もそのまま受理する)。
     explicit_install_dir: インストールディレクトリの明示指定(explicitが
               無いとき、探索よりこちらを優先する)。
     """
@@ -220,10 +269,11 @@ def find_palworld_pak(explicit=None, explicit_install_dir=None, steam_roots=None
         searched.extend(e.searched)
         raise PalworldNotFoundError(searched)
 
-    pak = os.path.join(install_dir, PAK_REL)
-    searched.append(pak)
-    if os.path.isfile(pak):
-        return _normalize(pak)
+    for filename in PAK_FILENAME_CANDIDATES:
+        pak = os.path.join(install_dir, PAKS_DIR_REL, filename)
+        searched.append(pak)
+        if os.path.isfile(pak):
+            return _normalize(pak)
     raise PalworldNotFoundError(searched)
 
 

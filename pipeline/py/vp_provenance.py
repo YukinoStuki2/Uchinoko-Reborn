@@ -21,11 +21,30 @@ TAG = "vp_provenance"
 _HASH_CHUNK_SIZE = 1024 * 1024  # 1MB
 
 
+def _is_git_checkout(repo_dir):
+    """repo_dir が開発チェックアウト(.gitを持つ)かどうか。
+
+    dev#886: 配布ビルド(devtools\\deploy.pyがEXCLUDE_TOPで常に.gitを除外する
+    ため、展開先には.gitが存在しない)のユーザー環境で、gitコマンドの実行
+    そのものを試みてはならない(オーナー裁定: 例外ログの文言がノイズなの
+    ではなく、配布物が不要な・pushの疑いを招きかねない処理を試みること自体が
+    問題)。.gitの有無で事前に判定し、無ければsubprocessを一切起動しない。
+    通常チェックアウトでは.gitはディレクトリだが、git worktree(本リポジトリの
+    開発運用で多用)では.gitが「gitdir: ...」を指す1個のテキストファイルに
+    なる。どちらも「開発チェックアウトである」ことに変わりはないため、
+    os.path.isdir ではなく os.path.exists で判定する(worktree内でこのテストを
+    走らせると誤ってunknown/Noneにフォールバックしないように)。"""
+    return os.path.exists(os.path.join(repo_dir, ".git"))
+
+
 def _git_commit(repo_dir):
-    """gitリポジトリでない環境(配布zip展開先等)ではgitコマンドが
-    非0終了する(CalledProcessError)か、gitが未インストールなら
-    FileNotFoundErrorになる。どちらも来歴スタンプ全体を失敗させては
+    """gitリポジトリでない環境(配布zip展開先等)では、そもそもgitコマンドの
+    実行を試みない(dev#886)。開発チェックアウトでも、gitコマンドが
+    非0終了する(CalledProcessError)か未インストールなら
+    FileNotFoundErrorになりうる。どちらも来歴スタンプ全体を失敗させては
     ならないため、"unknown" にフォールバックする(U41)。"""
+    if not _is_git_checkout(repo_dir):
+        return "unknown"
     try:
         out = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
                               cwd=repo_dir, capture_output=True, text=True, check=True)
@@ -35,9 +54,11 @@ def _git_commit(repo_dir):
 
 
 def _git_dirty(repo_dir):
-    """_git_commit と同じ理由でフォールバックする(U41)。
+    """_git_commit と同じ理由(dev#886)で、.git が無ければgit実行を試みない。
     真偽が不明であることを表すため None(JSONのnull)を返す
     (Trueにするとdirty扱い誤判定、Falseにするとclean扱い誤判定になるため)。"""
+    if not _is_git_checkout(repo_dir):
+        return None
     try:
         out = subprocess.run(["git", "status", "--porcelain"],
                               cwd=repo_dir, capture_output=True, text=True, check=True)

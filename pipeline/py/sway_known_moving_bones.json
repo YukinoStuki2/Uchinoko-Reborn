@@ -1,0 +1,16 @@
+{
+  "_schema": "divetopalworld-sway-known-moving-chain-bones-1",
+  "_docstring": "共有Skeleton(SK_PalHuman_Skeleton)の骨のうち、KPノードroot骨(16本、sway_hub.all_kp_node_root_names()、別途reservedとして常に除外済み)では*ない*のに、実機ダンプでvanillaアニメーション由来の非ノイズ床な動きを示した骨名の一覧(dev#1508 laneA4、鎖donor選定で避けるべき候補)。出所: work/night_20260817/laneA2/donor_quietness.json (flatHaoriKpOff実機ダンプ、sway_intensity='none'でKP不在、対親相対偏差>0.01cmを'moving'と分類)のmoving_bonesからhub root自身(既にreserved_descendants_of()で別途除外済み)を除いた集合。**既知の限界**: 共有Skeletonは実測4079骨あるが、この一覧はflatHaoriが実際に配線した125骨のうちの実測分のみ(全骨の網羅ではない)。したがって本ファイルは『これに載っていない骨は静音であることが確認されている』を意味しない——確認できていないだけの骨が大多数を占める。あくまで『これらの名前は既知の実測で動くと確認されているので、避けられるなら避ける』というベストエフォートの除外リストであり、chain donor選定の唯一の判断材料ではない(sway_hub.free_donor_pool()のprotected/reservedによる構造的除外が主、本リストは追加のヒューリスティック)。spine_03/weapon_lは既にvanilla\\common_bones.json(protected)や非人型プロップとして別経路で扱われる可能性が高いが、二重の安全策として本リストにも含めた。",
+  "source_dump": "work/night_20260817/laneA2/donor_quietness.json",
+  "known_moving_chain_bones": [
+    "F_Ancient001_waistClothB_01",
+    "F_Ancient001_waistClothC_01",
+    "F_Cloth001_waistCloth_01_l",
+    "F_Cloth001_waistMedal_02",
+    "M_Bronze001_bag_01",
+    "M_Hunter001_bag_01",
+    "YakushimaHeadEquip006_tentacleA_01",
+    "spine_03",
+    "weapon_l"
+  ]
+}

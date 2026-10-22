@@ -25,11 +25,16 @@ failures = []
 
 
 def check(label, cond, detail=""):
+    """dev#739: 従来はここでfailuresへ記録するだけでassertしておらず、
+    pytest経由では常に緑になっていた(main()を直接実行したときしか
+    有効でなかった)。呼び出し側は無改変のまま、ここでassertすることで
+    pytest収集時にも実際に効くようにする。"""
     if cond:
         print(f"[PASS] {label}")
     else:
         print(f"[FAIL] {label} {detail}")
         failures.append(label)
+    assert cond, f"{label} {detail}".rstrip()
 
 
 N_BONES = 40  # vp_core.find_refskeleton()の既定min_bones=40と同じ下限に合わせる

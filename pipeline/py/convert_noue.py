@@ -47,6 +47,10 @@ import vp_tex  # noqa: E402 (U16: アトラス合成PNGの書き出しに使用)
 import vp_provenance  # noqa: E402 (U34: ビルド来歴スタンプ)
 import vp_texinject  # noqa: E402 (U49: shadow_lift接続の明度ゲイン計算)
 import vp_parallel  # noqa: E402 (rd_120: UV焼き込みfemale/male並列化の共有ヘルパー)
+import vp_structural_check  # noqa: E402 (dev#6: 構造チェックの判定ロジック)
+import vp_equipment_filter  # noqa: E402 (dev#165: 装備限定ラボ機能のSK絞り込み)
+import vp_headequip_filter  # noqa: E402 (dev#277第1弾④: 頭装備切り替えラボ機能)
+import vp_avatar_library  # noqa: E402 (dev#1170 WP-1: 中間物ライブラリ基盤)
 
 TAG = "convert_noue"
 
@@ -95,6 +99,11 @@ VP_ATLAS_UVBAKE_PY = os.path.join(HERE, "vp_atlas_uvbake.py")
 # U50-single: 焼き込み後のUVで実際にレンダリングして絵を突き合わせる受入ゲート
 RENDER_ATLAS_CHECK_PY = os.path.join(
     os.path.dirname(HERE), "blender", "render_atlas_check.py")
+# dev#6: retarget段(step02_retarget.py)の出力を、今回の実行結果に依存しない
+# 基準(refskel固定データ・retarget前のstep01_clean.blend)で検証する非画素
+# チェーンのBlender headless生データ抽出スクリプト。判定ロジックは
+# vp_structural_check.py(bpy非依存)側に分離してある
+DUMP_RETARGET_STRUCTURE_PY = os.path.join(HERE, "dump_retarget_structure.py")
 
 
 def resolve_vanilla_source(job):
@@ -209,6 +218,38 @@ def die(msg):
     sys.exit(1)
 
 
+# dev#1572(2026-08-19 オーナー裁定): job.jsonのgendersキー(元々デバッグ用。
+# gender_filter_store.py冒頭・app_py\ui\lab_window.py:541付近・
+# app_py\pipeline_runner.py:475付近のコメント参照: dev#336の性別限定機能は
+# ラボからも撤去済みで、製品GUIに性別限定機能は存在しない)を使って片性別
+# ビルドを要求するjobを、noue経路の入口(job読込直後)で即拒否する。
+# 背景: 試験レーンが片性別(Female-only)jobで揺れもの検証をしてしまい、
+# 「製品版と違うパイプラインで試験するメリットは0」とオーナーが裁定
+# (2026-08-19朝)。逃げ道フラグは作らない(ハードエラー、KISS)。
+_DUAL_GENDERS = frozenset({"Male", "Female"})
+
+
+def check_dual_gender_required(job):
+    """job.jsonのgendersが未指定、または{"Male","Female"}と厳密に一致する
+    場合は何もしない(=従来どおり両性別ビルド)。それ以外(単一性別・空・
+    不正値等)は即die()で異常終了する(早期リターン。変換を一切始めない)。
+    """
+    if "genders" not in job:
+        return
+    requested = set(job.get("genders") or [])
+    if requested == _DUAL_GENDERS:
+        return
+    die(
+        "job.json genders による片性別ビルドは廃止されました。"
+        "試験も製品も両性別で行ってください(2026-08-19裁定)。"
+        "jobから genders キーを削除するか [\"Male\", \"Female\"] にしてください。 / "
+        "Single-gender builds via job.json `genders` are no longer supported. "
+        "Both test and production builds must use both genders (2026-08-19 ruling). "
+        f'Remove the "genders" key from the job, or set it to ["Male", "Female"]. '
+        f"(got: {sorted(requested)})"
+    )
+
+
 def ensure_vanilla(job, assets, job_json, stage=extract_vanilla.STAGE_FULL):
     """バニラ参照データ(refskel/複製リスト/pak全エントリ)をjob配下へ用意する。
 
@@ -265,6 +306,54 @@ def ensure_vanilla(job, assets, job_json, stage=extract_vanilla.STAGE_FULL):
             shutil.copy(src, os.path.join(vanilla_dir, fn))
 
 
+def warn_posture_mismatch_cull(conv, requested_genders):
+    """dev#1625(2026-08-21 オーナー裁定「変換自体はいつも通り完走+結果画面で
+    告知」): `pipeline\\blender\\step02_retarget.py`が姿勢不一致(donor骨が
+    明後日の方向を向いたまま配線される構造的破綻)を検出して特定ハブだけ
+    切除したとき(`sway_exclusions_{gender}.json`の"excluded"に
+    "posture mismatch (dev#1625)"タグ付きエントリがある)、GUIの完了
+    ダイアログへ##AVATAR_WARNING##を出す(app_py\\pipeline_runner.pyの
+    parse_avatar_warning/_AVATAR_WARNING_TEMPLATESが拾って翻訳する)。
+
+    ここ(呼び出し元`main()`のPhase 2-6、convert.ps1のPhase 1リレーとは
+    違いフィルタ無しでそのまま中継される、convert.ps1の該当コメント参照)
+    で出す理由: step02_retarget.py自身(Blender工程、Phase 1)で直接
+    printしても、convert.ps1のPhase 1リレー(Run-Blender/
+    Phase1GenderWorkerScript)が表示用に`Select-String -Pattern
+    "\\[(step|preview|vp_bl|validate)|FATAL|Error"`で行を間引いており、
+    ##AVATAR_WARNING##はこのパターンに一致しないため呼び出し元(app_py)
+    まで届かない(convert.ps1はこのWPの書き込み許可範囲外、実機検証で
+    発覚——詳細はwork\\wp_1625_notes\\NOTES.md)。容量超過・重み衝突・
+    支点公理違反等、本WP以前から存在する既存の切除理由は対象外——挙動が
+    変わるのは本WPが追加した切除経路だけ("posture mismatch (dev#1625)"
+    タグの有無で判別)。
+
+    bpy非依存の純粋な「ファイル読み取り+print」関数として切り出してある
+    (main()から直接呼ぶには重すぎる前提――blender_exe存在チェック・
+    step02_*.blend存在チェック等――を経ずに単体テストできるようにする
+    ため、pipeline\\py\\test_convert_noue_texfallback.pyの
+    resolve_textures()と同じ設計方針)。"""
+    total = 0
+    for gender in sorted(requested_genders):
+        excl_path = os.path.join(conv, f"sway_exclusions_{gender.lower()}.json")
+        if not os.path.exists(excl_path):
+            continue
+        try:
+            with open(excl_path, encoding="utf-8") as f:
+                excl_report = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        total += sum(
+            1 for e in excl_report.get("excluded", [])
+            if "posture mismatch (dev#1625)" in e.get("reason", ""))
+    if total:
+        print(f"[{TAG}] dev#1625: {total} sway chain(s) disabled due to "
+              "posture mismatch (see sway_exclusions_<gender>.json for detail)")
+        print("##AVATAR_WARNING## Some sway (jiggle) physics chains were "
+              "disabled because the source bone's posture did not match its "
+              f"donor closely enough ({total} chain(s))")
+
+
 def resolve_textures(job, meta):
     """avatar_meta.jsonのslots(m00, m01, ...)から body/parka 用PNGを解決する。
 
@@ -305,22 +394,18 @@ def resolve_textures(job, meta):
     tex_dir = os.path.join(job["job_dir"], "textures")
     atlas_dir = core.job_subdir(job, "build", "atlas")
 
-    plan, skipped_non_png = vp_atlas.plan_avatar(meta)
+    plan, skipped_non_png = vp_atlas.plan_avatar(meta, tex_dir=tex_dir)
+    # dev#1417: テクスチャ既定柄フォールバックのfail-loud化。以前は
+    # <not-actually-png:>/非PNG拡張子のケースがログ([WARN])のみで、
+    # フォールバック発生の事実がGUI変換完了時警告に伝わらなかった
+    # (「テクスチャ入力ディレクトリごと欠落」等の重大異常が、単色素材で
+    # 正当にテクスチャ不要なケースと見分けが付かなかった不具合の実害)。
+    # 文言の組み立てはvp_tex.tex_fallback_diagnostics()に委譲(フォールバック
+    # 挙動そのもの=テンプレート既定柄を使う判断は変更しない、聖域)。
     for slot_id, fn in skipped_non_png:
-        if fn.startswith("<no-texture-no-basecolor:"):
-            # 2026-07-26追加: texture=nullかつbase_colorも取得できない
-            # (現行step01_import_vrm.pyでは通常発生しない、旧形式meta等の
-            # フォールバック)。以前はここが完全に無言で握り潰されていた
-            # (=seed胸ロゴ不具合の根)。もう黙らせず、ログ+GUI両方へ警告する。
-            orig_name = fn[len("<no-texture-no-basecolor:"):-1]
-            print(f"[{TAG}][WARN] slot={slot_id} (material={orig_name}) has "
-                  "neither a texture nor a resolvable base color, so it is excluded "
-                  "from auto-injection (appearance may be missing)")
-            print("##AVATAR_WARNING## Color information for some materials could not "
-                  f"be retrieved, so they may not display correctly (material={orig_name})")
-        else:
-            print(f"[{TAG}][WARN] slot={slot_id} texture={fn} is not a PNG, "
-                  "skipping auto-injection (leaving the template default)")
+        diag_line, warning_text = vp_tex.tex_fallback_diagnostics(slot_id, fn)
+        print(f"[{TAG}]{diag_line}")
+        print(f"##AVATAR_WARNING## {warning_text}")
 
     result = {}
     tex_alpha_mask = {}
@@ -344,24 +429,49 @@ def resolve_textures(job, meta):
                 result[label] = out_png
                 print(f"[{TAG}] {label}: no texture (solid color {rgba[:3]}) "
                       f"material only, generating a solid-color PNG -> {out_png}")
+            elif vp_atlas.is_tinted_texture_key(only):
+                # dev#505: このラベルの唯一のマテリアルが「テクスチャ+非白
+                # tint」だった場合(アトラス化不要でも乗算だけは必要)。
+                tex_filename, rgba = vp_atlas.parse_tinted_texture_key(only)
+                _, _, tex_rgba = vp_tex.decode_png(os.path.join(tex_dir, tex_filename))
+                img = vp_atlas.apply_tint(tex_rgba, rgba)
+                out_png = os.path.join(atlas_dir, f"tinted_{label}.png")
+                vp_tex.encode_png(out_png, img)
+                result[label] = out_png
+                print(f"[{TAG}] {label}: single texture with a non-white tint "
+                      f"({tex_filename}, tint {rgba[:3]}), baking a tinted PNG -> {out_png}")
             else:
                 result[label] = os.path.join(tex_dir, only)
             continue
-        # solid_color_key は実ファイルではないので tex_dir と結合しない
-        # (結合すると build_atlas_from_paths の is_solid_color_key 判定が
-        # 効かなくなり、存在しないパスとして decode_png に渡って壊れる)。
-        paths = [fn if vp_atlas.is_solid_color_key(fn) else os.path.join(tex_dir, fn)
-                 for fn in order]
+        # solid_color_key/tinted_texture_key は実ファイルではない(または
+        # ファイル名がキー内に埋め込まれている)ので、そのまま tex_dir と
+        # 結合しない(結合すると build_atlas_from_paths の判定が効かなくなる)。
+        # tinted_texture_key はファイル名部分だけ tex_dir で解決してから
+        # 同じキー形式へ包み直す(埋め込みパスを絶対パスにする)。
+        paths = []
+        for fn in order:
+            if vp_atlas.is_solid_color_key(fn):
+                paths.append(fn)
+            elif vp_atlas.is_tinted_texture_key(fn):
+                tex_filename, rgba = vp_atlas.parse_tinted_texture_key(fn)
+                paths.append(vp_atlas.tinted_texture_key(os.path.join(tex_dir, tex_filename), rgba))
+            else:
+                paths.append(os.path.join(tex_dir, fn))
         canvas, rows, cols, cs = vp_atlas.build_atlas_from_paths(paths)
         out_png = os.path.join(atlas_dir, f"atlas_{label}.png")
         vp_tex.encode_png(out_png, canvas)
         result[label] = out_png
-        # ログ表示だけ solid_color_key を読みやすい表記へ変換する(実際の
-        # キー文字列はNUL区切りで生ログに出すとエディタ・端末で崩れるため)。
-        order_display = [
-            f"<solid{vp_atlas.parse_solid_color_key(fn)[:3]}>"
-            if vp_atlas.is_solid_color_key(fn) else fn
-            for fn in order]
+
+        def _display(fn):
+            if vp_atlas.is_solid_color_key(fn):
+                return f"<solid{vp_atlas.parse_solid_color_key(fn)[:3]}>"
+            if vp_atlas.is_tinted_texture_key(fn):
+                tex_filename, rgba = vp_atlas.parse_tinted_texture_key(fn)
+                return f"<tinted:{tex_filename}x{rgba[:3]}>"
+            return fn
+        # ログ表示だけ合成キーを読みやすい表記へ変換する(実際のキー文字列は
+        # NUL区切りで生ログに出すとエディタ・端末で崩れるため)。
+        order_display = [_display(fn) for fn in order]
         print(f"[{TAG}] {label}: atlassing {len(order)} texture(s) "
               f"({rows}x{cols} grid, cell={cs}px, canvas={canvas.shape[1]}x"
               f"{canvas.shape[0]}, sources={order_display}) -> {out_png}")
@@ -541,6 +651,30 @@ ATLAS_VISUAL_MIN_NCC = 0.95
 ATLAS_VISUAL_TILE_PATCH = 64
 ATLAS_VISUAL_MIN_TILE_NCC = 0.70
 
+# dev#371(2026-08-02、擬陽性是正。研究WP work\\rd_x2rsc\\PROPOSAL.md参照):
+# NCC(相関係数)は、比較対象の残差(pre/postの画素差)が無相関であれば、
+# その分散の大小に関わらず0近辺の値になる——分散がそこそこ大きくても崩れる
+# (研究WP実測: 独立ノイズを乗せた一様タイルはstd=18.7でもncc=0.005)。
+# ほぼ単色のタイル(髪飾り等、material_map.json欠落時のsolid colorフォールバック
+# スロットに実在する)は、pre/postそれぞれの量子化・ディザに由来する残差しか
+# 持たないため、目視で完全に同一でもNCCが数値的に意味を失う
+# (実測: solid_plane検体の worst_tile は maxdiff=1LSBなのにncc=0.81まで低下、
+# 合成の一様タイル同士では denom==0 の既存ガードが1LSB差で0.0を返す)。
+# 「分散が閾値未満なら」という基準は誤り(A2実測が反証: 分散の大小は無関係)。
+# 効くのは「残差(画素差そのもの)が無視できるほど小さいか」だけなので、
+# タイルの平均絶対画素差がこの床以下なら、そのタイルはNCCで判定できる
+# 情報を持たない(=別の絵として表現されていない)とみなし、min-NCC探索
+# から除外する(全透明タイルを除外する既存ロジックと同型の「判定不能→
+# 対象外」であり、除外したタイルを合格とみなすわけではない——研究WPの
+# 二段判定案の1段目のみを実装。2段目=NCC<0.70でFAILは変更しない)。
+# 床の値は「8bit表現の量子化幅(1階調)の2倍」という表現上の下限から
+# 導いたものであり(観測分布に合わせて選んだ数値ではない)、研究WPの
+# 実測でも flat_ok(dmean=0.25)・uniform_ok(dmean=1.00)を通し、
+# flat_BROKEN(dmean=33.41)・uniform_BROKEN(dmean=72.00)は素通りさせない
+# 値であることを確認済み(criterion_test.py)。この床を超える平均画素差は
+# 「量子化ノイズの範囲外」であり、NCCによる判定へ進む(=見落とさない)。
+ATLAS_VISUAL_TILE_MEAN_DIFF_FLOOR = 2.0
+
 
 def _atlas_ncc_flat_rgb(ta, tb):
     """RGB3chをflatten→平均減算→相関係数。devtools\\atlas_compare.py:86-106の
@@ -567,7 +701,11 @@ def _atlas_tile_min_ncc(a, b, patch):
     最小NCCとその座標を返す((min_ncc, (x, y))。タイルが1枚も無ければ
     (None, None))。devtools\\atlas_compare.py:126-141のgrid_ncc()と同じ
     ロジック(dev#76、配布制約によりここへ複製)。全透明(alpha=0)タイルは
-    未使用領域とみなしスキップする。"""
+    未使用領域とみなしスキップする。
+    dev#371: 平均絶対画素差が ATLAS_VISUAL_TILE_MEAN_DIFF_FLOOR 以下のタイルも、
+    NCCが判定情報を持たない(=残差が量子化ノイズ同然で無相関)とみなし、
+    全透明タイルと同様にmin-NCC探索から除外する(定数の由来はコメント参照)。"""
+    import numpy as np
     h, w = a.shape[:2]
     worst_ncc = None
     worst_xy = None
@@ -576,6 +714,11 @@ def _atlas_tile_min_ncc(a, b, patch):
             ta = a[y:y + patch, x:x + patch]
             tb = b[y:y + patch, x:x + patch]
             if ta[..., 3].max() == 0 and tb[..., 3].max() == 0:
+                continue
+            mean_abs_diff = float(np.abs(
+                ta[..., :3].astype(np.float64) - tb[..., :3].astype(np.float64)
+            ).mean())
+            if mean_abs_diff <= ATLAS_VISUAL_TILE_MEAN_DIFF_FLOOR:
                 continue
             n = _atlas_ncc_flat_rgb(ta, tb)
             if worst_ncc is None or n < worst_ncc:
@@ -611,6 +754,37 @@ def _visual_check_not_run(gender, reason_code, human_reason):
         die(f"Completing with the atlas visual check ({gender}) unable to run is not "
             f"allowed under D2P_STRICT_VISUAL_CHECK=1 (release gate): "
             f"{human_reason} (reason code: {reason_code})")
+
+
+def _atlas_check_diff_image(a, b, amplify=4):
+    """dev#1468(問い合わせU3898G8Z/833M84NT診断、証拠保存WP): アトラス化前(a)
+    /後(b)レンダリング比較の差分可視化PNGを作る。RGB各chの絶対差を`amplify`倍に
+    強調して0-255へクリップし、不透明(alpha=255)のRGBA画像として返す。
+    PASS/FAIL判定には一切使わない目視診断専用の副産物(NCC_DIAG.mdが指摘した
+    「顔領域が再サンプリングでボケているだけか、本物の破損か」を人間が一目で
+    見分けられるようにする)。"""
+    import numpy as np
+    diff = np.abs(a[..., :3].astype(np.int16) - b[..., :3].astype(np.int16))
+    diff = np.clip(diff * amplify, 0, 255).astype(np.uint8)
+    h, w = diff.shape[:2]
+    out = np.zeros((h, w, 4), dtype=np.uint8)
+    out[..., :3] = diff
+    out[..., 3] = 255
+    return out
+
+
+def _log_atlas_check_evidence(gender, result, ncc, tile_min_ncc, worst_tile,
+                               ref_png, out_png, diff_png):
+    """dev#1468: grep可能な`[ATLAS_CHECK]`タグで、視覚チェックが実際に走った回
+    (RAN、PASS/FAILどちらも)の証拠一式を1行にまとめて出す。呼び出し元
+    (_render_atlas_visual_check)がRAN確定後にしか呼ばないため、
+    _visual_check_not_run()経由のSKIPPED経路では絶対に出ない
+    (=「検査が実際に走った回だけ」の負の対照が成立する)。判定ロジックには
+    一切関与しない(ここより前で確定した result 文字列をそのまま出力するだけ)。"""
+    tile_ncc_str = f"{tile_min_ncc:.4f}" if tile_min_ncc is not None else "NA"
+    print(f"[ATLAS_CHECK] gender={gender} result={result} ncc={ncc:.4f} "
+          f"tile_min_ncc={tile_ncc_str} worst_tile={worst_tile} "
+          f"pre={ref_png} post={out_png} diff={diff_png}")
 
 
 def _render_atlas_visual_check(job, gender, blend_out, blender_exe, atlas_dir):
@@ -676,9 +850,28 @@ def _render_atlas_visual_check(job, gender, blend_out, blender_exe, atlas_dir):
     # マーカー)。dev#76でtile_min_ncc=を追加(既存フィールドは変更せず、
     # result=の直前に挿入)。合否はresult=。FAIL時はこの直後のdieで変換ごと停止する
     tile_ncc_str = f"{tile_min_ncc:.4f}" if tile_min_ncc is not None else "NA"
+    atlas_check_result = "PASS" if (global_ok and tile_ok) else "FAIL"
     print(f"##ATLAS_VISUAL_CHECK## RAN gender={gender} ncc={ncc:.4f} "
           f"tile_min_ncc={tile_ncc_str} "
-          f"result={'PASS' if (global_ok and tile_ok) else 'FAIL'}")
+          f"result={atlas_check_result}")
+    # dev#1468(証拠保存WP): 比較画像はここまでで既にatlas_dir(job_dir配下、
+    # 「作成済みMOD一覧」ライブラリエントリと運命共同体で永続する既存の成果物
+    # 置き場)へ保存済み(ref=preview_{gender}_stand.png、out_png=atlascheck_
+    # {gender}.png)。ここでは差分可視化PNGを追加保存し、grep可能な証拠ログを
+    # 出す。diff画像の保存はbest-effort(失敗してもWARNのみ、PASS/FAIL判定・
+    # 既存ログ行は一切変えない)。die()より前に置き、FAIL時も証拠が残るように
+    # する(「成功したのに結果が変」だけでなく「FAILしたが何が原因か」も
+    # 目視できるようにする、NCC_DIAG.md参照)。
+    diff_png = os.path.join(atlas_dir, f"atlascheck_diff_{gender}.png")
+    try:
+        diff_rgba = _atlas_check_diff_image(a, b)
+        vp_tex.encode_png(diff_png, diff_rgba)
+    except Exception as e:
+        print(f"[{TAG}][WARN] Atlas visual check ({gender}): failed to save "
+              f"diff evidence image ({e})")
+        diff_png = None
+    _log_atlas_check_evidence(gender, atlas_check_result, ncc, tile_min_ncc,
+                               worst_tile, ref, out_png, diff_png)
     if not (global_ok and tile_ok):
         reasons = []
         if not global_ok:
@@ -687,7 +880,8 @@ def _render_atlas_visual_check(job, gender, blend_out, blender_exe, atlas_dir):
             reasons.append(
                 f"tile_min_ncc={tile_min_ncc:.4f} < {ATLAS_VISUAL_MIN_TILE_NCC} "
                 f"(patch={ATLAS_VISUAL_TILE_PATCH}, worst_tile={worst_tile})")
-        die(f"The image rendered with the post-atlas UVs does not match the pre-atlas "
+        diag_msg = (
+            f"The image rendered with the post-atlas UVs does not match the pre-atlas "
             f"preview ({gender}: {'; '.join(reasons)}).\n"
             f"Strong suspicion that the cell assignment and UV transform disagree, or that "
             f"a local region (e.g. hair/logo texture) was corrupted during atlas packing "
@@ -695,6 +889,150 @@ def _render_atlas_visual_check(job, gender, blend_out, blender_exe, atlas_dir):
             f"  Pre-atlas (expected): {ref}\n"
             f"  Post-atlas (sample) : {out_png}\n"
             f"  Atlas image         : {atlas_png}")
+        # dev#1468(オーナー裁定2026-08-15): 「こっちの勝手な正義感で『本来使える
+        # かもしれない物』を『失敗』と断定してユーザーに渡さない、をやめてくれ。
+        # preflight同様『内部チェックで問題があったから問題があるかもしれないけど
+        # 適用しました』があるべき姿」。以前はここで無条件die()し、変換そのものを
+        # 止めていた(実報告2件: 全体NCC=0.9981[実質満点]なのに一部タイルだけが
+        # 閾値[0.49,0.9414]の未検証領域に入り、検査ロジック自体の弱点でFAIL
+        # 扱いになっていた——ユーザーの入力は無罪の疑いが強いのに変換ごと拒否
+        # していた)。_visual_check_not_run()(検査を「実行できなかった」経路、
+        # 公開issue #5)と同じ二層構造に揃える: エンドユーザー経路は検出結果を
+        # 出力ログ+##AVATAR_WARNING##で警告した上で変換を継続し(preflightの
+        # 「検査したが強制はしない」方針と同型)、D2P_STRICT_VISUAL_CHECK=1
+        # (devtools\\relgate.py=リリース関所が常時設定)のときだけdieする
+        # (リリース判定の既知良品検体でのFAILは真の退行の疑いが強く、そこは
+        # 引き続きfail-closedで検出する)。検出ロジック・閾値・
+        # ##ATLAS_VISUAL_CHECK##マーカーは無変更。
+        print(f"[{TAG}][WARN] {diag_msg}")
+        print("##AVATAR_WARNING## The post-atlas visual check detected a possible mismatch "
+              f"({gender}: {'; '.join(reasons)}). Conversion continues, but please check "
+              "the appearance of the converted avatar")
+        if os.environ.get("D2P_STRICT_VISUAL_CHECK") == "1":
+            die(f"Completing with the atlas visual check ({gender}) FAILING is not allowed "
+                f"under D2P_STRICT_VISUAL_CHECK=1 (release gate): {diag_msg}")
+
+
+# dev#6(自己参照設計の再スコープ、.devonly\docs\rd\visual_check_rescope_20260802.md):
+# _render_atlas_visual_check()(上)が比較する ref(preview_{gender}_stand.png)と
+# out_png(atlascheck_{gender}.png)は、どちらも同一のstep02_{gender}.blend
+# (retargetの出力そのもの)を共通祖先に持つ(convert_noue.py:617/627-631の
+# トレース。vp_atlas_uvbake.pyはUVベイクのみでボーンを一切変更しない)。
+# したがってretarget段(step02_retarget.py)自体が起こす破損(関節位置の誤り・
+# 90度回転ミス等)は、ref/out_pngの両方に"同じように"焼き込まれ、画素比較では
+# 原理的に検出できない(自己参照)。この関数はその穴を、今回の実行結果に
+# 依存しない2つの基準——①refskel_{gender}.json(Palworld本体から一度だけ
+# 抽出した固定データ)から独立に再構築した標準骨格との向き比較、②retarget
+# 前のstep01_clean.blend(アバター自身、retarget実行が何をしたかの情報を
+# 含まない)とretarget後のチェーン方向・左右対称性比較——で埋める。
+# レンダリングを伴わない(ボーン行列の比較のみ)ためGPU非依存で、
+# _visual_check_not_run()のようなfail-open分岐は持たない(入力の
+# step01_clean.blend/step02_{gender}.blend/vanilla一式はこの時点で必ず
+# 揃っている——欠けていればここより前の工程が既にdieしている)。
+def _check_retarget_structure(job, job_json, gender, blender_exe):
+    """dev#6構造チェック本体。Blender headlessで生データを抽出させ
+    (dump_retarget_structure.py)、判定はpure Pythonのvp_structural_check.py
+    (bpy非依存、単体テスト可能)に委ねる。FAILならdie()で変換を止める
+    (pak出力への影響は無い。sanity checkとして変換を止めるかどうかだけを
+    左右する——層宣言はnone)。"""
+    conv = os.path.join(job["job_dir"], "converted")
+    out_json = os.path.join(conv, f"retarget_structure_{gender.lower()}.json")
+    log_path = os.path.join(conv, f"retarget_structure_{gender.lower()}.log")
+    cmd = [blender_exe, "--background", "--factory-startup",
+           "--python-exit-code", "1", "--python",
+           DUMP_RETARGET_STRUCTURE_PY, "--", job_json, gender, out_json]
+    with open(log_path, "w", encoding="utf-8") as lf:
+        r = subprocess.run(cmd, stdout=lf, stderr=subprocess.STDOUT, text=True)
+    if r.returncode != 0 or not os.path.exists(out_json):
+        tail = ""
+        try:
+            with open(log_path, encoding="utf-8", errors="replace") as lf:
+                tail = lf.read()[-3000:]
+        except OSError:
+            pass
+        die(f"Retarget structure check ({gender}) could not be run "
+            f"(exit={r.returncode}, log: {log_path})\n--- log tail ---\n{tail}")
+    with open(out_json, encoding="utf-8") as f:
+        data = json.load(f)
+    result = vp_structural_check.evaluate(data)
+    o, c, s = result["orientation"], result["chain"], result["symmetry"]
+    print(f"[{TAG}] Retarget structure check ({gender}): "
+          f"orientation max={o['max_deg']:.4f}deg "
+          f"(<= {o['threshold_deg']} passes, worst={o['worst_bone']}); "
+          f"chain reversed={len(c['reversed'])}/{c['n_pairs']}; "
+          f"symmetry n_fail={len(s['fail'])}/{s['n_pairs']} "
+          f"(mirror_axis={s['mirror_axis']}) -> {out_json}")
+    print(f"##RETARGET_STRUCTURE_CHECK## RAN gender={gender} "
+          f"orientation_max_deg={o['max_deg']:.4f} "
+          f"chain_reversed={len(c['reversed'])} "
+          f"symmetry_fail={len(s['fail'])} "
+          f"result={'PASS' if result['pass'] else 'FAIL'}")
+    if not result["pass"]:
+        orientation_ok = not o["fail_bones"]
+        chain_ok = not c["reversed"]
+        reasons = []
+        sym_reason = None
+        if o["fail_bones"]:
+            worst = max(o["fail_bones"], key=o["fail_bones"].get)
+            reasons.append(
+                f"orientation: {len(o['fail_bones'])} bone(s) exceed "
+                f"{o['threshold_deg']}deg vs. the independently-rebuilt Palworld "
+                f"standard skeleton (worst={worst} {o['fail_bones'][worst]:.2f}deg)")
+        if c["reversed"]:
+            rv = c["reversed"][0]
+            reasons.append(
+                f"chain: {len(c['reversed'])} bone chain pair(s) reversed direction "
+                f"between pre-retarget and post-retarget "
+                f"(e.g. {rv['parent']}->{rv['child']} dot={rv['dot']:.3f})")
+        if s["fail"]:
+            sf = s["fail"][0]
+            # dev#6b: length_ratioは絶対値(参考情報、非対称なアバターでは
+            # 1.0から離れていて正常)。判定に使うのはlength_ratio_change
+            # (retarget前後の変化率)であり、こちらが閾値超過の実際の理由。
+            change_str = (f"{sf['length_ratio_change']:.3f}"
+                          if sf["length_ratio_change"] is not None else "n/a")
+            sym_reason = (
+                f"symmetry: {len(s['fail'])} left/right bone pair(s) out of "
+                f"tolerance (e.g. {sf['parent']}/{sf['parent_r']} "
+                f"mirror_angle={sf['mirror_angle_deg']:.2f}deg "
+                f"length_ratio={sf['length_ratio']:.3f} "
+                f"length_ratio_change(pre->post retarget)={change_str})")
+            reasons.append(sym_reason)
+
+        # dev#1609(JTBCNXCA): symmetry_diffs()の鏡映軸判定はdev#1609WPで
+        # ペアごとの実方向ベクトルから個別決定するよう改善したが、それでも
+        # なお誤検知が起こり得る境界ケースを完全には排除できない。一方
+        # orientation_diffs()は今回のretarget実行にも入力アバターにも
+        # 依存しないrefskel由来の基準骨格との直接比較であり、実損壊の
+        # 検出力は独立して機能している(このファイル冒頭dev#6コメント
+        # 参照)。したがって「orientationとchainがどちらも健全なのに
+        # symmetryだけがFAILする」場合は、思想録の方針(検査機構は警告
+        # 目的のみに使い、渡さない目的に使ってはならない)に基づき、
+        # 変換を止めずWARNING格下げで続行する。orientationまたはchainが
+        # 実際にFAILしている場合は、実損壊の可能性が高いため従来どおり
+        # FATALのまま変換を止める。
+        if orientation_ok and chain_ok:
+            print(f"##AVATAR_WARNING## Retarget structure check ({gender}) "
+                  f"symmetry check flagged a possible issue ({sym_reason}), but "
+                  f"orientation is healthy (independently-rebuilt Palworld standard "
+                  f"skeleton comparison, max={o['max_deg']:.4f}deg <= "
+                  f"{o['threshold_deg']}deg) and no bone chain reversed direction. "
+                  f"Conversion continues (dev#1609: a single global mirror axis can "
+                  f"misfire on some rest poses even after the per-pair axis fix); "
+                  f"please check the appearance of the converted avatar")
+            if os.environ.get("D2P_STRICT_VISUAL_CHECK") == "1":
+                die(f"Retarget structure check ({gender}) symmetry FAILING is not "
+                    f"allowed under D2P_STRICT_VISUAL_CHECK=1 (release gate): "
+                    f"{sym_reason}\n  Raw data: {out_json}\n  Log: {log_path}")
+        else:
+            die(f"Retarget structure check ({gender}) failed: {'; '.join(reasons)}.\n"
+                f"This indicates the retarget stage (step02_retarget.py) produced a "
+                f"structurally invalid skeleton (joint orientation drifted from the "
+                f"Palworld standard skeleton, or a bone chain reversed direction). "
+                f"The pixel-based atlas visual check cannot see this class of "
+                f"defect, because its reference and sample images share this same "
+                f"retarget output as a common ancestor (dev#6).\n"
+                f"  Raw data: {out_json}\n  Log: {log_path}")
 
 
 def find_shadow_lift_offset(data):
@@ -950,6 +1288,11 @@ def main():
     job_dir = job["job_dir"]
     avatar = job.get("avatar_name", "Avatar")
 
+    # dev#1572(2026-08-19): 片性別genders jobは即拒否(上のcheck_dual_gender_required
+    # 参照)。これより下のgenders_cfg計算(dev#165)は、genders未指定時の既定分岐
+    # 用に従来どおり残す
+    check_dual_gender_required(job)
+
     # dev#165(2026-07-30): job.jsonのgendersはconvert.ps1のPhase1
     # (retarget/preview)は尊重するが、実際にpakを作るこのnoue経路は
     # これまで一切参照せず、常にfemale/male両方のstep02 blendの存在を
@@ -966,6 +1309,45 @@ def main():
             f"{sorted(_valid_genders)}: {genders_cfg}")
     print(f"[{TAG}] genders requested (job.json): {sorted(requested_genders)}")
 
+    # dev#165(2026-08-08 第2期、指揮者裁定・オーナーGO): job.jsonの
+    # equipment_filterで、注入対象の衣装SKを選択した装備コード
+    # (vp_equipment_filter.equipment_code、性別非依存)だけに絞り込む。
+    # キー不在/空リストなら従来どおり全装備が対象(=既定・無退行の根拠)。
+    #
+    # 第1期(グローバルdict一時書き換え)はメッシュ(Phase2)にしか間に合わず、
+    # マテリアル(t00/t01共有アトラス)は全ジョブ共有・キャッシュされる
+    # テンプレート組み立て時に別途確定するため効かなかった(G12と同型の
+    # 見た目破綻、詳細はgit logのdev#165第1期コミット参照)。第2期は
+    # グローバル書き換えを廃止し、job辞書をそのまま渡すだけにした:
+    # resolve_noue_assets()->live_template.build_live_template(job)は
+    # job全体を最初から受け取っているため、job["equipment_filter"]を
+    # live_template.py側が直接読む(このファイル側の追加配線は不要——
+    # 「新しいグローバル状態を増やさない」設計そのもの)。Phase2側は
+    # build_pak_from_avatar.pyへ--equipment-filterとして明示的に渡す
+    # (--gendersと同じ形)。
+    requested_equipment = vp_equipment_filter.normalize_equipment_filter(
+        job.get("equipment_filter"))
+    if requested_equipment:
+        print(f"[{TAG}] equipment filter requested (job.json): "
+              f"{len(requested_equipment)} code(s) -> {sorted(requested_equipment)}")
+    else:
+        print(f"[{TAG}] equipment filter: not set (all equipment injected, default)")
+
+    # dev#277第1弾④(2026-08-08、頭装備切り替え、サポート防衛): ラボ設定の
+    # 非既定値は必ず診断ログへdumpする(lab-dev憲章、CLAUDE.md「ラボON起因の
+    # 不具合報告は『既定に戻して再試行』の定型で仕分けする設計」)。
+    # 実際のスタブ除外判定自体はlive_template.py側(job.get("headequip_show")
+    # を直接読む)で行われる——ここでは診断可視性のためだけに同じ正規化
+    # ロジックを呼ぶ(副作用なし)。
+    requested_headequip_show = vp_headequip_filter.normalize_headequip_selection(
+        job.get("headequip_show"))
+    if requested_headequip_show:
+        print(f"[{TAG}] headequip toggle requested (job.json): "
+              f"{len(requested_headequip_show)} code(s) shown -> "
+              f"{sorted(requested_headequip_show)}")
+    else:
+        print(f"[{TAG}] headequip toggle: not set (all head equipment hidden, default)")
+
     conv = os.path.join(job_dir, "converted")
     step02_female = (os.path.join(conv, "step02_female.blend")
                       if "Female" in requested_genders else None)
@@ -975,6 +1357,8 @@ def main():
                      (step02_male, "step02_male.blend")):
         if p is not None and not os.path.exists(p):
             die(f"{label} not found (Blender pipeline incomplete?): {p}")
+
+    warn_posture_mismatch_cull(conv, requested_genders)
     # WP-C(dev issue #27、2026-07-28): relgateの中間ハッシュスキップ用フック。
     # convert.ps1のPhase 0-1(バニラ準備+Blender工程、Mutex保護込み)だけを
     # 本番と完全に同一の経路で走らせ、noue工程(Phase 2-6)へ入る直前で止める。
@@ -1020,6 +1404,16 @@ def main():
     if not os.path.exists(blender_exe):
         die(f"Blender not found: {blender_exe}")
 
+    # dev#6: retarget段の非画素構造チェック(自己参照しない視覚検査の
+    # 次善策)。アトラス焼き込みより前、step02_retarget.pyの生出力に対して
+    # 行う(アトラス焼き込みはボーンを一切変更しないので、この時点で
+    # チェックしても後段の判定と食い違わない — apply_atlas_uv_bake()の
+    # docstring参照)。
+    print(f"[{TAG}] === NoueSubphase: retarget_structure_check start ===")
+    for _gender in sorted(requested_genders):
+        _check_retarget_structure(job, job_json, _gender, blender_exe)
+    print(f"[{TAG}] === NoueSubphase: retarget_structure_check done ===")
+
     # U16: マテリアルアトラス化。tex解決(画像合成)→アトラス使用時のみ
     # Blender headlessでUV焼き込み(step02_{female,male}.blendの新版を作る。
     # 元ファイルは無改変)。slot_xfが空(distinctテクスチャ<=1のラベルのみ)
@@ -1054,6 +1448,12 @@ def main():
         print(f"[{TAG}] U50-fast: template is not live-extracted ({assets['source']}), "
               f"so shadow-strength MI override is skipped (legacy path)")
     print(f"[{TAG}] === NoueSubphase: material_override done ===")
+
+    # dev#1170 WP-A(装備別アバター、ラボ機能): job.jsonの
+    # `equipment_avatar_map`キー経由の差し替え配線はWP-2(合成エンジン、
+    # pipeline\py\vp_avatar_compose.py)への一本化に伴い廃止済み(オーナー
+    # 確定仕様2026-08-09)。通常の単一アバター変換フローはequip_avatar_extra_dir
+    # を一切使わない(--equip-avatar-extra-dir自体を渡さない=常時④無退行)。
 
     # U49: shadow_lift(job.json)から注入テクスチャの明度ゲインを計算する。
     # 根拠/式はvp_texinject.shadow_lift_gain()のdocstring+モジュール
@@ -1100,6 +1500,16 @@ def main():
     out_pak = os.path.join(out_dir, f"{avatar}_PlayerSwap_P.pak")
     work_dir = os.path.join(out_dir, "noue_work")
 
+    # dev#1230(2026-08-08オーナー裁定): ユーザーサイド変換フローはpreflight
+    # FAILでもブロックしない。job.jsonの明示キーで伝える(app_py\
+    # pipeline_runner.pyのwrite_job()が常にTrueで書く。devtools\relgate.pyが
+    # 組み立てるjob.jsonはこのキーを持たないため、job.getの既定Falseにより
+    # 開発側の関所は無変更のまま)。
+    preflight_nonblocking = bool(job.get("preflight_nonblocking", False))
+    if preflight_nonblocking:
+        print(f"[{TAG}] preflight_nonblocking=True (job.json): even if preflight FAILs, "
+              f"the pak is completed and the build continues (dev#1230)")
+
     argv = ["build_pak_from_avatar.py",
             "--template", assets["template"],
             "--out", out_pak,
@@ -1108,15 +1518,27 @@ def main():
             "--job-json", job_json,
             "--cook-log", assets["cook_log"],
             "--tex-gain", str(tex_gain),
-            # dev#157 / WP-I157(2026-07-30): サイズ可変(隠し設定)。job.jsonに
-            # 無ければvp_core.load_job()の既定1.0が使われ、build_pak_from_avatar.py
-            # 側も既定1.0のため完全no-op(pakバイト不変)。
-            "--uniform-scale", str(job.get("uniform_scale", 1.0)),
+            # dev#560(2026-08-07): job["uniform_scale"]はもうここへ転送しない。
+            # dev#157/PR#357のpakレベルUExpスケルトンパッチ方式は官能NG
+            # (「手が大きく崩壊」)で凍結済みで、代わりにBlender工程末尾
+            # (step02_retarget.py apply_output_scale())で適用する方式に
+            # 置き換えた。build_pak_from_avatar.pyの--uniform-scale自体は
+            # 既定1.0のままここでは渡さない(常に恒久no-op。CLI直接指定での
+            # 手動デバッグ用途にのみコードを残す、vp_core.pyのuniform_scale
+            # コメント参照)。
             # dev#165: 要求された性別だけをbuild_pak_from_avatar.pyへ伝える。
             # 既定(両方要求)ではsorted(requested_genders)==["Female","Male"]で
             # 固定なので、このオプション自体は既定挙動に対する新しい分岐にならない
             # (build_pak_from_avatar.py側のdefaultも同じ"Male,Female"に揃えてある)。
-            "--genders", ",".join(sorted(requested_genders))]
+            "--genders", ",".join(sorted(requested_genders)),
+            # dev#165第2期: 選択された装備コードをbuild_pak_from_avatar.pyへ
+            # 明示的に伝える(Phase2のメッシュ注入絞り込み用)。マテリアル側
+            # (t00/t01統一)はassets["template"]の組み立て時点で既にjob辞書
+            # そのものから同じ絞り込みが適用済み(live_template.py参照)。
+            # requested_equipmentがNoneなら空文字列を渡し、既定(絞り込み無し)
+            # を明示する(build_pak_from_avatar.py側のdefaultも空文字列)。
+            "--equipment-filter",
+            ",".join(sorted(requested_equipment)) if requested_equipment else ""]
     if step02_female is not None:
         argv += ["--step02-female", step02_female]
     if step02_male is not None:
@@ -1133,6 +1555,8 @@ def main():
         argv += ["--mat-override-dir", mat_override_dir]
     if mi_override_dir:
         argv += ["--mi-override-dir", mi_override_dir]
+    if preflight_nonblocking:
+        argv += ["--preflight-nonblocking"]
 
     print(f"[{TAG}] build_pak_from_avatar.main() argv={argv[1:]}")
     old_argv = sys.argv
@@ -1155,6 +1579,13 @@ def main():
                       f, ensure_ascii=False, indent=2, sort_keys=True, default=str)
     except Exception as e:  # 控えの失敗でビルドを落とさない(fast_repackはmtimeへ退避する)
         print(f"[{TAG}][WARN] Could not write job_snapshot.json: {e}")
+
+    # dev#1170 WP-1(マルチアバターPAK合成の基盤): 通常のnoue変換完了時、
+    # 後続のpak合成(WP-2以降)が必要とする中間物一式(装備SK群+アトラス+
+    # manifest.json)を job_dir/library/ へ自動保存する。失敗しても
+    # save_library()内部で例外を吸収し変換自体は成功のまま続く(④無退行、
+    # pak本体・job.json・job_snapshot.jsonのいずれにも一切触れない)。
+    vp_avatar_library.save_library(job, job_dir, out_pak, work_dir)
 
     print(f"[{TAG}] done: {out_pak}")
 
