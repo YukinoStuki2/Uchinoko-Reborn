@@ -80,6 +80,8 @@ from ui import workarea  # noqa: E402
 # DiveToPalworld.cs L.704 (devtools\release.py がリリース時にスタンプする値。
 # WP-A1の骨格では固定値で近似し、実際の版管理はB1/D1側の課題とする)
 TOOL_VERSION = "v2.13.0"
+REPAIR_VERSION = TOOL_VERSION + "-reborn.1"
+TOOL_DISPLAY_NAME = "Uchinoko Reborn"
 
 # オンラインマニュアルのURL(指揮者裁定: マニュアルを開く導線があれば既定
 # ブラウザで開く)。DESIGN.md §1.1の25要素にはマニュアル専用ボタンは含まれて
@@ -761,7 +763,7 @@ class MainWindow:
         i18n.clear_registry()
         i18n.set_language(lang)
 
-        root.title(f"Uchinoko for Palworld {TOOL_VERSION} - {i18n.S('TitleSubtitle')}")
+        self._update_window_title()
         # dev#662: 固定 "1100x930"(現在はdev#551でCONTENT_HEIGHTが900へ変更
         # されたため"1100x900")を作業領域(タスクバー除く)クランプへ置換。
         # 通常環境(作業領域がcontentサイズ以上)では従来と同じ寸法・
@@ -1438,6 +1440,8 @@ class MainWindow:
         """OpenUpdateDownloadPage() (DiveToPalworld.cs L.3613-3617) 相当。
         既定ブラウザで配布ページを開く。失敗しても無音(通知クリックの延長で
         二重にエラーダイアログを出す必要は無い、元実装のコメントどおり)。"""
+        if not update_check.UPDATE_DOWNLOAD_PAGE_URL:
+            return
         try:
             webbrowser.open(update_check.UPDATE_DOWNLOAD_PAGE_URL)
         except Exception:  # noqa: BLE001 -- 元実装と同じく無音で諦める
@@ -1461,7 +1465,7 @@ class MainWindow:
         実際に組み込む(D1の統合対象そのもの)。"""
         lines: list[str] = []
         lines.append(f"date: {datetime.now().isoformat(timespec='seconds')}")
-        lines.append(f"version: {TOOL_VERSION}")
+        lines.append(f"version: {REPAIR_VERSION}")
         lines.append(f"os: {self._get_os_description()}")
         file_lang = i18n.FILE_LANG_CODES.get(i18n.current_lang, i18n.current_lang)
         lines.append(f"lang: {file_lang} (ui) / {self._current_os_culture_name() or 'unknown'} (os)")
@@ -1670,7 +1674,7 @@ class MainWindow:
 
     def _update_window_title(self) -> None:
         self.root.title(
-            f"Uchinoko for Palworld {TOOL_VERSION} - {i18n.S('TitleSubtitle')}"
+            f"{TOOL_DISPLAY_NAME} {REPAIR_VERSION} - {i18n.S('TitleSubtitle')}"
         )
 
     # -- ウィジェット構築 ---------------------------------------------------

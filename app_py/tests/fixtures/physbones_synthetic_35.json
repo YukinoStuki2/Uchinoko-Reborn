@@ -1,0 +1,1036 @@
+{
+  "_fixture_origin": "Artificial public test data, not derived from a model. See README.md.",
+  "format": "divetopalworld-physbones-1",
+  "physbones": [
+    {
+      "anchor": "hinge_00",
+      "pb_object_name": "Synthetic hinge_00",
+      "chains": [
+        [
+          "hinge_00_a1",
+          "hinge_00_a2"
+        ],
+        [
+          "hinge_00_b1",
+          "hinge_00_b2",
+          "hinge_00_b3"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Hinge",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          15.0,
+          -10.0,
+          5.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "hinge_01",
+      "pb_object_name": "Synthetic hinge_01",
+      "chains": [
+        [
+          "hinge_01_a1",
+          "hinge_01_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Hinge",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          15.0,
+          -10.0,
+          5.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "hinge_02",
+      "pb_object_name": "Synthetic hinge_02",
+      "chains": [
+        [
+          "hinge_02_a1",
+          "hinge_02_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Hinge",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          15.0,
+          -10.0,
+          5.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "hinge_03",
+      "pb_object_name": "Synthetic hinge_03",
+      "chains": [
+        [
+          "hinge_03_a1",
+          "hinge_03_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Hinge",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          15.0,
+          -10.0,
+          5.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "hinge_04",
+      "pb_object_name": "Synthetic hinge_04",
+      "chains": [
+        [
+          "hinge_04_a1",
+          "hinge_04_a2"
+        ],
+        [
+          "hinge_04_b1",
+          "hinge_04_b2",
+          "hinge_04_b3"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Hinge",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          15.0,
+          -10.0,
+          5.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "hinge_05",
+      "pb_object_name": "Synthetic hinge_05",
+      "chains": [
+        [
+          "hinge_05_a1",
+          "hinge_05_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Hinge",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          15.0,
+          -10.0,
+          5.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "hinge_06",
+      "pb_object_name": "Synthetic hinge_06",
+      "chains": [
+        [
+          "hinge_06_a1",
+          "hinge_06_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Hinge",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          15.0,
+          -10.0,
+          5.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "hinge_07",
+      "pb_object_name": "Synthetic hinge_07",
+      "chains": [
+        [
+          "hinge_07_a1",
+          "hinge_07_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Hinge",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          15.0,
+          -10.0,
+          5.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "hinge_08",
+      "pb_object_name": "Synthetic hinge_08",
+      "chains": [
+        [
+          "hinge_08_a1",
+          "hinge_08_a2"
+        ],
+        [
+          "hinge_08_b1",
+          "hinge_08_b2",
+          "hinge_08_b3"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Hinge",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          15.0,
+          -10.0,
+          5.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "hinge_09",
+      "pb_object_name": "Synthetic hinge_09",
+      "chains": [
+        [
+          "hinge_09_a1",
+          "hinge_09_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Hinge",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          15.0,
+          -10.0,
+          5.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "polar_00",
+      "pb_object_name": "Synthetic polar_00",
+      "chains": [
+        [
+          "polar_00_a1",
+          "polar_00_a2"
+        ],
+        [
+          "polar_00_b1",
+          "polar_00_b2",
+          "polar_00_b3"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Polar",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "polar_01",
+      "pb_object_name": "Synthetic polar_01",
+      "chains": [
+        [
+          "polar_01_a1",
+          "polar_01_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Polar",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "polar_02",
+      "pb_object_name": "Synthetic polar_02",
+      "chains": [
+        [
+          "polar_02_a1",
+          "polar_02_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Polar",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "polar_03",
+      "pb_object_name": "Synthetic polar_03",
+      "chains": [
+        [
+          "polar_03_a1",
+          "polar_03_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Polar",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "polar_04",
+      "pb_object_name": "Synthetic polar_04",
+      "chains": [
+        [
+          "polar_04_a1",
+          "polar_04_a2"
+        ],
+        [
+          "polar_04_b1",
+          "polar_04_b2",
+          "polar_04_b3"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Polar",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "polar_05",
+      "pb_object_name": "Synthetic polar_05",
+      "chains": [
+        [
+          "polar_05_a1",
+          "polar_05_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Polar",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "polar_06",
+      "pb_object_name": "Synthetic polar_06",
+      "chains": [
+        [
+          "polar_06_a1",
+          "polar_06_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Polar",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "polar_07",
+      "pb_object_name": "Synthetic polar_07",
+      "chains": [
+        [
+          "polar_07_a1",
+          "polar_07_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Polar",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "offset_00",
+      "pb_object_name": "Synthetic offset_00",
+      "chains": [
+        [
+          "offset_00_a1",
+          "offset_00_a2"
+        ],
+        [
+          "offset_00_b1",
+          "offset_00_b2",
+          "offset_00_b3"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Angle",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          20.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "offset_01",
+      "pb_object_name": "Synthetic offset_01",
+      "chains": [
+        [
+          "offset_01_a1",
+          "offset_01_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Angle",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          20.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "offset_02",
+      "pb_object_name": "Synthetic offset_02",
+      "chains": [
+        [
+          "offset_02_a1",
+          "offset_02_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Angle",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          20.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "offset_03",
+      "pb_object_name": "Synthetic offset_03",
+      "chains": [
+        [
+          "offset_03_a1",
+          "offset_03_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Angle",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          20.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "offset_04",
+      "pb_object_name": "Synthetic offset_04",
+      "chains": [
+        [
+          "offset_04_a1",
+          "offset_04_a2"
+        ],
+        [
+          "offset_04_b1",
+          "offset_04_b2",
+          "offset_04_b3"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Angle",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          20.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "offset_05",
+      "pb_object_name": "Synthetic offset_05",
+      "chains": [
+        [
+          "offset_05_a1",
+          "offset_05_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Angle",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          20.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "offset_06",
+      "pb_object_name": "Synthetic offset_06",
+      "chains": [
+        [
+          "offset_06_a1",
+          "offset_06_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Angle",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          20.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "offset_07",
+      "pb_object_name": "Synthetic offset_07",
+      "chains": [
+        [
+          "offset_07_a1",
+          "offset_07_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Angle",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          20.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "unlimited_00",
+      "pb_object_name": "Synthetic unlimited_00",
+      "chains": [
+        [
+          "unlimited_00_a1",
+          "unlimited_00_a2"
+        ],
+        [
+          "unlimited_00_b1",
+          "unlimited_00_b2",
+          "unlimited_00_b3"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "None",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          99.0,
+          99.0,
+          99.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "unlimited_01",
+      "pb_object_name": "Synthetic unlimited_01",
+      "chains": [
+        [
+          "unlimited_01_a1",
+          "unlimited_01_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "None",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          99.0,
+          99.0,
+          99.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "unlimited_02",
+      "pb_object_name": "Synthetic unlimited_02",
+      "chains": [
+        [
+          "unlimited_02_a1",
+          "unlimited_02_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "None",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          99.0,
+          99.0,
+          99.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "unlimited_03",
+      "pb_object_name": "Synthetic unlimited_03",
+      "chains": [
+        [
+          "unlimited_03_a1",
+          "unlimited_03_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "None",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          99.0,
+          99.0,
+          99.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "unlimited_04",
+      "pb_object_name": "Synthetic unlimited_04",
+      "chains": [
+        [
+          "unlimited_04_a1",
+          "unlimited_04_a2"
+        ],
+        [
+          "unlimited_04_b1",
+          "unlimited_04_b2",
+          "unlimited_04_b3"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "None",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          99.0,
+          99.0,
+          99.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "centered_00",
+      "pb_object_name": "Synthetic centered_00",
+      "chains": [
+        [
+          "centered_00_a1",
+          "centered_00_a2"
+        ],
+        [
+          "centered_00_b1",
+          "centered_00_b2",
+          "centered_00_b3"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Angle",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "centered_01",
+      "pb_object_name": "Synthetic centered_01",
+      "chains": [
+        [
+          "centered_01_a1",
+          "centered_01_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Angle",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "centered_02",
+      "pb_object_name": "Synthetic centered_02",
+      "chains": [
+        [
+          "centered_02_a1",
+          "centered_02_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Angle",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    },
+    {
+      "anchor": "centered_03",
+      "pb_object_name": "Synthetic centered_03",
+      "chains": [
+        [
+          "centered_03_a1",
+          "centered_03_a2"
+        ]
+      ],
+      "params": {
+        "pull": 0.3,
+        "spring": 0.2,
+        "stiffness": 0.2,
+        "gravity": 0.0,
+        "gravity_falloff": 0.0,
+        "immobile": 0.0,
+        "immobile_type": "AllMotion",
+        "limit_type": "Angle",
+        "max_angle_x": 40.0,
+        "max_angle_z": 40.0,
+        "limit_rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "radius": 0.001
+      }
+    }
+  ]
+}

@@ -23,19 +23,13 @@ from __future__ import annotations
 
 import json
 import re
-import urllib.request
 from dataclasses import dataclass
 from typing import Callable, List, Optional
 
-# VersionCheckUrl (L.731)。C#側はこのURLを環境変数で上書きしない
-# (D2P_REPORT_BASEURLがあるのはinquiry.py相当のレポート送信先だけ、L.716)。
-VERSION_CHECK_URL = "https://dl.osakishokai.com/versions.json"
-
-# UpdateDownloadPageUrl (L.733)。
-UPDATE_DOWNLOAD_PAGE_URL = "https://osaki-vrc.booth.pm/items/8662197"
-
-# req.Timeout = req.ReadWriteTimeout = 4000 (L.3518-3519、ミリ秒)。
-_REQUEST_TIMEOUT_SECONDS = 4.0
+# This independent repair build has no update service. Upstream releases would
+# replace the local fixes, so neither a feed nor an update destination is set.
+VERSION_CHECK_URL = ""
+UPDATE_DOWNLOAD_PAGE_URL = ""
 
 
 def parse_version(v: Optional[str]) -> Optional[List[int]]:
@@ -128,28 +122,17 @@ def evaluate_update_json(json_text: Optional[str], current_version: str) -> Upda
 
 
 def _default_fetch_versions_json(current_version: str) -> Optional[str]:
-    """実HTTP GET(L.3507-3536相当)。失敗は完全に無音でNoneを返す(聖域:
-    取得失敗はいかなるエラー表示・例外にもならないこと、L.3502-3503)。"""
-    try:
-        req = urllib.request.Request(
-            VERSION_CHECK_URL,
-            headers={"User-Agent": "Uchinoko-UpdateCheck/" + current_version.lstrip("vV")},
-        )
-        with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_SECONDS) as resp:
-            charset = resp.headers.get_content_charset() or "utf-8"
-            return resp.read().decode(charset)
-    except Exception:
-        return None
+    """Keep startup offline; compatibility uses the bundled known-good data."""
+    return None
 
 
 def check_for_update(
     current_version: str, fetch: Optional[Callable[[], Optional[str]]] = None
 ) -> UpdateCheckResult:
-    """起動時の更新通知本体(CheckForUpdateOnStartup L.3505-3546相当、ダウンロード
-    無し=通知のみ)。fetchはHTTP層を差し替えるための注入点(既定は実際に
-    versions.jsonをGETする_default_fetch_versions_json)。呼び出し側
-    (main_window等、統合はWP範囲外)は非同期スレッドから呼ぶこと(C#側も
-    ThreadPool.QueueUserWorkItemで非同期・非ブロッキング、L.3507)。"""
+    """Evaluate an explicitly supplied feed; the repair build defaults to offline.
+
+    The injected fetch remains available for tests and local feed evaluation.
+    """
     if fetch is None:
         fetch = lambda: _default_fetch_versions_json(current_version)
     try:

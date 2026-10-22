@@ -774,7 +774,11 @@ def import_fbx_avatar(job, warnings, humanoid_json=None):
     # 明示ルート(FBXのあるフォルダ)基準の解決へ差し替える。
     with rooted_fbx_texture_resolution(os.path.dirname(
             os.path.abspath(job["vrm_path"]))):
-        bpy.ops.import_scene.fbx(filepath=job["vrm_path"])
+        # Source actions can restore object scale/rotation after transform_apply
+        # and corrupt the normalized skeleton when Blender reevaluates the scene.
+        # Import bind geometry only; Palworld supplies gameplay animation and
+        # the separate PhysBone/SpringBone data supplies sway configuration.
+        bpy.ops.import_scene.fbx(filepath=job["vrm_path"], use_anim=False)
     new_objs = set(bpy.data.objects) - before
     arms = [o for o in new_objs if o.type == "ARMATURE"]
     if not arms:

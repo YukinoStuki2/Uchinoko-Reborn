@@ -20,12 +20,12 @@ if _PIPELINE_PY_DIR not in sys.path:
 
 from ui import sway_pb_catalog as m  # noqa: E402
 
-_FLATHAORI_FIXTURE = os.path.join(
-    _ROOT_DIR, "pipeline", "py", "testdata", "sway_allocator", "physbones_flathaori.json")
+_SYNTHETIC_FIXTURE = os.path.join(
+    _APP_PY_DIR, "tests", "fixtures", "physbones_synthetic_35.json")
 
 
-def _load_flathaori() -> dict:
-    with open(_FLATHAORI_FIXTURE, encoding="utf-8") as f:
+def _load_synthetic_doc() -> dict:
+    with open(_SYNTHETIC_FIXTURE, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -111,13 +111,15 @@ def test_params_are_carried_through_when_present():
     assert m.flatten_physbone_units(entries)[0]["params"] == {"pull": 0.5}
 
 
-def test_flatten_physbone_units_on_real_flathaori_fixture_yields_35_units():
-    """実データ(work\\flatHaori_export\\physbones.json相当のfixture)で
-    35コンポーネント(旧受入で確認済みの実数)がそのまま35行になること
-    ——多房PBが混在していても展開しない。"""
-    doc = _load_flathaori()
+def test_flatten_physbone_units_on_synthetic_fixture_yields_35_units():
+    """Public artificial data retain 35 rows despite mixed chain counts.
+
+    The missing upstream private-model fixture is not claimed as revalidated.
+    """
+    doc = _load_synthetic_doc()
     units = m.flatten_physbone_units(doc["physbones"])
     assert len(units) == 35
+    assert sum(u["chain_count"] for u in units) > 35
 
 
 # ---------------------------------------------------------------------------
@@ -213,13 +215,11 @@ def test_sample_pb_units_matches_legacy_sample_chains_count_and_anchors():
 # 6. is_unit_biased: sway_allocator._judge_pb_bias()の再利用(重複実装しない)。
 # ---------------------------------------------------------------------------
 
-def test_is_unit_biased_matches_sway_allocator_on_real_flathaori_fixture():
-    """flatHaori実データで、本モジュールの偏向判定件数がsway_allocator.py
-    (dev#1508 W1c、既存test_sway_allocator.pyで確認済みの26件)と完全一致
-    すること(判定規則の重複実装ではなく再利用であることの証明)。"""
+def test_is_unit_biased_matches_sway_allocator_on_synthetic_fixture():
+    """Catalog and allocator agree on 26 artificial biased components."""
     import sway_allocator
 
-    doc = _load_flathaori()
+    doc = _load_synthetic_doc()
     units = m.flatten_physbone_units(doc["physbones"])
     biased_via_new_module = sum(1 for u in units if m.is_unit_biased(u)[0])
 
@@ -227,6 +227,13 @@ def test_is_unit_biased_matches_sway_allocator_on_real_flathaori_fixture():
     biased_via_allocator = sum(1 for u in allocator_units if u.is_biased)
 
     assert biased_via_new_module == biased_via_allocator == 26
+    expected_anchors = (
+        {f"hinge_{i:02}" for i in range(10)}
+        | {f"polar_{i:02}" for i in range(8)}
+        | {f"offset_{i:02}" for i in range(8)}
+    )
+    assert {u["anchor"] for u in units if m.is_unit_biased(u)[0]} == expected_anchors
+    assert {u.anchor for u in allocator_units if u.is_biased} == expected_anchors
 
 
 def test_is_unit_biased_none_type_is_unbiased():
@@ -252,8 +259,8 @@ def test_is_unit_biased_springbone_is_always_unbiased():
 # 7. compute_forced_style_params: 「特殊ボーンを強制セットアップ」の値生成。
 # ---------------------------------------------------------------------------
 
-def test_compute_forced_style_params_maps_pb_values_on_real_fixture():
-    doc = _load_flathaori()
+def test_compute_forced_style_params_maps_pb_values_on_synthetic_fixture():
+    doc = _load_synthetic_doc()
     units = m.flatten_physbone_units(doc["physbones"])
     biased = [u for u in units if m.is_unit_biased(u)[0]]
     assert biased  # 前提: 偏向ユニットが存在すること

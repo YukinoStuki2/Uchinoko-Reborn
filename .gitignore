@@ -172,3 +172,8 @@ devtools/autonomy/watchdog_state.json
 devtools/autonomy/watchdog.log
 devtools/autonomy/watchdog.log.old
 devtools/autonomy/ANOMALY_LAUNCH_LIMIT.flag
+
+# Repair fork: local runtime, generated test avatars and per-machine settings.
+/.local/
+/settings_*.json
+/repair_local.json

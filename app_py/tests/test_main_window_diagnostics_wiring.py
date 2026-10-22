@@ -648,6 +648,8 @@ def test_check_for_update_once_shows_notice_when_newer_version_available(monkeyp
 def test_on_open_update_download_page_opens_the_update_check_constant_url(monkeypatch):
     fake_self = _FakeSelf(app_root="C:\\app", work_root="C:\\app\\work")
     opened: list[str] = []
+    # The independent repair build has no default update destination.
+    monkeypatch.setattr(mw.update_check, "UPDATE_DOWNLOAD_PAGE_URL", "https://example.invalid/update")
     monkeypatch.setattr(mw.webbrowser, "open", lambda url: opened.append(url))
 
     mw.MainWindow._on_open_update_download_page(fake_self)
@@ -657,6 +659,7 @@ def test_on_open_update_download_page_opens_the_update_check_constant_url(monkey
 
 def test_on_open_update_download_page_swallows_exceptions(monkeypatch):
     fake_self = _FakeSelf(app_root="C:\\app", work_root="C:\\app\\work")
+    monkeypatch.setattr(mw.update_check, "UPDATE_DOWNLOAD_PAGE_URL", "https://example.invalid/update")
 
     def raise_error(_url):
         raise OSError("no default browser")

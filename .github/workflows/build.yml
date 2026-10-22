@@ -1,4 +1,4 @@
-# Uchinoko for Palworld — 公開リポジトリ(pandrabox/Uchinoko)用 CIワークフロー
+# Uchinoko Reborn public-source CI (upstream workflow retained below)
 #
 # 2026-08-01(dev#573、dev#532 D1の直後の是正): このワークフローは長らく
 # C#/WinForms時代(app\DiveToPalworld.cs / app\build_app.ps1 / csc.exeビルド /
@@ -88,10 +88,10 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install pytest (test-only tool, not shipped in the distributed zip)
+      - name: Install test dependencies (not shipped in the distributed zip)
         shell: pwsh
         run: |
-          python -m pip install --quiet "pytest==9.0.3"
+          python -m pip install --quiet "pytest==9.0.3" "numpy==1.26.4"
           if ($LASTEXITCODE -ne 0) { Write-Error "pytestのインストールに失敗"; exit 1 }
 
       # app_py\ 配下の全.pyファイルをコンパイルするだけで構文エラーは検出できる
@@ -109,6 +109,14 @@ jobs:
         run: |
           python -m pytest app_py\tests -q
           if ($LASTEXITCODE -ne 0) { Write-Error "app_py\testsがFAILした"; exit 1 }
+
+      # Reborn regressions are public-source tests. Private avatar/Blender
+      # integration stays opt-in and is not enabled by this workflow.
+      - name: Run Reborn repair regressions
+        shell: pwsh
+        run: |
+          python -m pytest tests/repair -q
+          if ($LASTEXITCODE -ne 0) { Write-Error "Reborn repair regressions failed"; exit 1 }
 
       # 配布文書の禁止内容回帰検査(WP35/2026-07-31由来)。ビルド前提が無い本ワークフロー
       # では、実際に配布zipを組み立てて検査する統合テスト部分は自動的にskipされる

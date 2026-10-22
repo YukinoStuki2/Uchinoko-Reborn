@@ -3578,6 +3578,19 @@ def run_sway_source_gate(job, gender, physbone_entries, springbone_entries,
         meshes, group_targets, hub_wiring, dz, pal_map, source_parent_of,
         lab_assignments=lab_assignments)
     if prep is None:
+        # An empty result must replace a previous run's dynamic state. Leaving
+        # these files untouched makes G15 inspect stale donors after all chains
+        # have been disabled (or after the source no longer contains sway).
+        empty_reports = {
+            "sway_source_donor_map": {},
+            "sway_source_gate": {"ok": True, "checked": 0, "failed": [],
+                                 "transform_warnings": []},
+            "sway_pivot_axiom": {"ok": True, "checked": 0, "failed": []},
+        }
+        for stem, payload in empty_reports.items():
+            with open(os.path.join(conv, f"{stem}_{gender.lower()}.json"),
+                      "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False)
         return
     real_source_bone_names = prep.real_source_bone_names
     source_transform_snapshot = prep.source_transform_snapshot
@@ -3844,8 +3857,19 @@ def run_sway_degrade_loop(job, gender, physbone_entries, springbone_entries,
     fully_disabled)。`lab_overrides`は`run_sway_source_gate()`へ
     そのまま渡すべき最終除外集合(post-remap最終防衛線も同じ集合で
     対象骨を絞るため)。"""
-    lab_overrides: Dict[str, sway_allocator.LabAssignment] = dict(initial_lab_overrides or {})
-    exclusion_entries: List[sway_degrade.ExclusionEntry] = []
+    initial_plan = sway_allocator.allocate(
+        physbones_json={"physbones": list(physbone_entries or [])},
+        springbones_json={"springbones": list(springbone_entries or [])},
+        lab_assignments=initial_lab_overrides)
+    # The armature and donor wiring were built from attempt 0. Re-allocating
+    # after a cull must not fill the vacant slot with a previously rejected
+    # unit: no donor was built for that unit. Freeze the rejected set before
+    # either precheck or the final source gate independently allocates again.
+    # Existing force-ON/style overrides for accepted units remain unchanged.
+    lab_overrides: Dict[str, sway_allocator.LabAssignment] = sway_degrade.build_lab_overrides(
+        (u.key for u in initial_plan.rejected_units), existing=initial_lab_overrides)
+    exclusion_entries: List[sway_degrade.ExclusionEntry] = \
+        sway_degrade.exclusion_entries_for_capacity_overflow(initial_plan)
     wiring = initial_wiring
     node_overrides = initial_node_overrides
     diagnostics_lines = initial_diagnostics_lines
@@ -3956,12 +3980,14 @@ def run_sway_degrade_loop(job, gender, physbone_entries, springbone_entries,
                 reason_bits.append(
                     f"retry budget exhausted ({_SWAY_DEGRADE_MAX_RETRIES} retries)")
             systemic_reason = "; ".join(reason_bits) or "unattributed gate failure"
-            still_active_keys = {u.key for g in prep.plan.accepted for u in g.units}
+            all_keys = sway_degrade.all_unit_keys(initial_plan)
+            still_active_keys = {key for key in all_keys
+                                 if key not in lab_overrides or lab_overrides[key].enabled}
             for key in sorted(still_active_keys):
                 exclusion_entries.append(sway_degrade.make_exclusion_entry(
                     key, sway_degrade.STAGE_SYSTEMIC_DISABLE, systemic_reason))
             lab_overrides = sway_degrade.build_lab_overrides(
-                still_active_keys, existing=lab_overrides)
+                all_keys, existing=lab_overrides)
             wiring, node_overrides, diagnostics_lines, refskel_dict = \
                 _retry_wiring_from_initial(lab_overrides)
             hub_donor_quats = place_hub_donor_chains(
@@ -4570,14 +4596,9 @@ def main():
             physbones_json={"physbones": list(physbone_entries or [])},
             springbones_json={"springbones": list(job.get("springbones") or [])})
         sway_degrade_total_units = len(sway_degrade.all_unit_keys(sway_full_plan))
-        # dev#1551(hub廃止・1chain=1KP)受入ゲート3「容量あふれ鎖は完全に
-        # 無傷で残す...sway_degradeの帰属記録に載せる」: lab_assignments
-        # 無しの`sway_full_plan`(degrade loop実行前相当)のrejected_unitsから
-        # 容量超過ぶんだけを抽出し、gate失敗/systemic disable由来の
-        # sway_exclusion_entriesとは別枠で追加する(二重計上なし、
-        # sway_degrade.exclusion_entries_for_capacity_overflow()docstring参照)。
-        sway_exclusion_entries.extend(
-            sway_degrade.exclusion_entries_for_capacity_overflow(sway_full_plan))
+        # Capacity exclusions are recorded by the loop from its actual initial
+        # plan, including the user's overrides. Re-allocating without overrides
+        # here could mislabel an explicitly selected chain as overflow.
         sway_exclusions_report = sway_degrade.ExclusionReport(
             gender=gender.lower(), total_units=sway_degrade_total_units,
             fully_disabled=sway_fully_disabled, excluded=tuple(sway_exclusion_entries))

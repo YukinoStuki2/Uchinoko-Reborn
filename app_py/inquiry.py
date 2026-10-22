@@ -28,9 +28,7 @@ import gzip
 import json
 import os
 import re
-import urllib.error
 import urllib.parse
-import urllib.request
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -39,6 +37,8 @@ from typing import Callable, Optional
 # 縮退の試験ができる、通常ユーザーは触らない)。
 REPORT_BASE_URL_DEFAULT = "https://report.osakishokai.com"
 _REPORT_BASEURL_ENV = "D2P_REPORT_BASEURL"
+# Legacy URL resolution is retained for payload/transport tests only. The
+# repair build's default transport below always refuses online submission.
 
 
 def get_report_base_url() -> str:
@@ -711,17 +711,13 @@ Transport = Callable[[str, str, str, int], str]
 
 
 def _default_transport(url: str, payload_json: str, user_agent: str, timeout: int) -> str:
-    """実HTTP送信(urllib.request、devtools\\support.pyと同じ流儀のstdlibのみ実装)。
-    テストではこの関数を呼ばせず、必ずtransport引数でモックへ差し替えること
-    (受入条件③: 実サーバーへの送信テストは禁止)。"""
-    req = urllib.request.Request(
-        url,
-        data=payload_json.encode("utf-8"),
-        method="POST",
-        headers={"Content-Type": "application/json", "User-Agent": user_agent},
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.read().decode("utf-8")
+    """No report service is configured for this independent repair build.
+
+    The main window already closes the old support flow. Keep its underlying
+    default transport offline as well, including when a legacy caller or an
+    inherited D2P_REPORT_BASEURL reaches it. Injected test transports still work.
+    """
+    raise RuntimeError("Uchinoko Reborn: online report submission is disabled.")
 
 
 def send_report_payload(

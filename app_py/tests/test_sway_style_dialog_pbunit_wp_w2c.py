@@ -29,8 +29,8 @@ import i18n  # noqa: E402
 import sway_styles_store as store  # noqa: E402
 from ui import sway_style_dialog as dlg_mod  # noqa: E402
 
-_FLATHAORI_FIXTURE = os.path.join(
-    _ROOT_DIR, "pipeline", "py", "testdata", "sway_allocator", "physbones_flathaori.json")
+_SYNTHETIC_FIXTURE = os.path.join(
+    _APP_PY_DIR, "tests", "fixtures", "physbones_synthetic_35.json")
 
 
 @pytest.fixture(autouse=True)
@@ -246,8 +246,8 @@ def test_reopening_after_multi_chain_save_reconciles_back_to_a_single_row(hidden
 # 4. 「特殊ボーンを強制セットアップ」ボタン(2026-08-16オーナー口述指定)。
 # ---------------------------------------------------------------------------
 
-def _load_flathaori_doc() -> dict:
-    with open(_FLATHAORI_FIXTURE, encoding="utf-8") as f:
+def _load_synthetic_doc() -> dict:
+    with open(_SYNTHETIC_FIXTURE, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -267,10 +267,10 @@ def test_force_setup_warning_message_exact_japanese_text():
 
 
 def test_force_setup_creates_styles_and_assigns_biased_rows(hidden_root, tmp_path, monkeypatch):
-    """flatHaori系fixture(偏向26行)で、ボタンがゆれかた生成+割当を行う
+    """公開合成fixture(偏向26行)で、ボタンがゆれかた生成+割当を行う
     こと。メッセージダイアログはconftest.pyの既定ブロックを明示的に
     monkeypatchして経路の呼び出しだけを確認する(実ダイアログは開かない)。"""
-    doc = _load_flathaori_doc()
+    doc = _load_synthetic_doc()
     avatar_path = _write_prefab_sidecar(tmp_path, doc)
     ctx = _make_ctx(str(tmp_path), str(tmp_path), avatar_path)
 
@@ -347,9 +347,9 @@ def test_force_setup_generated_values_correspond_to_pb_actual_values(hidden_root
 
 def test_force_setup_ignores_slot_count_and_still_applies_over_9(hidden_root, tmp_path, monkeypatch):
     """スロット数(n/9)はこのボタンでは検査も阻止もしない(2026-08-16
-    オーナー指定「カウントも一応無視」)。flatHaoriは偏向26行あり、
+    オーナー指定「カウントも一応無視」)。公開合成fixtureには偏向26行あり、
     容量9を大きく超えても全行に適用されること。"""
-    doc = _load_flathaori_doc()
+    doc = _load_synthetic_doc()
     avatar_path = _write_prefab_sidecar(tmp_path, doc)
     ctx = _make_ctx(str(tmp_path), str(tmp_path), avatar_path)
     monkeypatch.setattr(dlg_mod.messagebox, "showwarning", lambda *a, **kw: None)
