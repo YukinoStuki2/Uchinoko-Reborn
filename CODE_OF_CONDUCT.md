@@ -31,18 +31,21 @@
 
 ## 運用体制についての注記
 
-本プロジェクトは個人開発者(pandrabox)がメンテナンスしています。専任のモデレーション
+Uchinoko Reborn は本 fork のメンテナーが管理しています。上流の作者 pandrabox は
+本 fork の対応担当ではありません。専任のモデレーション
 チームは存在しないため、対応の即時性・一貫性については限界があることをご了承ください。
 それでも、報告いただいた内容には誠実に対応します。
 
 ## 違反の報告
 
-行動規範に反すると思われる行為を見かけた・受けた場合は、アプリ内の「問合せ」
-ボタンからご連絡ください。公開の場に出したくない内容も、この方法であれば
-非公開で報告できます。
+行動規範に反すると思われる行為を見かけた・受けた場合、公開してよい内容は
+[本 fork の Issues](https://github.com/YukinoStuki2/Uchinoko-Reborn/issues) で報告できます。
+Issues は公開です。個人情報や機密資料を投稿しないでください。
+本 fork は専用の非公開受付窓口を現在設けていません。上流のオンライン報告サービスは
+無効化されており、アプリ内の「問合せ」は本 fork の連絡先ではありません。
 
-すべての報告は速やかに、公平にレビューされます。報告者のプライバシーと安全は
-尊重されます。
+メンテナーは確認できた報告を公平に扱い、報告者のプライバシーと安全を尊重します。
+即時の対応を保証するものではありません。
 
 ---
 
@@ -82,15 +85,20 @@ including GitHub issues, pull requests, and comment threads.
 
 ### A note on enforcement capacity
 
-This project is maintained by a single individual developer (pandrabox). There is
-no dedicated moderation team, so responsiveness and consistency of handling may be
-limited. That said, every report will be handled in good faith.
+Uchinoko Reborn is managed by this fork's maintainers. Upstream author pandrabox
+does not handle reports for this fork. There is no dedicated moderation team,
+so response times and handling capacity are limited. Reports the maintainers
+receive will be handled in good faith.
 
 ### Reporting
 
-If you experience or witness behavior that violates this Code of Conduct, please
-report it via the in-app "Contact" button. This lets you report privately, even
-for matters you would rather not raise in a public space.
+If you experience or witness behavior that violates this Code of Conduct,
+information suitable for public disclosure may be reported through
+[this fork's Issues](https://github.com/YukinoStuki2/Uchinoko-Reborn/issues).
+Issues are public: do not post personal information or sensitive material.
+There is currently no dedicated private reporting channel. The upstream online
+report service is disabled; the in-app "Contact" button is not a reporting
+channel for this fork.
 
-All reports will be reviewed promptly and fairly. The privacy and safety of the
-reporter will be respected.
+Maintainers will review received reports fairly and respect reporters' privacy
+and safety. Immediate responses are not guaranteed.

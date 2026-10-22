@@ -31,11 +31,11 @@
 
 公开 `v2.13.0` 标签指向 `b342e5b21faff537c331f60257c7e77e55838b4a`，但该源码的 GUI 版本仍为 `v2.3.1`，缺少发行版后续功能。因此本地 Git 历史分别保存：
 
-1. GitHub 官方源码快照；Git 传输不可用时通过 GitHub API 下载同一提交的源码归档。
+1. GitHub 官方仓库的真实提交历史；Git 直连不可用时通过 GitHub API 恢复并逐项校验原有 Git 对象与提交哈希。
 2. MIT 许可 2.13.0 发行包内的 Python、PowerShell、Unity 源码补齐记录。
 3. 修复版自身修改。
 
-`provenance/release-source.json` 记录补齐源码的逐文件哈希。用户模型、游戏资产二进制、工作记录和个人设置不进入源码仓库。下载归档不包含 Git 历史，因此本地提交不伪装为原作者提交。
+`provenance/release-source.json` 记录发行包原始补齐源码的逐文件哈希，公开源码调整另见 `provenance/PUBLIC_SOURCE_ADJUSTMENTS.md`。用户模型、游戏资产二进制、工作记录和个人设置不进入源码仓库。上游提交身份与哈希保留；发行源码补齐和本 fork 修复以维护者的新提交记录，不伪装为原作者提交。
 
 ## 本地构建
 

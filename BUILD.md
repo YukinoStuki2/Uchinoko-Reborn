@@ -1,3 +1,11 @@
+# 上游历史构建说明 / Historical upstream build instructions
+
+> 本文保留上游打包流程供参考，不是 Uchinoko Reborn 当前的构建入口。Reborn 当前只提供源码与本地开发构建器；请按 [README.md](README.md) 使用 `repair/build_local.py`，从合法取得的完整 Uchinoko 2.13.0 安装生成独立目录。下文的版本号、`Uchinoko.bat`、`app_py/build.py` 和完整发行包流程属于上游历史，尚未作为 Reborn 的公开发行流程验证。
+>
+> This document preserves the upstream packaging process for reference. For the maintained Reborn local development build, follow [README.md](README.md) and `repair/build_local.py`, using a complete, legitimately obtained Uchinoko 2.13.0 installation. The versions, launchers and full-distribution commands below describe upstream history, not a verified Reborn release pipeline.
+
+---
+
 # ビルド手順 (Build Instructions)
 
 *English section is below the Japanese one.*
