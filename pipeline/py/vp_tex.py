@@ -4,13 +4,14 @@
 sanitizedpakのsanitize(ピクセルハッシュ記録)とrestore(PNG→DXT注入)の共通部品。
 numpyはBlender同梱Pythonのsite-packagesにあるものを使う(pip禁止の範囲内)。
 復元はUE非依存が要件(docs\sanitizedpak_design.md)なので、エンコードは自前実装。
-品質はレンジフィット(min/max端点)方式 — 定番エンコーダより僅かに落ちるが
-色改変ユースケースには十分。受入はPSNRゲート+目視プレビューで判定する。
+色圧縮はレンジ/PCAフィットを下限として、補間色・量子化端点を追加探索する。
+受入はブロックごとの復号誤差、PSNRゲート、目視プレビューで判定する。
 """
 
 import hashlib
 import struct
 import zlib
+from functools import lru_cache
 
 
 # ------------------------------------------------------------------ PNG decode
@@ -388,7 +389,7 @@ def _unpack565(c):
                      (b * 255 + 15) // 31], axis=1).astype(np.int32)
 
 
-def _color_block(blocks_rgb):
+def _color_block_range_fit(blocks_rgb):
     """(n,16,3) uint8/int → (c0,c1,idx_u32) 各(n,)。レンジフィット4色モード
 
     dev#288(速度): 元実装は (n,16,4,3) の距離テンソルを一括生成しており、
@@ -439,6 +440,214 @@ def _color_block(blocks_rgb):
     shifts = (np.arange(16, dtype=np.uint32) * 2)[None, :]
     packed = (idx << shifts).sum(axis=1, dtype=np.uint64).astype(np.uint32)
     return c0s, c1s, packed
+
+
+def _color_candidates(rgb, c0, c1):
+    """Evaluate actual RGB565 palettes, retaining opaque four-color ordering."""
+    import numpy as np
+    high, low = np.maximum(c0, c1), np.minimum(c0, c1)
+    first, last = _unpack565(high), _unpack565(low)
+    palette = (first, last, (2*first+last+1)//3, (first+2*last+1)//3)
+    best = np.full(rgb.shape[:2], 3*255*255+1, dtype=np.int32)
+    indices = np.zeros(rgb.shape[:2], dtype=np.uint32)
+    red, green, blue = rgb[:, :, 0], rgb[:, :, 1], rgb[:, :, 2]
+    for index, color in enumerate(palette):
+        delta = red-color[:, 0:1]
+        distance = delta*delta
+        delta = green-color[:, 1:2]
+        distance += delta*delta
+        delta = blue-color[:, 2:3]
+        distance += delta*delta
+        better = distance < best
+        best[better] = distance[better]
+        indices[better] = index
+    # Equality switches BC1 to three-color mode. The old candidate uses index
+    # zero in this case, so never accidentally introduce transparent pixels.
+    flat = high == low
+    indices[flat] = 0
+    return high, low, indices, best.sum(axis=1)
+
+
+def _refit_color_endpoints(rgb, indices, c0, c1):
+    """Least-squares endpoints for the previous quantized palette assignment."""
+    import numpy as np
+    weights = np.array((3, 0, 2, 1), dtype=np.float32)[indices]
+    other = 3-weights
+    aa, bb, ab = ((weights*weights).sum(axis=1),
+                  (other*other).sum(axis=1), (weights*other).sum(axis=1))
+    determinant = aa*bb-ab*ab
+    valid = determinant > 1e-6
+    denominator = np.where(valid, determinant, 1)[:, None]
+    right_a = np.einsum('ni,nij->nj', weights, rgb, optimize=False)*3
+    right_b = np.einsum('ni,nij->nj', other, rgb, optimize=False)*3
+    first = (bb[:, None]*right_a-ab[:, None]*right_b)/denominator
+    last = (aa[:, None]*right_b-ab[:, None]*right_a)/denominator
+    first = _pack565(np.rint(first).clip(0, 255).astype(np.int32))
+    last = _pack565(np.rint(last).clip(0, 255).astype(np.int32))
+    return np.where(valid, first, c0), np.where(valid, last, c1)
+
+
+def _principal_color_endpoints(rgb):
+    """Use the dominant color axis, including negatively correlated channels."""
+    import numpy as np
+    centered = rgb.astype(np.float32)-rgb.mean(axis=1, keepdims=True)
+    covariance = np.einsum('nki,nkj->nij', centered, centered, optimize=False)
+    largest = np.diagonal(covariance, axis1=1, axis2=2).argmax(axis=1)
+    axis = covariance[np.arange(len(rgb)), :, largest]
+    for _ in range(4):
+        axis = np.einsum('nij,nj->ni', covariance, axis, optimize=False)
+        axis /= np.maximum(np.linalg.norm(axis, axis=1, keepdims=True), 1e-20)
+    projection = np.einsum('nki,ni->nk', centered, axis, optimize=False)
+    rows = np.arange(len(rgb))
+    return (_pack565(rgb[rows, projection.argmax(axis=1)]),
+            _pack565(rgb[rows, projection.argmin(axis=1)]))
+
+
+def _color_block_fitted(blocks_rgb):
+    """BC1 colors with a per-block legacy-error floor and bounded workspace.
+
+    Try range-fit and principal-axis endpoints, each with two least-squares
+    refinements. Every candidate is quantized and scored using the decoded BC1
+    palette. Strictly lower error is required to replace the legacy result.
+    The format, byte count and runtime decoding cost are unchanged; conversion
+    does extra offline work. Chunks bound temporary arrays even for 4K atlases.
+    """
+    import numpy as np
+    count = len(blocks_rgb)
+    output = (np.empty(count, np.uint16), np.empty(count, np.uint16),
+              np.empty(count, np.uint32))
+    shifts = (np.arange(16, dtype=np.uint32)*2)[None, :]
+    for start in range(0, count, 8192):
+        stop = min(start+8192, count)
+        rgb = np.asarray(blocks_rgb[start:stop], dtype=np.int32)
+        seed = (_pack565(rgb.max(axis=1)), _pack565(rgb.min(axis=1)))
+        current = _color_candidates(rgb, *seed)
+        best = tuple(value.copy() for value in current)
+        active = (current[3] > 0) & np.any(rgb != rgb[:, :1, :], axis=(1, 2))
+        working_rgb = rgb[active]
+        current = tuple(value[active] for value in current)
+        working_best = tuple(value.copy() for value in current)
+        for branch in range(2):
+            if not len(working_rgb):
+                break
+            if branch:
+                current = _color_candidates(working_rgb, *_principal_color_endpoints(working_rgb))
+            for iteration in range(3):
+                if iteration:
+                    endpoints = _refit_color_endpoints(working_rgb, current[2], current[0], current[1])
+                    current = _color_candidates(working_rgb, *endpoints)
+                better = current[3] < working_best[3]
+                for saved, candidate in zip(working_best, current):
+                    saved[better] = candidate[better]
+        for saved, refined in zip(best, working_best):
+            saved[active] = refined
+        output[0][start:stop], output[1][start:stop] = best[0], best[1]
+        output[2][start:stop] = (best[2] << shifts).sum(axis=1, dtype=np.uint64).astype(np.uint32)
+    return output
+
+
+@lru_cache(maxsize=2)
+def _single_color_table(limit):
+    """Nearest interpolated color on one RGB565 channel's finite lattice."""
+    import numpy as np
+    channel = np.arange(limit+1, dtype=np.int32)
+    first, last = np.meshgrid(channel, channel, indexing='ij')
+    decoded = (channel*255+limit//2)//limit
+    interpolated = (2*decoded[:, None]+decoded[None, :]+1)//3
+    error = (np.arange(256, dtype=np.int32)[:, None, None]-interpolated)**2
+    # Equal errors prefer nearby endpoints. The spread tie-break is smaller
+    # than one unit of squared error, and keeps low-contrast blocks stable.
+    score = error*256+np.abs(first-last)
+    selected = score.reshape(256, -1).argmin(axis=1)
+    return first.ravel()[selected], last.ravel()[selected]
+
+
+def _single_color_endpoints(rgb):
+    """Use BC1's interpolants to represent colors between RGB565 endpoints."""
+    import numpy as np
+    average = np.rint(rgb.mean(axis=1)).astype(np.int32)
+    tables = [_single_color_table(limit) for limit in (31, 63, 31)]
+    first = np.stack([table[0][average[:, i]] for i, table in enumerate(tables)], axis=1)
+    last = np.stack([table[1][average[:, i]] for i, table in enumerate(tables)], axis=1)
+    return ((first << (11, 5, 0)).sum(axis=1).astype(np.uint16),
+            (last << (11, 5, 0)).sum(axis=1).astype(np.uint16))
+
+
+def _refit_color_grid(rgb, indices, c0, c1):
+    """Optimize neighboring quantized endpoints for fixed palette assignments.
+
+    Each channel is independent until palette indices are reassigned. Aggregate
+    counts and channel sums avoid a pixels × candidates temporary tensor.
+    """
+    import numpy as np
+    shifts = np.array((11, 5, 0), dtype=np.int32)
+    limits = np.array((31, 63, 31), dtype=np.int32)
+    first = (c0[:, None].astype(np.int32) >> shifts) & limits
+    last = (c1[:, None].astype(np.int32) >> shifts) & limits
+    counts = np.stack([(indices == i).sum(axis=1) for i in range(4)], axis=1).astype(np.int32)
+    sums = np.stack([np.einsum('ni,nij->nj', indices == i, rgb, optimize=False)
+                     for i in range(4)], axis=1)
+    best = np.full(first.shape, np.iinfo(np.int32).max, dtype=np.int32)
+    best_first, best_last = first.copy(), last.copy()
+    for da in (0, -1, 1):
+        for db in (0, -1, 1):
+            qa, qb = (first+da).clip(0, limits), (last+db).clip(0, limits)
+            pa, pb = (qa*255+limits//2)//limits, (qb*255+limits//2)//limits
+            palette = np.stack((pa, pb, (2*pa+pb+1)//3, (pa+2*pb+1)//3), axis=1)
+            cost = (counts[:, :, None]*palette*palette-2*sums*palette).sum(axis=1)
+            better = cost < best
+            best[better] = cost[better]
+            best_first[better], best_last[better] = qa[better], qb[better]
+    return ((best_first << shifts).sum(axis=1).astype(np.uint16),
+            (best_last << shifts).sum(axis=1).astype(np.uint16))
+
+
+def _color_block(blocks_rgb):
+    """Refine the existing fitter without increasing BC1 storage or error.
+
+    Low-contrast blocks get an interpolated-color seed, then one discrete
+    RGB565 neighborhood search polishes nonconstant blocks. The existing
+    fitted candidate is retained unless actual decoded error decreases.
+    """
+    import numpy as np
+    count = len(blocks_rgb)
+    output = (np.empty(count, np.uint16), np.empty(count, np.uint16), np.empty(count, np.uint32))
+    shifts = (np.arange(16, dtype=np.uint32)*2)[None, :]
+    for start in range(0, count, 8192):
+        stop = min(start+8192, count)
+        source = blocks_rgb[start:stop]
+        rgb = np.asarray(source, dtype=np.int32)
+        c0, c1, _ = _color_block_fitted(source)
+        best = _color_candidates(rgb, c0, c1)
+        spread = (rgb.max(axis=1)-rgb.min(axis=1)).max(axis=1)
+        narrow = (best[3] > 0) & (spread < 24)
+        if np.any(narrow):
+            working = rgb[narrow]
+            refined = tuple(value[narrow].copy() for value in best)
+            current = _color_candidates(working, *_single_color_endpoints(working))
+            for iteration in range(3):
+                if iteration:
+                    current = _color_candidates(working, *_refit_color_endpoints(
+                        working, current[2], current[0], current[1]))
+                better = current[3] < refined[3]
+                for saved, candidate in zip(refined, current):
+                    saved[better] = candidate[better]
+            for saved, candidate in zip(best, refined):
+                saved[narrow] = candidate
+        active = (best[3] > 0) & (spread > 0)
+        if np.any(active):
+            working = rgb[active]
+            refined = tuple(value[active].copy() for value in best)
+            current = _color_candidates(working, *_refit_color_grid(
+                working, refined[2], refined[0], refined[1]))
+            better = current[3] < refined[3]
+            for saved, candidate in zip(refined, current):
+                saved[better] = candidate[better]
+            for saved, candidate in zip(best, refined):
+                saved[active] = candidate
+        output[0][start:stop], output[1][start:stop] = best[0], best[1]
+        output[2][start:stop] = (best[2] << shifts).sum(axis=1, dtype=np.uint64).astype(np.uint32)
+    return output
 
 
 def encode_dxt1(rgba):

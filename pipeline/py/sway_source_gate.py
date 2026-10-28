@@ -235,6 +235,32 @@ def direction_mismatch_deg(
     return _angle_between_deg(source_dir, donor_dir)
 
 
+def source_transforms_for_geometry_groups(
+    source_snapshot: Mapping[str, Mapping[str, Sequence[float]]],
+    geometry_groups: Mapping[str, Sequence[str]],
+) -> Dict[str, Mapping[str, Sequence[float]]]:
+    """Resolve fitted rest spans from source geometry, independently of donors.
+
+    Fitting several curved bones to one donor preserves the first member's
+    head and the last member's tail. Comparing that donor with only the last
+    member's direction falsely rejects correctly placed chains. Use the same
+    ordered group boundaries as placement, while keeping the original snapshot
+    intact for weight and anchor/pivot checks. Missing endpoints retain the
+    original comparison instead of inventing geometry or trusting the donor.
+    """
+    result = dict(source_snapshot)
+    for representative, members in geometry_groups.items():
+        if len(members) <= 1 or representative not in source_snapshot:
+            continue
+        first = source_snapshot.get(members[0])
+        last = source_snapshot.get(members[-1])
+        if first is None or last is None:
+            continue
+        result[representative] = dict(source_snapshot[representative],
+                                      pos=first["pos"], tail=last["tail"])
+    return result
+
+
 # ---------------------------------------------------------------------
 # dev#1625(2026-08-21 オーナー裁定): 姿勢不一致ハブの最小切除。
 #
@@ -376,6 +402,7 @@ def run_gate(
     donor_weight_snapshot: Mapping[str, Mapping[str, Mapping[str, float]]],
     merge_groups: FrozenSet[FrozenSet[str]] = frozenset(),
     representative_of: Mapping[str, str] = _EMPTY_MAP,
+    source_geometry_groups: Mapping[str, Sequence[str]] = _EMPTY_MAP,
 ) -> GateReport:
     """ソース基準1:1ゲート本体。
 
@@ -405,22 +432,24 @@ def run_gate(
     `representative_of`(dev#1551 chain-length-fit WP追加):
     `sway_hub.representative_of_map(wiring)`の戻り値。{元アバター骨名 ->
     そのマージグループの代表(先端側)骨名}(節数フィット未発動の骨は
-    恒等写像)。donorのジオメトリは常に**代表骨**のtransformで配置される
-    (`fit_chain_to_length()`「マージ後の代表点はマージ区間の端点を保つ」
-    設計)ため、**代表でない**(マージされて消えた側の)骨を自分自身の
-    生transformとdonorとで比較すると構造的に不一致になる——バグではなく
-    設計どおりの結果なので、この骨については位置/向き/スケール検査を
-    スキップする(donor欠落自体の検査とウェイト検査は従来どおり行う)。
-    代表骨自身(恒等写像)は従来どおり厳密に比較する。
+    恒等写像)。The representative identifies the fitted group rather than
+    defining its geometry. Check its complete span once; non-representative
+    members still undergo donor-presence and weight validation.
 
-    1本でも欠け/位置ズレ/向きズレ/スケールズレ/ウェイト不一致があれば
-    その骨がFAILする(全数検査、`GateReport.ok`が全体の合否)。
+    `source_geometry_groups` supplies the ordered source spans from the wiring
+    plan. Fitted representatives are compared to the complete merged span;
+    singleton geometry, donor presence and weight checks are unchanged.
+
+    Missing transforms or mismatched weights fail the report. Transform
+    differences remain warnings, with the posture cull applied before remap.
     """
     bone_to_merge_group: Dict[str, FrozenSet[str]] = {}
     for group in merge_groups:
         for b in group:
             bone_to_merge_group[b] = group
 
+    expected_transforms = source_transforms_for_geometry_groups(
+        source_transform_snapshot, source_geometry_groups)
     results: List[BoneCheckResult] = []
     for bone in source_bone_names:
         donor = group_targets.get(bone)
@@ -437,7 +466,7 @@ def run_gate(
         transform_warnings: List[str] = []
         is_representative = representative_of.get(bone, bone) == bone
 
-        src_t = source_transform_snapshot.get(bone)
+        src_t = expected_transforms.get(bone)
         dst_t = donor_transform_snapshot.get(donor)
         if src_t is None:
             reasons.append("source bone missing from live avatar_arm snapshot")

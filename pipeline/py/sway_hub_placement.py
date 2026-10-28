@@ -490,6 +490,35 @@ def select_first_resolved_hub_segment(chain_plans, resolve):
     return None
 
 
+def resolve_hub_root_segment(cp, point):
+    """Preserve the actual root rest segment, including branching roots.
+
+    ``point(name, use_tail=False)`` may return Blender vectors or tuples. A
+    source root need not point towards any one child, especially after a tuft
+    chooses its longest branch. Substituting that child's head rotates the root
+    and loses otherwise valid dynamics at the posture gate. Use the source
+    segment first; retain the previous child fallback only for missing/zero
+    source segments. Merged root groups keep their complete group span.
+    """
+    src = list(cp.source_chain)
+    if not src:
+        return None
+    groups = sway_hub.donor_group_members(cp)
+    members = groups.get(src[0], (src[0],))
+    head = point(members[0])
+    if head is None:
+        return None
+    tail = point(members[-1], use_tail=True)
+    if tail is not None and v_len(v_sub(tail, head)) >= 1e-6:
+        return head, tail
+    if len(src) >= 2:
+        next_members = groups.get(src[1], (src[1],))
+        tail = point(next_members[0])
+        if tail is None:
+            tail = point(src[1])
+    return None if tail is None else (head, tail)
+
+
 def _hub_root_real_segment_transform(
     hub_name: str, gp: sway_hub.GroupHubPlan, sim: Similarity,
     avatar_dump: Mapping[str, Mapping[str, Sequence[float]]],
@@ -540,39 +569,8 @@ def _hub_root_real_segment_transform(
         return (local_quat, local_pos, (1.0, 1.0, 1.0)), target_pos, target_quat
 
     def _resolve(cp):
-        # dev#1572(夜間便2): tailの向きは「source_chain[1](=fit後の代表骨)
-        # 自身」ではなく、`sway_hub.donor_group_members()`で引いたその代表
-        # グループの**先頭骨**(根元寄り、常に元の鎖のchain[0]そのもの)の
-        # headを使う——節数フィットで代表がマージ区間の末尾側へ動いても、
-        # hub root自身のtail方向は常に「アバターの実際に次の関節」を指す
-        # (place_hub_donor_chains()の同型修正と同じ考え方)。
-        #
-        # dev#1572(第2便、安全域マージの全結合(実効節数1)修理): headの
-        # 側にも同じ理屈を適用する。`src[0]`(=fit後の唯一の代表)は通常
-        # (根本がマージされていない)ならそれ自身が根本(=anchor)だが、
-        # 実効節数1の全結合(`fit_chain_to_length(chain,1)`)が発動すると
-        # `src[0]`はグループの末尾側(先端寄り)要素名になり、真のanchor
-        # (グループの先頭骨)の位置とは一致しない。`donor_group_members(cp)
-        # [src[0]][0]`は常にそのグループの先頭骨を指すため、これ経由で
-        # headを引く(通常ケースは`members0[0]==src[0]`で無変更)。
-        src = list(cp.source_chain)
-        if not src:
-            return None
-        members0 = sway_hub.donor_group_members(cp).get(src[0], (src[0],))
-        head_pos = av_world(avatar_dump, sim, members0[0])
-        if head_pos is None:
-            return None
-        if len(src) < 2:
-            tail_pos = av_world(avatar_dump, sim, src[0], use_tail=True)
-            return None if tail_pos is None else (head_pos, tail_pos)
-        rep = src[1]
-        members = sway_hub.donor_group_members(cp).get(rep, (rep,))
-        tail_pos = av_world(avatar_dump, sim, members[0])
-        if tail_pos is None:
-            tail_pos = av_world(avatar_dump, sim, rep)
-        if tail_pos is None:
-            return None
-        return head_pos, tail_pos
+        return resolve_hub_root_segment(
+            cp, lambda name, use_tail=False: av_world(avatar_dump, sim, name, use_tail))
 
     segment = select_first_resolved_hub_segment(gp.chain_plans, _resolve)
     if segment is None:

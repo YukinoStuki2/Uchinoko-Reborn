@@ -177,3 +177,25 @@ devtools/autonomy/ANOMALY_LAUNCH_LIMIT.flag
 /.local/
 /settings_*.json
 /repair_local.json
+
+# Reborn source releases never include personal installations or model state.
+.pytest_cache/
+.venv/
+.env
+.env.*
+/res/
+/runtime/
+/exports/
+/data/
+/diagnostics/
+/private_notes/
+source_backups/
+repair_build.json
+settings_*.json
+*.blend
+*.blend1
+*.dmp
+*.log
+*.pak
+.workshop.json
+.pam-workshop.json

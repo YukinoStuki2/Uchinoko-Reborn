@@ -11,6 +11,11 @@ physbones.json/springbones.json(W1a/W1bが生成する、アバターのPB/SB鎖
 後続W2a「骨配線(ハブ実装)」の仕事——本モジュールはW2aへ渡す「計画
 オブジェクト」(`AllocationPlan`)を作るところまで)。
 
+Reborn 2026-10: the historical bias rules below are superseded by
+``sway_limits.convert_limit``. A rotated Angle constraint retains its positive
+rest-centred inner cone; unsupported Hinge/Polar constraints still default off.
+The cooked-template capacity and independent-component grouping are unchanged.
+
 ## パイプライン(SPEC §1の番号に対応)
 
 1. **候補判定**: physbones.json/springbones.jsonに列挙されている時点で
@@ -108,6 +113,7 @@ if _HERE not in sys.path:
 
 import sway_identify  # noqa: E402  (尻尾同定の唯一の真実の源。sway_chain_override_store.py等と同じ理由でpipeline/py内から直接import)
 import sway_quantize  # noqa: E402  (dev#1508 W1c: quantize_pb/quantize_sbの製品配置)
+import sway_limits  # noqa: E402
 
 DEFAULT_CAPACITY = 9
 
@@ -169,6 +175,10 @@ class ChainUnit:
                                           # 変換されない=SPEC §2「放棄確定」ため参照数のみ保持)
 
 
+    nested_parent_key: Optional[str] = None  # Compatibility: weights follow this selected parent.
+    source_disabled_reason: Optional[str] = None  # Unity must enable this component before export.
+
+
 @dataclass(frozen=True)
 class SwayGroup:
     """1つの`ChainUnit`に対応する、1つのKPノードぶんの配線単位
@@ -206,21 +216,13 @@ class AllocationPlan:
 # =====================================================================
 
 def _judge_pb_bias(params: Mapping[str, object]) -> Tuple[bool, str]:
-    """PBの偏向判定(SPEC §1-2、2026-08-16訂正版)。戻り値は
-    (is_biased, reason)。reasonは無偏向なら空文字列。"""
-    limit_type = str(params.get("limit_type", "None"))
-    if limit_type == "None":
-        # RotationはLimitの一部でNone時は不使用の死データ。値が残っていても問わない。
-        return False, ""
-    if limit_type == "Angle":
-        rot = params.get("limit_rotation") or [0, 0, 0]
-        if all(abs(float(v)) < 1e-9 for v in rot):
-            return False, ""
-        return True, f"偏向(Angleコーン中心オフセット): limit_rotation={list(rot)}"
-    if limit_type in _BIASED_LIMIT_TYPES:
-        return True, f"偏向({limit_type}型)"
-    # 未知のlimit_typeは安全側(偏向扱い)に倒す。
-    return True, f"偏向(未知のlimit_type={limit_type!r}、安全側判定)"
+    """Return whether a safe rest-centred cone is unavailable.
+
+    Reborn preserves a positive inner cone for offset Angle limits. Unsupported
+    directional constraints still require explicit compatibility opt-in.
+    """
+    result = sway_limits.convert_limit(params)
+    return not result.supported, result.reason
 
 
 def _judge_sb_bias(_params: Mapping[str, object]) -> Tuple[bool, str]:
@@ -233,15 +235,10 @@ def _judge_sb_bias(_params: Mapping[str, object]) -> Tuple[bool, str]:
 # =====================================================================
 
 def _pb_limit_angle(params: Mapping[str, object], is_biased: bool) -> float:
-    """SPEC §1-3b。無偏向Angle型はmax_angle_x(=PBのMax Angle)をそのまま
-    写す。limit_type=="None"は写すものが無いので0(無制限)。偏向鎖(is_biased)
-    はどのみち非採用になるため0を返す(値としての意味は持たない)。"""
+    """Use the direct or conservative inner-cone limit from the shared mapper."""
     if is_biased:
         return 0.0
-    limit_type = str(params.get("limit_type", "None"))
-    if limit_type == "Angle":
-        return float(params.get("max_angle_x", 0.0))
-    return 0.0
+    return sway_limits.convert_limit(params).angle
 
 
 def _sb_limit_angle(_params: Mapping[str, object], _is_biased: bool) -> float:
@@ -293,12 +290,19 @@ def parse_physbones(physbones_json: Optional[Mapping[str, object]]) -> List[Chai
         pb_object_name = str(entry.get("pb_object_name", ""))
         colliders = params.get("colliders")
         collider_count = len(colliders) if isinstance(colliders, list) else 0
+        disabled_fields = [name for name in ("enabled", "active_in_hierarchy")
+                           if entry.get(name) is False]
+        source_disabled_reason = (
+            "Source PhysBone disabled (" + ", ".join(disabled_fields)
+            + "); enable it in Unity and export again" if disabled_fields else None)
         units.append(ChainUnit(
             key=f"pb:{anchor}#{idx}", source="pb", anchor=anchor, chains=chains,
             bone_count=bone_count, params=params, is_biased=is_biased,
             bias_reason=reason, is_tail=is_tail, style=style,
             limit_angle=limit_angle, pb_object_name=pb_object_name,
             collider_count=collider_count,
+            source_disabled_reason=source_disabled_reason,
+            excluded_reason=source_disabled_reason,
         ))
     return units
 
@@ -360,6 +364,11 @@ def apply_lab_overrides(
         return list(units)
     out: List[ChainUnit] = []
     for u in units:
+        if u.source_disabled_reason:
+            # A conversion override may relax an unsupported limit, but cannot
+            # turn a disabled source component or inactive GameObject back on.
+            out.append(u)
+            continue
         ov = lab_assignments.get(u.key)
         if ov is None:
             out.append(u)
@@ -417,12 +426,52 @@ def _group_priority_key(g: SwayGroup) -> Tuple[int, int, str]:
 # 5. 容量・優先順位 + 全体エントリポイント
 # =====================================================================
 
+def _nested_followers(
+    groups: Sequence[SwayGroup],
+    *, parent_groups: Optional[Sequence[SwayGroup]] = None,
+) -> Dict[str, str]:
+    """Find selected descendants whose complete ordered paths are covered.
+
+    The cooked backend anchors independent nodes to humanoid bones. Giving a
+    nested component its own node would detach it from its moving parent.
+    Keep that component's source bones on the parent's simulator instead.
+    Only actual path containment qualifies; names or partial overlap do not.
+    """
+    units = [unit for group in groups for unit in group.units]
+    parent_units = (units if parent_groups is None else
+                    [unit for group in parent_groups for unit in group.units])
+    paths = {u.key: tuple((u.anchor,) + chain for chain in u.chains) for u in units}
+    bones = {key: frozenset(bone for path in values for bone in path)
+             for key, values in paths.items()}
+
+    def contains(parent, child):
+        if (parent.anchor == child.anchor or not child.chains
+                or not bones[child.key] < bones[parent.key]):
+            return False
+        for child_path in paths[child.key]:
+            if not any(parent_path[start:start + len(child_path)] == child_path
+                       for parent_path in paths[parent.key]
+                       for start in range(1, len(parent_path))):
+                return False
+        return True
+
+    followers: Dict[str, str] = {}
+    for child in units:
+        parents = [parent for parent in parent_units if contains(parent, child)]
+        if parents:
+            # Strict containment prevents cycles even across multiple levels.
+            parent = max(parents, key=lambda unit: len(bones[unit.key]))
+            followers[child.key] = parent.key
+    return followers
+
+
 def allocate(
     physbones_json: Optional[Mapping[str, object]] = None,
     springbones_json: Optional[Mapping[str, object]] = None,
     *,
     lab_assignments: Optional[Mapping[str, LabAssignment]] = None,
     capacity: int = DEFAULT_CAPACITY,
+    refill_nested: bool = False,
 ) -> AllocationPlan:
     """アロケータ本体。physbones.json/springbones.json(いずれか一方でも
     可)から`AllocationPlan`を組み立てる(SPEC §1の1〜6を通しで実行)。
@@ -433,7 +482,14 @@ def allocate(
     **ChainUnit単位**で数える(1 ChainUnit = 1 グループ = 1スロット、
     dev#1508時代の「統合後のグループ数で数える」は統合が無くなったことで
     自動的にこの意味になる)。呼び出し側でこの関数へ`anchor_group_of=`を
-    渡していたコードは、キーワード引数ごと削除すること(TypeErrorになる)。"""
+    渡していたコードは、キーワード引数ごと削除すること(TypeErrorになる)。
+
+    ``refill_nested=True`` fills slots released by nested compatibility before
+    donor wiring is built. Only selected parents may absorb a child. Legacy
+    callers keep the original cutoff. A retry must freeze the initial rejected
+    set through lab assignments before calling this again: new units cannot be
+    added after the donor armature has already been constructed.
+    """
     units: List[ChainUnit] = []
     units.extend(parse_physbones(physbones_json))
     units.extend(parse_springbones(springbones_json))
@@ -454,15 +510,35 @@ def allocate(
 
     groups = build_groups(finalized)
     groups.sort(key=_group_priority_key)
-    accepted_groups = tuple(groups[:capacity])
-    overflow_groups = groups[capacity:]
-    overflow_keys = {u.key for g in overflow_groups for u in g.units}
+    cutoff = capacity
+    while True:
+        selected = groups[:cutoff]
+        nested_parents = _nested_followers(selected)
+        accepted_groups = tuple(g for g in selected
+                                if not any(u.key in nested_parents for u in g.units))
+        missing = capacity - len(accepted_groups)
+        if not refill_nested or missing <= 0 or cutoff >= len(groups):
+            break
+        cutoff = min(len(groups), cutoff + missing)
+    if refill_nested:
+        # Children beyond the cutoff may already move with an accepted parent.
+        # Never let a parent outside the actual selection suppress a child.
+        nested_parents = _nested_followers(groups, parent_groups=accepted_groups)
+    selected_keys = {u.key for g in accepted_groups for u in g.units}
+    overflow_keys = {u.key for g in groups for u in g.units
+                     if u.key not in selected_keys and u.key not in nested_parents}
 
     final_units: List[ChainUnit] = []
     for u in finalized:
         if u.key in overflow_keys:
             final_units.append(replace(
                 u, excluded_reason=f"容量超過で非採用: {u.anchor}"))
+        elif u.key in nested_parents:
+            parent_key = nested_parents[u.key]
+            final_units.append(replace(
+                u, nested_parent_key=parent_key,
+                excluded_reason=(f"Nested compatibility: follow parent {parent_key}; "
+                                 "child parameters do not run independently")))
         else:
             final_units.append(u)
 

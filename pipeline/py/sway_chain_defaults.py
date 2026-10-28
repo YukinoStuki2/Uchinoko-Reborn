@@ -79,6 +79,7 @@ if _HERE not in sys.path:
 
 import sway_allocator  # noqa: E402
 import sway_quantize  # noqa: E402
+import sway_limits  # noqa: E402
 
 # ChainUnit.source ("pb"/"sb") とGUI側("physbone"/"springbone")の両表記を
 # 受け付ける(呼び出し元ごとに自然な語彙が違うため、ここで正規化を1箇所に
@@ -147,13 +148,20 @@ def lab_assignment_for_unit(
     するケース)は、`sway_quantize.quantize_pb`/`quantize_sb`(`parse_
     physbones`/`parse_springbones`が非偏向時に内部で呼ぶのと同じ公開関数)
     を`unit.params`から直接呼び、偏向していなかったなら得られていたはずの
-    量子化プリセットをその場で再計算する——値を寄せて合わせるのではなく、
-    製品の通常経路と同じ計算式をそのまま再利用する。limit_angleは上書き
-    しない(Noneのまま渡し、`apply_lab_overrides()`に`unit.limit_angle`
-    (偏向鎖は0=無制限)をそのまま使わせる——「自己責任でONにする」場合
-    でも角度制限の再計算は本WPのスコープ外)。"""
+    量子化プリセットをその場で再計算する。
+
+    Reborn: explicit opt-in uses sway_limits' bounded compatibility cone;
+    unsupported source constraints must never accidentally become KP's
+    zero-angle/unlimited mode. Invalid/locked inputs remain disabled.
+    """
     if not enabled:
         return sway_allocator.LabAssignment(style="", enabled=False)
+    limit_angle = None
+    if _normalize_source(unit.source) == "pb":
+        limit = sway_limits.convert_limit(unit.params, compatibility=True)
+        if not limit.supported:
+            return sway_allocator.LabAssignment(style="", enabled=False)
+        limit_angle = limit.angle
     style = unit.style
     if style is None:
         if _normalize_source(unit.source) == "sb":
@@ -165,7 +173,7 @@ def lab_assignment_for_unit(
             style = sway_quantize.quantize_pb(
                 float(unit.params.get("pull", 0.0)),
                 float(unit.params.get("spring", 0.0)))
-    return sway_allocator.LabAssignment(style=style, enabled=True)
+    return sway_allocator.LabAssignment(style=style, enabled=True, limit_angle=limit_angle)
 
 
 def lab_assignments_from_job(

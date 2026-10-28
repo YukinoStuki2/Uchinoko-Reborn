@@ -58,7 +58,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Dict, FrozenSet, List, Mapping, Optional, Sequence, Set, Tuple
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -729,22 +729,38 @@ def target_len_with_safety_margin(n_ext: int, donor_capacity: int, margin: int) 
     return max(1, min(effective_capacity, n_ext))
 
 
+def _effective_source_groups(wiring: "HubWiringPlan"):
+    """Partition source weights by their final chain/representative owner.
+
+    Nested PhysBones may both name the same source bone. The existing mapper
+    writes chains in order and the last assignment owns that source's weights.
+    A parent's original fit group must not claim weights assigned to a later
+    child. Keep the owning chain and its original geometry representative too:
+    geometry still spans the original fitted interval even when a child owns
+    one of its source members.
+    """
+    chains = [cp for gp in wiring.group_plans for cp in gp.chain_plans]
+    owner = {}
+    for index, cp in enumerate(chains):
+        valid_reps = set(cp.source_chain)
+        for member, rep in cp.weight_expansion.items():
+            if rep in valid_reps:
+                owner[member] = (index, rep)
+    groups: Dict[Tuple[int, str], List[str]] = {}
+    for member, key in owner.items():
+        groups.setdefault(key, []).append(member)
+    for (index, rep), members in groups.items():
+        yield chains[index], rep, tuple(members)
+
+
 def merged_weight_groups(wiring: "HubWiringPlan") -> FrozenSet[FrozenSet[str]]:
     """`wiring`全体を走査し、`fit_chain_to_length()`が実際にマージした
     (=2要素以上をまとめた)グループ全部を`frozenset`の集合として返す
     (dev#1551)。`sway_degrade.detect_weight_collisions()`へ渡し、意図的な
     先端マージを「ウェイト衝突バグ」として誤検出しないための除外リスト
     として使う——`step02_retarget.py`の呼び出し側の責務。"""
-    groups: Set[FrozenSet[str]] = set()
-    for gp in wiring.group_plans:
-        for cp in gp.chain_plans:
-            by_rep: Dict[str, List[str]] = {}
-            for member, rep in cp.weight_expansion.items():
-                by_rep.setdefault(rep, []).append(member)
-            for members in by_rep.values():
-                if len(members) >= 2:
-                    groups.add(frozenset(members))
-    return frozenset(groups)
+    return frozenset(frozenset(members) for _, _, members in
+                     _effective_source_groups(wiring) if len(members) >= 2)
 
 
 def representative_of_map(wiring: "HubWiringPlan") -> Dict[str, str]:
@@ -760,9 +776,11 @@ def representative_of_map(wiring: "HubWiringPlan") -> Dict[str, str]:
     という設計どおりの結果であり、バグではない)。代表骨自身(自己写像)は
     従来どおり厳密に比較する。"""
     out: Dict[str, str] = {}
-    for gp in wiring.group_plans:
-        for cp in gp.chain_plans:
-            out.update(cp.weight_expansion)
+    for _cp, rep, members in _effective_source_groups(wiring):
+        # A child may own the original representative. Choose a remaining
+        # source on this donor so the parent donor is still checked once.
+        check_rep = rep if rep in members else members[-1]
+        out.update((member, check_rep) for member in members)
     return out
 
 
@@ -817,6 +835,19 @@ def donor_group_members(cp: "ChainDonorPlan") -> Dict[str, Tuple[str, ...]]:
             continue
         groups.setdefault(rep, []).append(member)
     return {rep: tuple(members) for rep, members in groups.items()}
+
+
+def source_geometry_groups(wiring: "HubWiringPlan") -> Dict[str, Tuple[str, ...]]:
+    """Return the ordered source spans used to place each representative.
+
+    Unlike merged_weight_groups, this excludes secondary tuft branches: they
+    contribute weights but do not determine the donor's rest geometry.
+    """
+    groups: Dict[str, Tuple[str, ...]] = {}
+    for cp, rep, members in _effective_source_groups(wiring):
+        check_rep = rep if rep in members else members[-1]
+        groups[check_rep] = donor_group_members(cp).get(rep, (rep,))
+    return groups
 
 
 # =====================================================================
@@ -944,6 +975,8 @@ def plan_hub_wiring(
     amplitude_rank: Optional[Mapping[str, float]] = None,
     default_safety_margin: int = 0,
     safety_margin_by_chain: Optional[Mapping[Tuple[str, ...], int]] = None,
+    preserve_chain_anchors: FrozenSet[str] = frozenset(),
+    auto_preserve_segments: bool = False,
 ) -> HubWiringPlan:
     """`AllocationPlan.accepted`(優先順位順、最大9件)を、`hub_slots`の
     スロット順に1対1で割り当て、各グループの全鎖にdonor骨名列を配る
@@ -1049,6 +1082,63 @@ def plan_hub_wiring(
     無ければ`default_safety_margin`)。両引数とも既定は0(=旧来どおり
     無効化、完全無退行)。呼び出し側(`sway_hub_wire.wire_and_diagnose_hub()`
     docstring参照)が製品既定値(1)を明示的に渡す。"""
+    if auto_preserve_segments:
+        # Start from the complete legacy result. Reuse the strict manual
+        # extension planner for each candidate, committing only plans that
+        # keep every baseline component. Unsupported slots or low inventory
+        # must never turn an automatic quality improvement into lost physics.
+        args = dict(protected=protected, known_moving=known_moving,
+                    amplitude_rank=amplitude_rank,
+                    default_safety_margin=default_safety_margin,
+                    safety_margin_by_chain=safety_margin_by_chain)
+        current = plan_hub_wiring(plan, catalog, hub_slots, reserved, **args)
+        baseline_keys = {u.key for gp in current.group_plans for u in gp.group.units}
+        selected: Set[str] = set()
+        events = []
+        for gp in current.group_plans:
+            anchors = {u.anchor for u in gp.group.units
+                       if u.source == "pb" or u.anchor in preserve_chain_anchors}
+            if not anchors:
+                continue
+            candidate = plan_hub_wiring(
+                plan, catalog, hub_slots, reserved, **args,
+                preserve_chain_anchors=frozenset(selected | anchors))
+            candidate_keys = {u.key for g in candidate.group_plans for u in g.group.units}
+            if candidate_keys == baseline_keys:
+                selected.update(anchors)
+                current = candidate
+                events.append(f"[sway-auto-preserve] anchors={sorted(anchors)!r}: "
+                              "representative segments retained; secondary branches still merged")
+            else:
+                reasons = [reason for group, reason in candidate.unassignable
+                           if any(u.key in baseline_keys - candidate_keys for u in group.units)]
+                events.append(f"[sway-auto-preserve] anchors={sorted(anchors)!r}: "
+                              f"kept baseline wiring; {'; '.join(reasons) or 'candidate lost an active component'}")
+        return replace(current, chain_fit_events=current.chain_fit_events + tuple(events))
+
+    # Opt-in preservation extends only an existing shared native chain. It
+    # retains every representative source joint and at least one unweighted
+    # terminal using real, unclaimed catalog bones; it never invents bones or
+    # changes the default chain-fit policy. Other branches retain tuft merging.
+    # Reserve the old free-pool allocations first so extending an earlier group
+    # cannot change another component's donor identities.
+    baseline_donors: Set[str] = set()
+    baseline_by_hub: Dict[Tuple[str, str], Set[str]] = {}
+    if preserve_chain_anchors:
+        baseline = plan_hub_wiring(
+            plan, catalog, hub_slots, reserved, protected=protected,
+            known_moving=known_moving, amplitude_rank=amplitude_rank,
+            default_safety_margin=default_safety_margin,
+            safety_margin_by_chain=safety_margin_by_chain)
+        for baseline_group in baseline.group_plans:
+            group_donors: Set[str] = set()
+            for baseline_chain in baseline_group.chain_plans:
+                group_donors.update(baseline_chain.donor_chain_female)
+                group_donors.update(baseline_chain.donor_chain_male)
+            baseline_donors.update(group_donors)
+            baseline_by_hub[(baseline_group.hub_root_female,
+                             baseline_group.hub_root_male)] = group_donors
+
     hub_names_slot_order = hub_slots.female  # スロット順の代表(female側)
     if len(plan.accepted) > len(hub_names_slot_order):
         raise SwayHubError(
@@ -1138,6 +1228,51 @@ def plan_hub_wiring(
                 continue  # unit.chainsが空(通常は起きない、安全側でスキップ)
             chains_flat.append((unit.anchor, representative, other_branches))
 
+        extensions: Dict[int, Tuple[str, ...]] = {}
+        extension_consumed: Set[str] = set()
+        if any(anchor in preserve_chain_anchors for anchor, _, _ in chains_flat):
+            if is_bivariant or not native_chain:
+                unassignable.append((group, (
+                    "preserve segments requires a shared hub with an existing "
+                    "native descendant chain; this slot is unsupported")))
+                # Keep this rejected group's old slots reserved so later
+                # components retain their donor identities. No partial group
+                # or extension is emitted.
+                consumed.update(baseline_by_hub.get((hub_female, hub_male), ()))
+                continue
+            extension_error = None
+            native_cursor = 0
+            for chain_index, (anchor, chain, _) in enumerate(chains_flat):
+                remaining_native = native_chain[native_cursor:]
+                native_cursor += len(remaining_native)
+                if anchor not in preserve_chain_anchors:
+                    continue
+                if set(remaining_native) & (set(protected) | set(known_moving)):
+                    extension_error = "preserve segments native chain contains a protected or known animated bone"
+                    break
+                source = (anchor,) + chain
+                margin = max(1, resolve_safety_margin(
+                    source, safety_margin_by_chain, default_safety_margin))
+                needed = max(0, len(source) + margin - len(remaining_native) - 1)
+                lower_bound = catalog.index_of(remaining_native[-1]) if remaining_native else hub_idx_bound
+                candidates = [name for name in available
+                              if name not in baseline_donors and name not in extension_consumed
+                              and catalog.index_of(name) > lower_bound]
+                if len(candidates) < needed:
+                    extension_error = (
+                        f"preserve segments free donor pool exhausted (anchor={anchor!r}, "
+                        f"need {needed}, available {len(candidates)} after native chain "
+                        "and existing component reservations)")
+                    break
+                selected = tuple(candidates[:needed])
+                extensions[chain_index] = selected
+                extension_consumed.update(selected)
+            if extension_error:
+                # Nothing has been consumed or emitted: the entire group fails
+                # atomically, leaving later components their original donors.
+                unassignable.append((group, extension_error))
+                continue
+
         def _dry_run() -> int:
             native_cursor = 0
             free_needed = 0
@@ -1192,7 +1327,7 @@ def plan_hub_wiring(
         chain_plans: List[ChainDonorPlan] = []
         cursor = 0
         native_cursor = 0
-        for anchor, chain, other_branches in chains_flat:
+        for chain_index, (anchor, chain, other_branches) in enumerate(chains_flat):
             extended_source = (anchor,) + chain
             n_ext = len(extended_source)
             margin = resolve_safety_margin(
@@ -1206,6 +1341,10 @@ def plan_hub_wiring(
                 # 「native不足→自由プールへフォールバック」分岐は構造的に
                 # 到達不能になった(_dry_run()と対称)。
                 remaining_native = native_chain[native_cursor:]
+                native_cursor += len(remaining_native)
+                if anchor in preserve_chain_anchors:
+                    remaining_native += extensions.get(chain_index, ())
+                    margin = max(1, margin)
                 capacity_root_included = len(remaining_native) + 1
                 target_len = target_len_with_safety_margin(
                     n_ext, capacity_root_included, margin)
@@ -1232,7 +1371,6 @@ def plan_hub_wiring(
                 # メッシュ含む)骨数」ではなく「登録するdonor骨数」には及ばさない
                 # ——登録総数は常に容量(native_chain全長+root)で不変。
                 donor_female = remaining_native  # 内容+延長(常に全部)
-                native_cursor += len(remaining_native)  # 内容・延長問わず全部消費
                 donor_male = donor_female
                 if target_len < n_ext:
                     # 容量root込みでもnative側が本来足りない(margin=0でも
@@ -1300,6 +1438,7 @@ def plan_hub_wiring(
                 donor_chain_female=donor_female, donor_chain_male=donor_male,
                 weight_expansion=full_expansion, representative_source=extended_source))
         consumed.update(available[:cursor])
+        consumed.update(extension_consumed)
 
         group_plans.append(GroupHubPlan(
             group=group, hub_root_female=hub_female, hub_root_male=hub_male,

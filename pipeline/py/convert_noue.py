@@ -307,52 +307,32 @@ def ensure_vanilla(job, assets, job_json, stage=extract_vanilla.STAGE_FULL):
 
 
 def warn_posture_mismatch_cull(conv, requested_genders):
-    """dev#1625(2026-08-21 オーナー裁定「変換自体はいつも通り完走+結果画面で
-    告知」): `pipeline\\blender\\step02_retarget.py`が姿勢不一致(donor骨が
-    明後日の方向を向いたまま配線される構造的破綻)を検出して特定ハブだけ
-    切除したとき(`sway_exclusions_{gender}.json`の"excluded"に
-    "posture mismatch (dev#1625)"タグ付きエントリがある)、GUIの完了
-    ダイアログへ##AVATAR_WARNING##を出す(app_py\\pipeline_runner.pyの
-    parse_avatar_warning/_AVATAR_WARNING_TEMPLATESが拾って翻訳する)。
+    """Write final coverage and propagate one translated completion note.
 
-    ここ(呼び出し元`main()`のPhase 2-6、convert.ps1のPhase 1リレーとは
-    違いフィルタ無しでそのまま中継される、convert.ps1の該当コメント参照)
-    で出す理由: step02_retarget.py自身(Blender工程、Phase 1)で直接
-    printしても、convert.ps1のPhase 1リレー(Run-Blender/
-    Phase1GenderWorkerScript)が表示用に`Select-String -Pattern
-    "\\[(step|preview|vp_bl|validate)|FATAL|Error"`で行を間引いており、
-    ##AVATAR_WARNING##はこのパターンに一致しないため呼び出し元(app_py)
-    まで届かない(convert.ps1はこのWPの書き込み許可範囲外、実機検証で
-    発覚——詳細はwork\\wp_1625_notes\\NOTES.md)。容量超過・重み衝突・
-    支点公理違反等、本WP以前から存在する既存の切除理由は対象外——挙動が
-    変わるのは本WPが追加した切除経路だけ("posture mismatch (dev#1625)"
-    タグの有無で判別)。
-
-    bpy非依存の純粋な「ファイル読み取り+print」関数として切り出してある
-    (main()から直接呼ぶには重すぎる前提――blender_exe存在チェック・
-    step02_*.blend存在チェック等――を経ずに単体テストできるようにする
-    ため、pipeline\\py\\test_convert_noue_texfallback.pyの
-    resolve_textures()と同じ設計方針)。"""
-    total = 0
-    for gender in sorted(requested_genders):
-        excl_path = os.path.join(conv, f"sway_exclusions_{gender.lower()}.json")
-        if not os.path.exists(excl_path):
-            continue
-        try:
-            with open(excl_path, encoding="utf-8") as f:
-                excl_report = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            continue
-        total += sum(
-            1 for e in excl_report.get("excluded", [])
-            if "posture mismatch (dev#1625)" in e.get("reason", ""))
-    if total:
-        print(f"[{TAG}] dev#1625: {total} sway chain(s) disabled due to "
-              "posture mismatch (see sway_exclusions_<gender>.json for detail)")
-        print("##AVATAR_WARNING## Some sway (jiggle) physics chains were "
-              "disabled because the source bone's posture did not match its "
-              f"donor closely enough ({total} chain(s))")
-
+    The historical function name remains for callers. Source unit identities
+    deduplicate male/female results; final coverage takes precedence over older
+    allocation exclusions. Old logs are still understood by the GUI translator.
+    """
+    import sway_report
+    try:
+        report = sway_report.write_report(conv, requested_genders)
+    except Exception as exc:
+        report = sway_report.failed_report(requested_genders, exc)
+    if report is None:
+        return
+    complete = any(row["complete_coverage"] for row in report["genders"].values())
+    posture_count = len(report["posture"])
+    # Legacy reports without full coverage retain silent no-op behavior when
+    # there was no posture exclusion. New coverage always receives a report.
+    final_failed = any(row["status"] == "failed" for row in report["final_checks"].values())
+    if not complete and not posture_count and not final_failed and not report["input_warnings"] and not report["report_write_errors"]:
+        return
+    print(f"[{TAG}] sway report: {report['report_path'] or 'could not be saved'}")
+    for error in report["report_write_errors"]:
+        print(f"[{TAG}] sway report write failed: {error}")
+    if posture_count:
+        print(f"[{TAG}] dev#1625: {posture_count} chain(s) excluded, counted by source component across genders")
+    print("##AVATAR_WARNING## " + sway_report.marker_payload(report))
 
 def resolve_textures(job, meta):
     """avatar_meta.jsonのslots(m00, m01, ...)から body/parka 用PNGを解決する。
@@ -457,7 +437,28 @@ def resolve_textures(job, meta):
                 paths.append(vp_atlas.tinted_texture_key(os.path.join(tex_dir, tex_filename), rgba))
             else:
                 paths.append(os.path.join(tex_dir, fn))
-        canvas, rows, cols, cs = vp_atlas.build_atlas_from_paths(paths)
+        layout_mode = job.get("atlas_layout", "detail")
+        if layout_mode == "legacy-grid":
+            canvas, rows, cols, cs = vp_atlas.build_atlas_from_paths(paths)
+            layout_description = f"{rows}x{cols} grid, cell={cs}px"
+        elif layout_mode == "detail":
+            canvas, transforms, layout = vp_atlas.build_detail_atlas_from_paths(paths)
+            info["texture_transform"] = dict(zip(order, transforms))
+            # Record readable source identities, avoiding NUL-delimited tint
+            # keys in diagnostic JSON. UV transforms retain the original keys.
+            for source, region in zip(order, layout["regions"]):
+                if vp_atlas.is_solid_color_key(source):
+                    region["source"] = {"solid_color": list(vp_atlas.parse_solid_color_key(source))}
+                elif vp_atlas.is_tinted_texture_key(source):
+                    filename, tint = vp_atlas.parse_tinted_texture_key(source)
+                    region["source"] = {"texture": filename, "tint": list(tint)}
+                else:
+                    region["source"] = {"texture": source}
+            with open(os.path.join(atlas_dir, f"atlas_layout_{label}.json"), "w", encoding="utf-8") as stream:
+                json.dump(layout, stream, ensure_ascii=False, indent=2)
+            layout_description = f"detail packing, padding={layout['padding']}px"
+        else:
+            raise ValueError(f"unknown atlas layout: {layout_mode!r}")
         out_png = os.path.join(atlas_dir, f"atlas_{label}.png")
         vp_tex.encode_png(out_png, canvas)
         result[label] = out_png
@@ -473,7 +474,7 @@ def resolve_textures(job, meta):
         # NUL区切りで生ログに出すとエディタ・端末で崩れるため)。
         order_display = [_display(fn) for fn in order]
         print(f"[{TAG}] {label}: atlassing {len(order)} texture(s) "
-              f"({rows}x{cols} grid, cell={cs}px, canvas={canvas.shape[1]}x"
+              f"({layout_description}, canvas={canvas.shape[1]}x"
               f"{canvas.shape[0]}, sources={order_display}) -> {out_png}")
 
     slot_xf = vp_atlas.slot_transforms(plan)

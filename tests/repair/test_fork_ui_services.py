@@ -15,7 +15,7 @@ def test_title_identifies_repair_build_without_changing_compat_version():
     titles = []
     window = SimpleNamespace(root=SimpleNamespace(title=titles.append))
     mw.MainWindow._update_window_title(window)
-    assert "Uchinoko Reborn v2.13.0-reborn.1" in titles[0]
+    assert f"Uchinoko Reborn {mw.REPAIR_VERSION}" in titles[0]
     assert mw.TOOL_VERSION == "v2.13.0"
 
 

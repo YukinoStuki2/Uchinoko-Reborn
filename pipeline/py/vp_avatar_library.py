@@ -228,7 +228,7 @@ def _settings_summary(job: dict) -> dict:
         "merge_fingers": bool(job.get("merge_fingers", False)),
         "unlit": bool(job.get("unlit", False)),
         "force_two_sided": bool(job.get("force_two_sided", True)),
-        "shadow_lift": job.get("shadow_lift", 0.7),
+        "shadow_lift": job.get("shadow_lift", 0.0),
         "shoulder_offset_deg": job.get("shoulder_offset_deg", 0.0),
         "uniform_scale": job.get("uniform_scale", 1.0),
         "engine_mode": job.get("engine_mode", "noue"),

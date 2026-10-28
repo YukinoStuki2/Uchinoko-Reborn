@@ -49,7 +49,7 @@ def test_build_preview_sig_false_bool_and_zero_offset():
     assert sig == "a.vrm|0|False|"
 
 
-def test_build_preview_sig_has_exactly_the_four_cs_components():
+def test_build_preview_sig_includes_sizing_but_no_material_options():
     """コメント(L.2404「プレビューの見た目に影響する設定だけ(影の濃さ・
     影なしはBlenderプレビューに出ない)」)どおり、shadow_bar/unlit/
     force_two_sidedはBuildPreviewSigの構成要素に含まれないこと
@@ -60,6 +60,8 @@ def test_build_preview_sig_has_exactly_the_four_cs_components():
         "shoulder_offset_deg",
         "merge_fingers",
         "drop_bones_text",
+        "size_fit_mode",
+        "uniform_scale",
     ]
 
 
@@ -112,6 +114,25 @@ def test_negative_control_changed_merge_fingers_makes_it_stale(tmp_path):
     os.makedirs(os.path.join(work_root, "a"), exist_ok=True)
     pf.save_preview_sig(work_root, "a.vrm", 0, False, "")
     assert pf.is_preview_fresh(work_root, "a.vrm", 0, True, "") is False
+
+
+def test_sizing_changes_invalidate_preview_but_allow_full_reconversion(tmp_path):
+    work_root = str(tmp_path / "work")
+    os.makedirs(os.path.join(work_root, "a"))
+    pf.save_preview_sig(work_root, "a.vrm", 0, False, "", size_fit_mode="vanilla", uniform_scale=0.9)
+    assert pf.is_preview_fresh(work_root, "a.vrm", 0, False, "", size_fit_mode="vanilla", uniform_scale=0.9)
+    assert not pf.is_preview_fresh(work_root, "a.vrm", 0, False, "", size_fit_mode="vanilla", uniform_scale=1.0)
+    assert not pf.is_preview_fresh(work_root, "a.vrm", 0, False, "", size_fit_mode="legacy", uniform_scale=0.9)
+    assert pf.is_preview_fresh(work_root, "a.vrm", 0, False, "", allow_size_change=True)
+    assert not pf.is_preview_fresh(work_root, "a.vrm", 3, False, "", allow_size_change=True)
+
+
+def test_old_preview_signature_requires_refresh_when_auto_size_enabled(tmp_path):
+    work_root = str(tmp_path / "work")
+    os.makedirs(os.path.join(work_root, "a"))
+    pf.save_preview_sig(work_root, "a.vrm", 0, False, "")
+    assert not pf.is_preview_fresh(work_root, "a.vrm", 0, False, "", size_fit_mode="vanilla")
+    assert pf.is_preview_fresh(work_root, "a.vrm", 0, False, "", size_fit_mode="vanilla", allow_size_change=True)
 
 
 def test_negative_control_changed_vrm_path_makes_it_stale(tmp_path):
@@ -168,7 +189,7 @@ class _FakeSelfForAutoPreview:
         self.started: list[tuple] = []
         self.logs: list[str] = []
 
-    def _is_preview_fresh(self, _vrm_path: str) -> bool:
+    def _is_preview_fresh(self, _vrm_path: str, **_kwargs) -> bool:
         return self._fresh
 
     def _start_pipeline(self, *, preview_only, materials_only, auto=False):
@@ -289,7 +310,7 @@ class _FakeSelfForFreshnessRefresh:
         # このテスト群の対象外。既定Trueでhas Vrm/fresh判定の経路を通す。
         self._blender_ready = True
 
-    def _is_preview_fresh(self, _vrm_path: str) -> bool:
+    def _is_preview_fresh(self, _vrm_path: str, **_kwargs) -> bool:
         return self._fresh
 
     # dev#897: statusLabel設定がself._set_status()経由に変わったための追加束縛。

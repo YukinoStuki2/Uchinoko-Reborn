@@ -207,6 +207,27 @@ def pack_transform80(bone):
     return struct.pack("<10d", *vals)
 
 
+def bone_fname(bone):
+    """Preserve an authoritative serialized name; never infer a numeric suffix.
+
+    Metadata-free legacy callers retain literal names. The build boundary adds
+    metadata from the shared Skeleton before extending production meshes.
+    """
+    present = ("fname_base" in bone, "fname_number" in bone)
+    if not any(present):
+        return bone["name"], 0
+    if not all(present):
+        raise RefskelExtendError(f"incomplete FName metadata: {bone['name']!r}")
+    base, number = bone["fname_base"], bone["fname_number"]
+    if (not isinstance(base, str) or not base or type(number) is not int
+            or not 0 <= number < 100000):
+        raise RefskelExtendError(f"invalid FName metadata: {bone['name']!r}")
+    display = base if number == 0 else f"{base}_{number - 1}"
+    if display.casefold() != bone["name"].casefold():
+        raise RefskelExtendError(f"FName metadata/display mismatch: {bone['name']!r}")
+    return base, number
+
+
 def extend_sk_refskeleton(uasset_path, uexp_path, new_bones,
                           out_uasset_path, out_uexp_path):
     """cooked SK 1体のRefSkeletonへnew_bonesを追加登録して書き出す。
@@ -227,9 +248,19 @@ def extend_sk_refskeleton(uasset_path, uexp_path, new_bones,
     if add_n == 0:
         raise RefskelExtendError("new_bones is empty")
     new_names = [b["name"] for b in new_bones]
-    for nm in new_names:
-        if nm in names:
-            raise RefskelExtendError(f"name already present in NameMap: {nm}")
+    if len(set(n.casefold() for n in new_names)) != add_n:
+        raise RefskelExtendError("duplicate new bone names")
+    fnames = [bone_fname(b) for b in new_bones]
+    name_indices = {name.casefold(): i for i, name in enumerate(names)}
+    appended_names = []
+    new_name_indices = []
+    for base, _number in fnames:
+        key = base.casefold()
+        if key not in name_indices:
+            name_indices[key] = base_name_count + len(appended_names)
+            appended_names.append(base)
+        new_name_indices.append(name_indices[key])
+    add_names = len(appended_names)
 
     # ---- uexp: RefSkeleton 3配列の位置確定(全数整合検査つき) ----
     bones, _transforms, tsize, _data, tpos = core.find_refskeleton(
@@ -239,7 +270,7 @@ def extend_sk_refskeleton(uasset_path, uexp_path, new_bones,
     n = len(bones)
     bone_names = [b for b, _p in bones]
     for nm in new_names:
-        if nm in bone_names:
+        if nm.casefold() in {name.casefold() for name in bone_names}:
             raise RefskelExtendError(f"bone already registered: {nm}")
 
     # 親解決(既存骨 or 先行する追加骨)
@@ -267,8 +298,9 @@ def extend_sk_refskeleton(uasset_path, uexp_path, new_bones,
     map_data = tf_end + 4
     for i in range(n):
         idx, num, val = struct.unpack_from("<iii", ux, map_data + i * 12)
-        nm = names[idx] if num == 0 else f"{names[idx]}_{num - 1}"
-        if val != i or nm != bone_names[i]:
+        bi_idx, bi_num = struct.unpack_from("<ii", ux, bi_count_pos + 4 + i * 12)
+        if (not 0 <= idx < len(names) or val != i
+                or (names[idx].casefold(), num) != (names[bi_idx].casefold(), bi_num)):
             raise RefskelExtendError(f"NameToIndexMap[{i}] mismatch")
     map_end = map_data + n * 12
 
@@ -281,11 +313,11 @@ def extend_sk_refskeleton(uasset_path, uexp_path, new_bones,
     rb_end = rb_off + 4 + len(rb_vals) * 2
 
     ins_bi = b"".join(
-        struct.pack("<iii", base_name_count + k, 0, parent_idx[k])
+        struct.pack("<iii", new_name_indices[k], fnames[k][1], parent_idx[k])
         for k in range(add_n))
     ins_tf = b"".join(pack_transform80(b) for b in new_bones)
     ins_map = b"".join(
-        struct.pack("<iii", base_name_count + k, 0, n + k)
+        struct.pack("<iii", new_name_indices[k], fnames[k][1], n + k)
         for k in range(add_n))
     ins_rb = struct.pack(f"<{add_n}H", *range(n, n + add_n))
 
@@ -312,17 +344,17 @@ def extend_sk_refskeleton(uasset_path, uexp_path, new_bones,
     # ---- uasset ----
     f_sum = parse_full_summary(ua)
     names_end = _name_block_end(ua, f_sum["name_offset"]["val"], base_name_count)
-    ins_names = b"".join(name_entry_bytes(nm) for nm in new_names)
+    ins_names = b"".join(name_entry_bytes(nm) for nm in appended_names)
     delta_n = len(ins_names)
 
     new_ua = bytearray(ua[:names_end] + ins_names + ua[names_end:])
     struct.pack_into("<i", new_ua, f_sum["name_count"]["pos"],
-                     base_name_count + add_n)
+                     base_name_count + add_names)
     struct.pack_into("<i", new_ua, f_sum["total_header_size"]["pos"],
                      f_sum["total_header_size"]["val"] + delta_n)
     for gen in f_sum["_generations"]:
         struct.pack_into("<i", new_ua, gen["pos"] + 4,
-                         gen["name_count"] + add_n)
+                         gen["name_count"] + add_names)
     for key in ("soft_object_paths_offset", "gatherable_text_offset",
                 "export_offset", "import_offset", "depends_offset",
                 "soft_package_references_offset", "searchable_names_offset",
@@ -345,7 +377,7 @@ def extend_sk_refskeleton(uasset_path, uexp_path, new_bones,
     struct.pack_into("<i", new_ua,
                      f_sum["names_referenced_from_export_data_count"]["pos"],
                      f_sum["names_referenced_from_export_data_count"]["val"]
-                     + add_n)
+                     + add_names)
 
     _summary0, exports = uh.parse_uasset_exports(uasset_path)
     asset_exports = [e for e in exports if e["b_is_asset"]]
@@ -386,6 +418,9 @@ def family_bones_from_refskel(refskel, chain_names):
             raise RefskelExtendError(f"bone {nm!r} not in refskel_extra")
         out.append({"name": nm, "parent": b["parent"],
                     "quat": b["quat"], "pos": b["pos"], "scale": b["scale"]})
+        for key in ("fname_base", "fname_number"):
+            if key in b:
+                out[-1][key] = b[key]
     return out
 
 

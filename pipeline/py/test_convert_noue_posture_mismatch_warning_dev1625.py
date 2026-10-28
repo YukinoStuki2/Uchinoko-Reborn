@@ -18,7 +18,7 @@ G3(負の対照): 切除はあるが別理由(容量超過等、dev#1625タグ�
     場合も##AVATAR_WARNING##が出ない(本WP以前からの既存挙動を変えない)
 G4: sway_exclusions_{gender}.json自体が存在しない(sway_enable=false等)
     場合も静かに何もしない(例外を出さない)
-G5: 複数性別(male+female)ぶんを合算した件数がメッセージに出る
+G5: 複数性別(male+female)ぶんを重複を除いた元部品数がメッセージに出る
 
 実行: python test_convert_noue_posture_mismatch_warning_dev1625.py または
 pytest経由
@@ -120,8 +120,8 @@ def test_missing_exclusions_file_is_a_silent_noop():
               out == "", out)
 
 
-def test_both_genders_counts_are_summed():
-    """G5: male/female両方にdev#1625切除があれば合算件数が出る。"""
+def test_both_genders_count_unique_source_components():
+    """G5: male/female両方の同一元部品を重複して数えない。"""
     with tempfile.TemporaryDirectory() as conv:
         entry = {"unit_key": "sb:J_Bip_C_UpperChest#0", "source": "sb",
                   "anchor": "J_Bip_C_UpperChest", "stage": "gate_transform",
@@ -134,8 +134,8 @@ def test_both_genders_counts_are_summed():
         with contextlib.redirect_stdout(buf):
             convert_noue.warn_posture_mismatch_cull(conv, {"Female", "Male"})
         out = buf.getvalue()
-        check("both genders summed: total is 3 chain(s)",
-              "3 chain(s)" in out, out)
+        check("both genders deduplicated: total is 1 chain(s)",
+              "1 chain(s)" in out, out)
         # 1行だけ出る(genderごとに複数回出したりしない)
         check("exactly one ##AVATAR_WARNING## line",
               out.count("##AVATAR_WARNING##") == 1, out)
@@ -146,7 +146,7 @@ def main():
     test_negative_control_zero_exclusions_no_warning()
     test_negative_control_other_exclusion_reasons_do_not_trigger()
     test_missing_exclusions_file_is_a_silent_noop()
-    test_both_genders_counts_are_summed()
+    test_both_genders_count_unique_source_components()
     print()
     if failures:
         print(f"=== FAIL: {len(failures)} ===")

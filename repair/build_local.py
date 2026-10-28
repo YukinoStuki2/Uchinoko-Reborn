@@ -1,4 +1,4 @@
-"""Build a separate local repair installation using an existing licensed runtime.
+"""Build or update a local repair installation using an existing licensed runtime.
 
 This is a local development builder. It does not create a public distribution or
 copy any avatar/work/settings files. Binary templates remain runtime inputs and
@@ -12,8 +12,11 @@ import json
 import os
 from pathlib import Path
 import shutil
+from datetime import datetime
+import uuid
 
 REPO=Path(__file__).resolve().parents[1]
+VERSION = '2.13.0-reborn.12'
 BLENDER_DIR = 'res/assets/tools/blender-4.3.2-windows-x64'
 RUNTIME_PATHS = {
     'TCL_LIBRARY': 'res/python_embed/tcl/tcl8.6',
@@ -37,6 +40,39 @@ CLEAR_ENVIRONMENT = (
     'D2P_OOZ_SITE_PACKAGES', 'D2P_PYTHON311_DLL',
 )
 
+# JSON is also a common user-state format. Only these application-owned inputs
+# may accompany source; a job/model/settings JSON must never become a default.
+SOURCE_STATIC = {
+    'app_py/i18n_data.json', 'pipeline/job.example.json',
+    'pipeline/py/known_good_palworld.json', 'pipeline/py/noue_template_manifest.json',
+    'pipeline/py/sway_known_moving_bones.json', 'pipeline/py/sway_root_amplitude.json',
+    'pipeline/py/noue_master/shader_platform_facts.json',
+    'pipeline/py/noue_master/stub_asset_ids.json',
+    'pipeline/py/noue_master/pak_extract_extra/_vrm2palworld_anchor.txt',
+    'pipeline/py/sway_abp_templates/README.md',
+}
+PRIVATE_DIRECTORIES = {'work', 'data', 'exports', 'logs', 'cache', '_shared_cache',
+                       '__pycache__', '.pytest_cache', 'source_backups', 'tests'}
+
+
+def source_files(root: Path):
+    """Yield only converter code and reviewed static inputs from a source tree."""
+    for top, destination in (('app_py', 'app'), ('pipeline', 'pipeline'), ('unity', 'unity')):
+        for path in (root / top).rglob('*'):
+            relative = path.relative_to(root)
+            if (not path.is_file() or path.is_symlink()
+                    or not path.resolve().is_relative_to(root.resolve())
+                    or any(part in PRIVATE_DIRECTORIES or part.startswith('.') for part in relative.parts)):
+                continue
+            key = relative.as_posix()
+            if path.name.startswith('test_'):
+                continue
+            allowed = path.suffix in {'.py', '.ps1', '.cs'} or key in SOURCE_STATIC
+            allowed |= (relative.parent.as_posix() == 'pipeline/py/sway_abp_templates/specs'
+                        and path.name.startswith('spec_') and path.suffix == '.json')
+            if allowed:
+                yield path, destination + '/' + path.relative_to(root / top).as_posix()
+
 
 def isolated_environment(target: Path) -> dict[str, str]:
     env = os.environ.copy()
@@ -58,7 +94,10 @@ def launcher_text() -> str:
     return '\n'.join(lines)
 
 def copy_tree(source: Path,destination: Path) -> None:
-    shutil.copytree(source,destination,ignore=shutil.ignore_patterns('__pycache__','*.pyc','tests'))
+    shutil.copytree(source,destination,ignore=shutil.ignore_patterns(
+        '__pycache__', '.pytest_cache', '_shared_cache', 'cache', 'logs',
+        'settings_*.txt', 'settings_*.json', '*.log', '*.dmp',
+        '*.pyc', '*.blend', '*.fbx', '*.vrm', '*.unitypackage', 'job.json', 'model.json'))
 
 def build(installed: Path,target: Path) -> dict:
     installed=installed.resolve();target=target.resolve()
@@ -84,14 +123,18 @@ def build(installed: Path,target: Path) -> dict:
         raise OSError(f'Not enough free space for a separate runtime: need {required_space} bytes')
     target.mkdir()
     res=target/'res';res.mkdir()
-    for source,dest in [('app_py','app'),('pipeline','pipeline'),('unity','unity')]:
-        copy_tree(REPO/source,res/dest)
+    for source, relative in source_files(REPO):
+        dest=res/relative
+        dest.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copy2(source,dest)
     # These binary assets belong to the installed converter. Keep them out of
     # source control; the fork uses an exact copy only in this local installation.
-    for src in (runtime/'pipeline').rglob('*'):
-        if src.is_file() and src.suffix.lower() in {'.bin','.uasset','.uexp','.ubulk','.uptnl'}:
-            dst=res/'pipeline'/src.relative_to(runtime/'pipeline')
-            dst.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(src,dst)
+    for template in ('py/noue_master','py/sway_abp_templates/cooked'):
+        for src in (runtime/'pipeline'/template).rglob('*'):
+            if (src.is_file() and src.suffix.lower() in {'.bin','.uasset','.uexp','.ubulk','.uptnl'}
+                    and not any(part in PRIVATE_DIRECTORIES for part in src.relative_to(runtime/'pipeline').parts)):
+                dst=res/'pipeline'/src.relative_to(runtime/'pipeline')
+                dst.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(src,dst)
     for folder in ('python_embed','assets','licenses'):
         copy_tree(runtime/folder,res/folder)
     # A new fork defaults to generating output without installing into the game.
@@ -105,9 +148,9 @@ def build(installed: Path,target: Path) -> dict:
     shutil.copy2(REPO/'README.md',target/'README.md')
     shutil.copy2(REPO/'README_REPAIR.md',target/'README_REPAIR.md')
     (target/'repair').mkdir()
-    shutil.copy2(REPO/'repair/VALIDATION.md',target/'repair/VALIDATION.md')
-    manifest={'format':1,'version':'2.13.0-reborn.1','kind':'local-development-installation',
-              'source_repository':str(REPO),'runtime_source':str(installed),
+    for document in (REPO/'repair').glob('*.md'):
+        shutil.copy2(document,target/'repair'/document.name)
+    manifest={'format':1,'version':VERSION,'kind':'local-development-installation',
               'public_distribution':False,'source_files':{}}
     for folder in ('app','pipeline','unity'):
         for path in (res/folder).rglob('*'):
@@ -116,9 +159,110 @@ def build(installed: Path,target: Path) -> dict:
     (target/'repair_build.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     return {'target':str(target),'source_files':len(manifest['source_files']),'version':manifest['version']}
 
+
+def update(target: Path) -> dict:
+    """Update managed source only, keeping the runtime, settings and work intact.
+
+    Refuse to overwrite locally changed source. A small, durable source backup
+    supports rollback without duplicating Python, Blender or model data.
+    """
+    target = target.resolve()
+    manifest_path = target / 'repair_build.json'
+    old = json.loads(manifest_path.read_text(encoding='utf-8'))
+    if old.get('kind') != 'local-development-installation':
+        raise ValueError('Only a managed Uchinoko Reborn installation can be updated')
+    if not (target / 'res/python_embed/pythonw.exe').is_file():
+        raise FileNotFoundError(target / 'res/python_embed/pythonw.exe')
+
+    def checked(relative: str) -> Path:
+        path = target / relative
+        if not path.resolve().is_relative_to(target) or path == target:
+            raise ValueError(f'Unsafe managed source path: {relative}')
+        return path
+
+    def digest(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    old_sources = old['source_files']
+    for relative, expected in old_sources.items():
+        parts = Path(relative).parts
+        if (not parts or parts[0] not in {'app', 'pipeline', 'unity'} or '..' in parts
+                or Path(relative).suffix not in {'.py', '.ps1', '.cs', '.json'}):
+            raise ValueError(f'Unsafe managed source path: {relative}')
+        path = checked('res/' + relative)
+        if not path.is_file() or digest(path) != expected:
+            raise ValueError(f'Installed source was modified; keep it before updating: {path}')
+    payload = {}
+    new_sources = {}
+    for path, key in source_files(REPO):
+        content = path.read_bytes()
+        new_sources[key] = hashlib.sha256(content).hexdigest()
+        installed = checked('res/' + key)
+        if key not in old_sources and installed.exists() and digest(installed) != new_sources[key]:
+            raise ValueError(f'Unmanaged file would be overwritten: {installed}')
+        payload['res/' + key] = content
+    payload['UchinokoReborn.bat'] = launcher_text().encode('ascii')
+    for name in ('LICENSE', 'README.md', 'README_REPAIR.md'):
+        payload[name] = (REPO / name).read_bytes()
+    for path in (REPO / 'repair').glob('*.md'):
+        payload['repair/' + path.name] = path.read_bytes()
+    current = dict(old, format=1, version=VERSION, source_files=new_sources)
+    current.pop('source_repository', None)
+    current.pop('runtime_source', None)
+    payload['repair_build.json'] = (json.dumps(current, ensure_ascii=False, indent=2) + '\n').encode('utf-8')
+    removed = {'res/' + key for key in old_sources if key not in new_sources}
+    changed = {key: value for key, value in payload.items()
+               if not checked(key).exists() or checked(key).read_bytes() != value}
+    if not changed and not removed:
+        return {'target': str(target), 'version': VERSION, 'changed': 0}
+    # Finish all path and space checks before making changes.
+    affected = sorted(set(changed) | removed)
+    existing = [key for key in affected if checked(key).exists()]
+    needed = sum(checked(key).stat().st_size for key in existing) + sum(map(len, changed.values()))
+    if shutil.disk_usage(target).free < needed + 5_000_000:
+        raise OSError(f'Not enough space for the source update and rollback: need {needed} bytes')
+    backup = checked('repair/source_backups/' + datetime.now().strftime('%Y%m%d_%H%M%S') + '_' + uuid.uuid4().hex[:6])
+    backup.mkdir(parents=True)
+    for key in existing:
+        dest = backup / key
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(checked(key), dest)
+    (backup / 'rollback.json').write_text(json.dumps({'existing': existing, 'affected': affected}, indent=2), encoding='utf-8')
+    temporary = []
+    applied = []
+    try:
+        for key, content in changed.items():
+            destination = checked(key)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            staging = destination.with_name(destination.name + '.update-' + uuid.uuid4().hex)
+            temporary.append(staging)
+            staging.write_bytes(content)
+            os.replace(staging, destination)
+            applied.append(key)
+        for key in removed:
+            checked(key).unlink()
+            applied.append(key)
+    except BaseException:
+        for key in reversed(applied):
+            destination = checked(key)
+            if key in existing:
+                shutil.copy2(backup / key, destination)
+            elif destination.exists():
+                destination.unlink()
+        raise
+    finally:
+        for path in temporary:
+            if path.exists():
+                path.unlink()
+    return {'target': str(target), 'version': VERSION, 'changed': len(changed),
+            'removed': len(removed), 'source_files': len(new_sources), 'backup': str(backup)}
+
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--installed',type=Path,required=True)
+    parser.add_argument('--installed',type=Path)
     parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--update',action='store_true',help='Update source in an existing installation, preserving runtime and models')
     args=parser.parse_args()
-    print(json.dumps(build(args.installed,args.output),ensure_ascii=False,indent=2))
+    if not args.update and args.installed is None:
+        parser.error('--installed is required when creating an installation')
+    print(json.dumps(update(args.output) if args.update else build(args.installed,args.output),ensure_ascii=False,indent=2))

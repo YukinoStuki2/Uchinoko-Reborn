@@ -142,9 +142,9 @@ def load_job(job_json_path):
     # (U50-unify で live_template._unify_slot_materials が実装。
     #  k=1.0 で実機の環境光被りが消える=真のunlit、work\u50_unify\shadow_metrics.txt)。
     # **GUI表示の「影の濃さ」は 1-k(向きが逆)**。GUI 30% == k=0.7。
-    # 既定 0.7(2026-07-26 責任者裁定「k=0.7でいったん固定」。GUI側の
-    #  スライダ既定も 30% = k=0.7 に揃えてある)。
-    job.setdefault("shadow_lift", 0.7)
+    # Reborn: new jobs follow scene lighting (GUI shadow 100% = k=0).
+    # Explicit settings in older jobs remain unchanged.
+    job.setdefault("shadow_lift", 0.0)
     job.setdefault("avatar_name", "Avatar")
     return job
 

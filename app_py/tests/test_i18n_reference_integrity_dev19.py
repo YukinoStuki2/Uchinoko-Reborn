@@ -142,6 +142,14 @@ def test_sway_enable_toggle_i18n_keys_all_five_languages_complete():
             assert i18n.TABLE[key].get(lang), f"{key}/{lang} が空"
 
 
+def test_all_current_sway_slider_labels_and_tooltips_exist_in_every_language():
+    from ui.main_window import SWAY_INTENSITY_I18N_KEYS
+    for key in [*SWAY_INTENSITY_I18N_KEYS, "LabelSwayIntensity", "TipSwayIntensity"]:
+        assert key in i18n.TABLE
+        for lang in i18n.LANGS:
+            assert i18n.TABLE[key].get(lang), f"{key}/{lang} is missing"
+
+
 def test_sway_chain_hardness_i18n_keys_all_five_languages_complete():
     for hardness, key in sway_chain_dialog._HARDNESS_KEYS.items():
         assert key in i18n.TABLE, f"hardness={hardness!r} のキー {key} が無い"

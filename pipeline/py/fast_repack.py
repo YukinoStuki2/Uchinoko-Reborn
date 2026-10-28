@@ -112,6 +112,7 @@ import convert_noue  # noqa: E402 (U50-fast: M_VPバリアント選択をフル�
 # ためのimport(pipeline\ 配下のソースは一切変更しない、importして使うだけ)。
 import build_pak_from_avatar  # noqa: E402 (dev#1494: DT_PACKAGE_NAME定数の共有)
 import sway_abp_build  # noqa: E402 (dev#1494: sway_abp_pak_entries()の再利用)
+from sway_node_overrides import load_node_overrides, SwayNodeMetadataError
 # dev#7: 生フルパス伏字化の共通実装。元は本ファイルにあった _path_facts/_display_path を
 # pipeline\py\path_privacy.py へ一般化して切り出した(convert.ps1/export_from_unity.ps1
 # からも使う。work\issue_zero\i7\NOTES.md参照)。エイリアス名(_で始まる)は
@@ -324,31 +325,20 @@ def _reuse_sway_hub_reparent(work, bases):
 
 
 def _rebuild_sway_abp(job, work):
-    """sway ABP(dev#19)を持ち越す。
+    """Rebuild physics assets using the same final node metadata as full builds.
 
-    sway ABPはアバター非依存の純関数(job["sway_intensity"]/
-    job["lab_raw_sway_params"]と静的テンプレ
-    `pipeline\\py\\sway_abp_templates\\` だけで決まり、Palworld本体pakも
-    Blender成果も読まない、sway_abp_build.sway_abp_pak_entries()の
-    docstring参照)なので、フル変換(_run_sway_abp_patch())と**同じ公開
-    関数をそのままもう一度呼ぶ**。job.jsonはshadow_lift/unlit以外フル
-    変換時点と同一であることが鮮度ゲート(main()のjob_diff_keys比較)で
-    既に保証されているため、結果はフル変換時とバイト完全一致する
-    (=実質的に「持ち越し」と同義。Palworld本体pakを読まないため
-    再計算のコストも無視できる)。
-
-    job(--job-dir単独指定時はNone)が無ければ、フル変換側もこのフェーズを
-    実行できていない(_run_sway_abp_patch()もjob.json必須でdie()する)ため、
-    同じく何も付加しない(空リスト)。
-
-    戻り値: [(abs_path, rel_path_in_common_mount), ...]。sway無効/未指定
-    ならsway_abp_pak_entries()自身が空リストを返す(既存のno-op設計)。"""
-    if job is None:
+    Shadow/material updates reuse the final donor allocation and its motion
+    overrides. Rebuilding from the global intensity alone would silently erase
+    per-component controls and compatibility angle limits. The job freshness
+    gate still requires a full conversion after changing motion settings.
+    """
+    if job is None or sway_abp_build.hardness_key_for_intensity(job.get("sway_intensity")) is None:
         return []
     out_dir = os.path.join(work, "sway_abp")
     try:
-        return sway_abp_build.sway_abp_pak_entries(job, out_dir)
-    except sway_abp_build.SwayAbpBuildError as e:
+        node_overrides = load_node_overrides(job)
+        return sway_abp_build.sway_abp_pak_entries(job, out_dir, node_overrides=node_overrides)
+    except (sway_abp_build.SwayAbpBuildError, SwayNodeMetadataError) as e:
         raise SystemExit(
             f"failed to rebuild sway ABP pak entries (dev#19, dev#1494): {e}")
 

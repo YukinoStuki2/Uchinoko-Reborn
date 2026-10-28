@@ -224,12 +224,15 @@ def struct_pack_u32(v):
 
 def test_encode_dxt1_matches_pure_python_reference():
     import numpy as np
+    from unittest.mock import patch
     rng = np.random.default_rng(288)
     for name, shape in [("8x8", (8, 8, 4)), ("odd_13x9", (13, 9, 4)), ("6x4", (6, 4, 4))]:
         rgba = rng.integers(0, 256, size=shape, dtype=np.uint8)
-        got = vp_tex.encode_dxt1(rgba)
+        # The original range-fit remains the quality encoder's fallback.
+        with patch.object(vp_tex, '_color_block', vp_tex._color_block_range_fit):
+            got = vp_tex.encode_dxt1(rgba)
         want = _pure_python_encode_dxt1(rgba)
-        check(f"encode_dxt1({name}) matches independent pure-Python reference",
+        check(f"legacy BC1 candidate({name}) matches independent pure-Python reference",
               got == want, f"len got={len(got)} want={len(want)}")
 
 

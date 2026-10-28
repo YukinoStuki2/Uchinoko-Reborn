@@ -71,6 +71,7 @@ if _PIPELINE_PY_DIR not in sys.path:
     sys.path.insert(0, _PIPELINE_PY_DIR)
 
 import i18n  # noqa: E402
+import sway_motion  # noqa: E402
 import sway_identify  # noqa: E402  (dev#1438: 既定enabled判定の唯一の真実の源。
 # bpy非依存の純粋関数モジュールなのでapp_py側から直接importしてよい
 # (sway_chain_dialog.pyが同じ理由で既にimportしているパターンを踏襲)。)
@@ -149,6 +150,8 @@ def _is_default_entry(
         bool(entry.get("enabled", True)) == default_enabled
         and entry.get("hardness", "follow") == "follow"
         and int(entry.get("safety_margin", DEFAULT_SAFETY_MARGIN)) == DEFAULT_SAFETY_MARGIN
+        and sway_motion.sanitize_motion_settings(entry.get("motion")) is None
+        and entry.get("preserve_segments") is not True
     )
 
 
@@ -174,7 +177,7 @@ def _sanitize_entry(entry: Any) -> Optional[Dict[str, Any]]:
     hardness = entry.get("hardness", "follow")
     if hardness not in HARDNESS_CHOICES:
         hardness = "follow"
-    return {
+    result = {
         "bones": list(bones),
         "enabled": bool(entry.get("enabled", True)),
         "hardness": hardness,
@@ -182,6 +185,14 @@ def _sanitize_entry(entry: Any) -> Optional[Dict[str, Any]]:
         "safety_margin": _sanitize_safety_margin(
             entry.get("safety_margin", DEFAULT_SAFETY_MARGIN)),
     }
+    motion = sway_motion.sanitize_motion_settings(entry.get("motion"))
+    if motion is not None:
+        result["motion"] = motion
+    # Experimental topology preservation is independent of motion profiles.
+    # Absent/false/invalid values retain the legacy serialized representation.
+    if entry.get("preserve_segments") is True:
+        result["preserve_segments"] = True
+    return result
 
 
 def load_config(

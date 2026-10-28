@@ -22,7 +22,8 @@
 #     mergeFingersCheck.Checked.ToString() / dropBonesBox.Text.Trim()
 #   shadowBar(影の濃さ)・unlit・force_two_sidedはBlenderプレビューには出ない
 #   (Palworld側のシェーディングにのみ効く)ため、意図的に含まれていない。
-#   本モジュールもこの4要素だけを使い、値を寄せたり閾値で近似したりしない。
+#   Reborn additionally includes size_fit_mode/uniform_scale, since they change
+#   the rendered geometry. Legacy default settings retain the old signature.
 #
 #   C#のbool.ToString()は"True"/"False"(先頭大文字)を返す。Pythonの
 #   str(bool(x))も同じ表記("True"/"False")を返すため、ここは近似ではなく
@@ -51,6 +52,7 @@ if _APP_PY_DIR not in sys.path:
 import pipeline_runner  # noqa: E402
 
 SIG_FILE_NAME = "preview_sig.txt"
+_SIZE_SUFFIX = "|size-v1="
 
 
 def build_preview_sig(
@@ -58,10 +60,13 @@ def build_preview_sig(
     shoulder_offset_deg: int,
     merge_fingers: bool,
     drop_bones_text: str,
+    *,
+    size_fit_mode: str = "legacy",
+    uniform_scale: float = 1.0,
 ) -> str:
     """BuildPreviewSig() L.2402-2408相当。"|"区切りで4要素を結合するだけの
     純関数(ファイルI/Oなし)。"""
-    return "|".join(
+    base = "|".join(
         [
             vrm_path.strip(),
             str(int(shoulder_offset_deg)),
@@ -69,6 +74,11 @@ def build_preview_sig(
             drop_bones_text.strip(),
         ]
     )
+    # Preserve old default signatures while invalidating cached previews for
+    # any sizing change. Rendering has always depended on uniform_scale too.
+    if size_fit_mode == "legacy" and float(uniform_scale) == 1.0:
+        return base
+    return base + _SIZE_SUFFIX + f"{size_fit_mode},{float(uniform_scale):.8g}"
 
 
 def sig_file_path(work_root: str, vrm_path: str) -> str:
@@ -86,6 +96,10 @@ def is_preview_fresh(
     shoulder_offset_deg: int,
     merge_fingers: bool,
     drop_bones_text: str,
+    *,
+    size_fit_mode: str = "legacy",
+    uniform_scale: float = 1.0,
+    allow_size_change: bool = False,
 ) -> bool:
     """IsPreviewFresh() L.2416-2425相当。ファイル無し・読み取り失敗はFalse
     (=stale扱い、C#のtry/catchでfalseを返す分岐と同じ)。"""
@@ -95,9 +109,15 @@ def is_preview_fresh(
             saved = fh.read()
     except OSError:
         return False
-    return saved == build_preview_sig(
-        vrm_path, shoulder_offset_deg, merge_fingers, drop_bones_text
+    expected = build_preview_sig(
+        vrm_path, shoulder_offset_deg, merge_fingers, drop_bones_text,
+        size_fit_mode=size_fit_mode, uniform_scale=uniform_scale,
     )
+    if allow_size_change:
+        # Full conversion rebuilds the geometry. A sizing-only change must
+        # not trap the GUI behind its hidden legacy preview-update button.
+        return saved.rsplit(_SIZE_SUFFIX, 1)[0] == expected.rsplit(_SIZE_SUFFIX, 1)[0]
+    return saved == expected
 
 
 def save_preview_sig(
@@ -106,6 +126,9 @@ def save_preview_sig(
     shoulder_offset_deg: int,
     merge_fingers: bool,
     drop_bones_text: str,
+    *,
+    size_fit_mode: str = "legacy",
+    uniform_scale: float = 1.0,
 ) -> None:
     """SavePreviewSig() L.2427-2430相当。File.WriteAllText(f, sig,
     new UTF8Encoding(false))と同じくBOM無しUTF-8・末尾改行を追加しない。
@@ -117,7 +140,8 @@ def save_preview_sig(
         with open(f, "w", encoding="utf-8", newline="") as fh:
             fh.write(
                 build_preview_sig(
-                    vrm_path, shoulder_offset_deg, merge_fingers, drop_bones_text
+                    vrm_path, shoulder_offset_deg, merge_fingers, drop_bones_text,
+                    size_fit_mode=size_fit_mode, uniform_scale=uniform_scale,
                 )
             )
     except OSError:

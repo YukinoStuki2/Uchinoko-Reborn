@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """U6-T3(ストレッチ): テクスチャ注入(PNG→テンプレート同寸リサイズ→ミップ→
 DXT1/5→uexpバイト注入)。restore_pak.py と同じ既存エンコーダ
-(`vp_core.parse_texture2d`/`vp_tex.decode_png`/`make_mips`/`encode`、いずれも
-無改変・import再利用)を、pakの外(平文uexpファイル)に対して適用する版。
+(`vp_core.parse_texture2d`/`vp_tex.decode_png`/`encode`)を、pakの外
+(平文uexpファイル)に対して適用する版。Opaque albedo resizing uses
+resize_detail; mip filtering averages linear light and keeps GPU dimensions.
 
-v1制約: テンプレートと異なる解像度のPNGは自動リサイズ(ニアレストネイバー)
-して同寸に合わせる(ドキュメント通りの妥協。品質はPSNR実測で報告)。
+テンプレートと異なる解像度のPNGは同寸へフィルタ付きでリサイズする。
 
 U49(2026-07-25): 注入テクスチャの明度補正(shadow_lift接続)。
 docs\\REPORT_U47_2026-07-25.md 1.6節の診断: noue版はUE版M_VP
@@ -25,6 +25,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vp_core
 import vp_tex
+from vp_color_mips import make_opaque_srgb_mips
+from vp_atlas_detail import resize_detail
 
 # U49: 注入系のバージョン痕跡(build_provenance.jsonは書き込み許可外のため、
 # ビルドログ/報告書にこの文字列を残すことで機能追加を追跡できるようにする)
@@ -106,8 +108,8 @@ def inject_texture_file(template_uexp_path, png_path, out_uexp_path, alpha_cover
     """template_uexp_path(cookedテクスチャのuexp)を読み、png_pathのピクセルを
     テンプレートと同フォーマット・同解像度(自動リサイズ)でミップ生成・
     エンコードして注入したバイト列をout_uexp_pathへ書く。
-    alpha_coverage: avatar_meta.jsonのalpha_mode=="MASK"スロット向け
-    (`vp_tex.make_mips`のアルファカバレッジ保存を有効化。既定False=従来どおり)。
+    alpha_coverage: retained for caller compatibility; this opaque injection
+    path forces alpha to 255 before mip generation, so coverage is always complete.
     gain: U49、注入ピクセルのRGBへ掛ける明度ゲイン(`shadow_lift_gain()`参照)。
     既定1.0(無補正、従来どおりのピクセル列)。
     戻り値: {"pixel_format","size_x","size_y","psnr","gain","gain_version"}
@@ -118,7 +120,6 @@ def inject_texture_file(template_uexp_path, png_path, out_uexp_path, alpha_cover
     pf, sx, sy = layout["pixel_format"], layout["size_x"], layout["size_y"]
 
     w, h, rgba = vp_tex.decode_png(png_path)
-    rgba = resize_nearest(rgba, sx, sy)
     # U50-single(2026-07-25、責任者裁定「透過非対応」): 注入するピクセルの
     # アルファは常に255で埋める。
     # ここに置く理由: アトラス経路(vp_atlas.build_atlas_image)はcanvasを255で
@@ -136,18 +137,26 @@ def inject_texture_file(template_uexp_path, png_path, out_uexp_path, alpha_cover
     # 既存アバターはextend_opaque_colorがno-opのためバイト単位で無変化。
     rgba = rgba.copy()
     rgba = vp_tex.extend_opaque_color(rgba)
+    # Source alpha selects conservative filtering for inferred padding colors.
+    rgba = resize_detail(rgba, sx, sy)
     rgba[:, :, 3] = 255
     rgba = apply_brightness_gain(rgba, gain)
 
-    mips = vp_tex.make_mips(rgba, len(layout["mips"]), alpha_coverage=alpha_coverage)
+    # This path injects opaque sRGB albedo. Average light values, retaining the
+    # original mip dimensions, alpha policy and mip-zero pixels.
+    mips = make_opaque_srgb_mips(rgba, len(layout["mips"]))
+    top_blob = None
     for m, img in zip(layout["mips"], mips):
         blob = vp_tex.encode(img, pf)
         if len(blob) != m["size"]:
             raise RuntimeError(
                 f"encoded size mismatch {m['w']}x{m['h']}: {len(blob)} != {m['size']}")
         data[m["offset"]:m["offset"] + m["size"]] = blob
+        if top_blob is None:
+            top_blob = blob
 
-    decoded0 = vp_tex.decode_dxt(vp_tex.encode(mips[0], pf), sx, sy, pf)
+    # Measure the bytes actually written, without encoding the largest mip twice.
+    decoded0 = vp_tex.decode_dxt(top_blob, sx, sy, pf)
     psnr = vp_tex.psnr(mips[0], decoded0)
 
     os.makedirs(os.path.dirname(out_uexp_path) or ".", exist_ok=True)
@@ -188,20 +197,24 @@ def inject_texture_file_vanilla_slot(template_uexp_path, template_ubulk_path, pn
             ubulk = bytearray(f.read())
 
     w, h, rgba = vp_tex.decode_png(png_path)
-    rgba = resize_nearest(rgba, sx, sy)
     rgba = rgba.copy()
     rgba = vp_tex.extend_opaque_color(rgba)
+    # Preserve the same source-alpha filter decision as the atlas/inline path.
+    rgba = resize_detail(rgba, sx, sy)
     rgba[:, :, 3] = 255
     rgba = apply_brightness_gain(rgba, gain)
 
-    mips = vp_tex.make_mips(rgba, len(layout["mips"]))
+    mips = make_opaque_srgb_mips(rgba, len(layout["mips"]))
     n_inline = 0
     n_ubulk = 0
+    top_blob = None
     for m, img in zip(layout["mips"], mips):
         blob = vp_tex.encode(img, pf)
         if len(blob) != m["size"]:
             raise RuntimeError(
                 f"encoded size mismatch {m['w']}x{m['h']}: {len(blob)} != {m['size']}")
+        if top_blob is None:
+            top_blob = blob
         if m["inline"]:
             data[m["offset"]:m["offset"] + m["size"]] = blob
             n_inline += 1
@@ -209,7 +222,7 @@ def inject_texture_file_vanilla_slot(template_uexp_path, template_ubulk_path, pn
             ubulk[m["abs_off"]:m["abs_off"] + m["size"]] = blob
             n_ubulk += 1
 
-    decoded0 = vp_tex.decode_dxt(vp_tex.encode(mips[0], pf), sx, sy, pf)
+    decoded0 = vp_tex.decode_dxt(top_blob, sx, sy, pf)
     psnr = vp_tex.psnr(mips[0], decoded0)
 
     os.makedirs(os.path.dirname(out_uexp_path) or ".", exist_ok=True)

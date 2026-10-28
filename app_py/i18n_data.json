@@ -1,4 +1,61 @@
 {
+ "MotionTitle": {
+  "ja": "部位ごとの揺れ調整", "en": "Component motion", "ko": "부위별 흔들림", "zhTW": "部件動態調節", "zhCN": "部件动态调节"
+ },
+ "MotionPreserveSegments": {
+  "ja": "ボーン鎖の節数を保持（実験的）", "en": "Preserve bone-chain segments (experimental)", "ko": "본 체인 마디 수 유지 (실험적)", "zhTW": "保留骨鏈節數（實驗）", "zhCN": "保留骨链节数（实验）"
+ },
+ "MotionPreserveSegmentsHint": {
+  "ja": "長い尻尾などに適しています。再変換が必要です。関節が増えても物理コンポーネント数は増えません。この部位を有効にした場合のみ適用されます。", "en": "Suited to long tails. Requires reconversion. Extra joints do not add physics components. Applies only while this component is enabled.", "ko": "긴 꼬리 등에 적합합니다. 다시 변환해야 합니다. 관절이 늘어나도 물리 컴포넌트 수는 늘어나지 않습니다. 이 부위를 활성화한 경우에만 적용됩니다.", "zhTW": "適合長尾等部件，需要重新轉換。新增關節不會增加物理組件數量；僅在該部件啟用時生效。", "zhCN": "适合长尾等部件，需要重新转换。新增关节不会增加物理组件数量；仅在该部件启用时生效。"
+ },
+ "MotionProfileLabel": {
+  "ja": "変換方法", "en": "Conversion profile", "ko": "변환 방식", "zhTW": "適配方式", "zhCN": "适配方式"
+ },
+ "MotionProfileLegacy": {
+  "ja": "全体設定に従う", "en": "Legacy (follow global setting)", "ko": "기존 방식 (전체 설정)", "zhTW": "原有方式（跟隨全域設定）", "zhCN": "原有方式（跟随全局设置）"
+ },
+ "MotionProfileSource": {
+  "ja": "元のPhysBone設定を安全に近似", "en": "Adapt source PhysBone settings", "ko": "원본 PhysBone 설정 근사", "zhTW": "源參數適配（有限幅度近似）", "zhCN": "源参数适配（有限幅度近似）"
+ },
+ "MotionProfileCalm": {
+  "ja": "控えめ（衣服・髪向け）", "en": "Calm (clothing / hair)", "ko": "차분하게 (옷 / 머리카락)", "zhTW": "保守預設（衣服／頭髮）", "zhCN": "保守预设（衣服／头发）"
+ },
+ "MotionAmount": {
+  "ja": "揺れの大きさ (%)", "en": "Motion amount (%)", "ko": "흔들림 크기 (%)", "zhTW": "擺動幅度 (%)", "zhCN": "摆动幅度 (%)"
+ },
+ "MotionDamping": {
+  "ja": "減衰を指定（大ほど早く収束）", "en": "Override damping (higher settles faster)", "ko": "감쇠 지정 (높을수록 빠르게 안정)", "zhTW": "指定阻尼（越大越快停止晃動）", "zhCN": "指定阻尼（越大越快停止晃动）"
+ },
+ "MotionGravity": {
+  "ja": "下向きの力を指定（既定0）", "en": "Override downward force (default 0)", "ko": "하향 힘 지정 (기본 0)", "zhTW": "指定下垂力（預設 0）", "zhCN": "指定下垂力（默认 0）"
+ },
+ "MotionEditorHint": {
+  "ja": "未指定の減衰は自動、下向きの力は0です。変更は再変換後に反映されます。VRChatの衝突や面制約の完全再現ではありません。小さい角度制限は維持されます。", "en": "Unchecked damping uses the profile; downward force defaults to 0. Reconvert to apply. VRChat colliders and plane constraints are not reproduced. Existing smaller angle limits remain in effect.", "ko": "감쇠 미지정 시 자동, 하향 힘 기본값은 0입니다. 재변환 후 적용됩니다. VRChat 충돌 및 평면 제약은 재현하지 않습니다.", "zhTW": "未勾選時阻尼自動、下垂力為 0。儲存後重新轉換才生效。這是有限幅度近似，不會完整複製 VRChat 碰撞器或平面約束；原有更小的角度限制仍有效。", "zhCN": "未勾选时阻尼自动、下垂力为 0。保存后重新转换才生效。这是有限幅度近似，不会完整复制 VRChat 碰撞器或平面约束；原有更小的角度限制仍有效。"
+ },
+ "MotionPanelHint": {
+  "ja": "揺れる部位は左のチェックで選択します（同時に最大9チェーン）。一括設定は有効な部位のみ。Hinge/Polarを手動で有効にすると小角度の互換近似になります。調整後は再変換してください。", "en": "Choose moving components using the left checkboxes (up to 9 chains). Bulk profiles affect enabled components only. Manually enabled Hinge/Polar constraints use a small-angle approximation. Reconvert after editing.", "ko": "왼쪽 체크로 부위를 선택하세요 (최대 9 체인). 일괄 설정은 활성 부위만 적용합니다. Hinge/Polar는 수동 활성 시 작은 각도로 근사합니다. 수정 후 재변환하세요.", "zhTW": "左側勾選要啟用的部件（同時最多 9 條骨鏈）。批次設定僅修改已勾選部件；手動啟用 Hinge／Polar 將使用小角度相容近似。可逐部件調幅度，修改後需重新轉換。", "zhCN": "左侧勾选要启用的部件（同时最多 9 条骨链）。批量设置仅修改已勾选部件；手动启用 Hinge／Polar 将使用小角度兼容近似。可逐部件调幅度，修改后需重新转换。"
+ },
+ "MotionApplySource": {
+  "ja": "有効な部位に源設定を適用", "en": "Adapt enabled components", "ko": "활성 부위 원본 적용", "zhTW": "已勾選：源參數適配", "zhCN": "已勾选：源参数适配"
+ },
+ "MotionApplyCalm": {
+  "ja": "有効な部位を控えめに", "en": "Calm enabled components", "ko": "활성 부위 차분하게", "zhTW": "已勾選：保守預設", "zhCN": "已勾选：保守预设"
+ },
+ "MotionClearEnabled": {
+  "ja": "有効な部位の調整を解除", "en": "Reset enabled motion profiles", "ko": "활성 부위 조정 초기화", "zhTW": "已勾選：恢復原有方式", "zhCN": "已勾选：恢复原有方式"
+ },
+ "MotionConfigure": {
+  "ja": "揺れ調整…", "en": "Motion…", "ko": "흔들림…", "zhTW": "動態參數…", "zhCN": "动态参数…"
+ },
+ "MotionConfigureActive": {
+  "ja": "揺れ調整 ✓", "en": "Motion ✓", "ko": "흔들림 ✓", "zhTW": "動態參數 ✓", "zhCN": "动态参数 ✓"
+ },
+ "MotionReset": {
+  "ja": "全体設定に戻す", "en": "Restore legacy settings", "ko": "기존 설정 복원", "zhTW": "恢復原有方式", "zhCN": "恢复原有方式"
+ },
+ "MotionEnabled": {
+  "ja": "この部位を有効にする（特殊制約は互換近似）", "en": "Enable component (special constraints use an approximation)", "ko": "부위 활성화 (특수 제약은 근사)", "zhTW": "啟用此部件（特殊約束使用相容近似）", "zhCN": "启用此部件（特殊约束使用兼容近似）"
+ },
  "LabelLanguage": {
   "ja": "Language",
   "en": "Language",
@@ -119,11 +176,11 @@
   "zhCN": "阴影浓度:"
  },
  "TipShadowBar": {
-  "ja": "100%=ふつうの影 / 下げるほど影の中でも明るく見えます(既定30%)。\n反映は「フル変換」または「影のみ更新」の後、ゲーム内で確認できます",
-  "en": "100% = normal shadow / the lower the value, the brighter shadows appear (default 30%).\nCheck the result in-game after \"Full Convert\" or \"Update Shadow Only\".",
-  "ko": "100%=일반 그림자 / 낮출수록 그림자 안도 밝게 보입니다(기본값 30%).\n적용 결과는 「전체 변환」 또는 「그림자만 업데이트」 후 게임에서 확인할 수 있습니다",
-  "zhTW": "100%=一般陰影 / 數值越低,陰影內也會顯示得越亮(預設 30%)。\n套用後請在「完整轉換」或「僅更新陰影」執行後於遊戲內確認",
-  "zhCN": "100%=一般阴影 / 数值越低,阴影内也会显示得越亮(默认 30%)。\n应用后请在「完整转换」或「仅更新阴影」执行后在游戏内确认"
+  "ja": "100%=環境光に合わせた通常の陰影(既定)。下げるほど自己発光が増え、暗い場所でも明るく見えます。\n反映は「フル変換」または「影のみ更新」の後、ゲーム内で確認できます",
+  "en": "100% = normal environment lighting (default). Lower values add emission and keep the model bright in dark areas.\nCheck the result in-game after \"Full Convert\" or \"Update Shadow Only\".",
+  "ko": "100%=환경광을 따르는 일반 그림자(기본값). 낮출수록 자체 발광이 늘어 어두운 곳에서도 밝게 보입니다.\n적용 결과는 「전체 변환」 또는 「그림자만 업데이트」 후 게임에서 확인할 수 있습니다",
+  "zhTW": "100%=正常跟隨環境光(預設)。數值越低，自發光越強，在暗處也會保持明亮。\n套用後請在「完整轉換」或「僅更新陰影」執行後於遊戲內確認",
+  "zhCN": "100%=正常跟随环境光(默认)。数值越低，自发光越强，在暗处也会保持明亮。\n应用后请在「完整转换」或「仅更新阴影」执行后在游戏内确认"
  },
  "BtnMatsOnly": {
   "ja": "影のみ更新(高速)",
@@ -139,6 +196,27 @@
   "zhTW": "僅變更陰影濃度並重新建立 MOD(約 1 分鐘。完整轉換約需 6 分鐘)。\n前提是這個角色模型已經執行過一次「完整轉換」(未執行過則無法按下此按鈕)。\n若變更了陰影濃度以外的設定(如刪除骨骼等),請改按「完整轉換」",
   "zhCN": "仅更改阴影浓度并重新生成 MOD(约 1 分钟。完整转换约需 6 分钟)。\n前提是该角色模型已执行过一次「完整转换」(未执行则无法点击此按钮)。\n如果更改了阴影浓度以外的设置(如删除骨骼等),请改为点击「完整转换」"
  },
+ "CheckVanillaSize": {
+  "ja": "標準プレイヤーのサイズに合わせる",
+  "en": "Match vanilla player size",
+  "ko": "기본 플레이어 크기에 맞춤",
+  "zhTW": "匹配原版人物尺寸",
+  "zhCN": "匹配原版人物尺寸"
+ },
+ "TipVanillaSize": {
+  "ja": "頭から両足首までの骨格の高さを標準プレイヤーに合わせ、全体を等比で調整します。帽子や耳などは測定に含みません。身長スライダーで追加調整できます。変更後は「フル変換」が必要です。既存モデルは以前の設定を保持します。",
+  "en": "Uniformly matches the skeleton's head-to-ankle height to the vanilla player, excluding hats and ears. The height slider adds a proportional adjustment. Changes require Full Convert. Existing models keep their saved sizing.",
+  "ko": "모자와 귀를 제외한 머리에서 양쪽 발목까지의 골격 높이를 기본 플레이어에 맞춰 전체를 동일 비율로 조정합니다. 키 슬라이더로 추가 조정할 수 있습니다. 변경 후 전체 변환이 필요합니다. 기존 모델은 저장된 크기를 유지합니다.",
+  "zhTW": "以頭部到兩腳踝的骨架高度匹配原版人物，整個模型等比例調整，不把帽子、耳朵等配件算進身高。身高滑桿可再做比例微調。更改後需要「完整轉換」；舊模型保留原來的尺寸設定。",
+  "zhCN": "以头部到两脚踝的骨架高度匹配原版人物，整个模型等比例调整，不把帽子、耳朵等配件算进身高。身高滑杆可再做比例微调。更改后需要「完整转换」；旧模型保留原来的尺寸设置。"
+ },
+ "MsgSizeNeedsFullConvert": {
+  "ja": "サイズ設定が前回のビルドと異なるか、古いビルドのサイズを確認できません。「フル変換」で骨格と物理を再生成してください。",
+  "en": "The size settings differ from the last build, or this older build has no size record. Use Full Convert to rebuild the skeleton and physics.",
+  "ko": "크기 설정이 이전 빌드와 다르거나 이전 빌드의 크기를 확인할 수 없습니다. 전체 변환으로 골격과 물리를 다시 생성하세요.",
+  "zhTW": "尺寸設定與上次建構不符，或舊建構沒有可驗證的尺寸記錄。請用「完整轉換」重新生成骨架與物理效果。",
+  "zhCN": "尺寸设置与上次构建不符，或旧构建没有可验证的尺寸记录。请用「完整转换」重新生成骨架与物理效果。"
+ },
  "LabelHeightScale": {
   "ja": "身長:",
   "en": "Height:",
@@ -147,11 +225,11 @@
   "zhCN": "身高:"
  },
  "TipHeightScale": {
-  "ja": "100%=そのままの身長 / 50%〜200%の範囲で全体の大きさを調整します(既定100%)。\n反映は「フル変換」の後、ゲーム内で確認できます",
-  "en": "100% = original height / adjusts overall size from 50% to 200% (default 100%).\nCheck the result in-game after \"Full Convert\".",
-  "ko": "100%=원래 키 / 50%〜200% 범위에서 전체 크기를 조정합니다(기본값 100%).\n적용 결과는 「전체 변환」 후 게임에서 확인할 수 있습니다",
-  "zhTW": "100%=原始身高 / 可在 50%〜200% 範圍內調整整體大小(預設 100%)。\n套用後請在「完整轉換」執行後於遊戲內確認",
-  "zhCN": "100%=原始身高 / 可在 50%〜200% 范围内调整整体大小(默认 100%)。\n应用后请在「完整转换」执行后在游戏内确认"
+  "ja": "選択したサイズ基準に対し、全体を50%〜200%の範囲で等比調整します。100%は追加調整なしです。\n変更後は「フル変換」が必要です。",
+  "en": "Adds a uniform 50%–200% adjustment to the selected sizing mode. 100% means no extra adjustment.\nChanges require Full Convert.",
+  "ko": "선택한 크기 기준에 전체를 50%–200% 비율로 조정합니다. 100%는 추가 조정 없음입니다.\n변경 후 전체 변환이 필요합니다.",
+  "zhTW": "在目前尺寸基準上，將整體等比例調整為 50%–200%；100% 表示不再額外調整。\n更改後需要「完整轉換」。",
+  "zhCN": "在当前尺寸基准上，将整体等比例调整为 50%–200%；100% 表示不再额外调整。\n更改后需要「完整转换」。"
  },
  "BtnResetHeightScale": {
   "ja": "リセット",
@@ -2044,11 +2122,11 @@
   "zhCN": "摆动程度:"
  },
  "TipSwayIntensity": {
-  "ja": "しっぽや耳などの揺れの強さをまとめて選びます(既定: ふつう)。",
-  "en": "Chooses the overall sway strength for tails, ears, etc. (default: Normal).",
-  "ko": "꼬리나 귀 등의 흔들림 세기를 한꺼번에 선택합니다(기본값: 보통).",
-  "zhTW": "統一選擇尾巴、耳朵等的搖動強度(預設:普通)。",
-  "zhCN": "统一选择尾巴、耳朵等的摆动强度(默认:普通)。"
+  "ja": "既定の「自動」は元のPhysBone設定から揺れを調整し、対応する骨の節を保ちます。固め・ふつう・やわらかめはプリセットで一括調整し、なしは揺れを無効にします。変換後の診断で対象部位と制限を確認できます。",
+  "en": "Auto (default) adapts the source PhysBone settings and preserves supported chain joints. Firm, Normal and Soft use the existing overall presets; None disables sway. Check the conversion report for included components and limits.",
+  "ko": "기본값인 자동은 원본 PhysBone 설정을 적용하고 지원되는 체인의 관절을 유지합니다. 단단하게·보통·부드럽게는 기존 전체 프리셋이며, 없음은 흔들림을 끕니다. 변환 보고서에서 적용 부위와 제한을 확인하세요.",
+  "zhTW": "預設「自動」會依來源 PhysBone 設定調整動態，並保留可支援的骨鏈關節。偏硬、普通、偏軟使用原有整體預設；無則關閉動態。轉換報告會列出生效部件與限制。",
+  "zhCN": "默认“自动”会按源 PhysBone 设置适配动态，并保留可支持的骨链关节。偏硬、普通、偏软使用原有整体预设；无则关闭动态。转换报告会列出生效部件与限制。"
  },
  "LabelSwayEnable": {
   "ja": "ゆらす:",
@@ -2070,6 +2148,13 @@
   "ko": "없음",
   "zhTW": "無",
   "zhCN": "无"
+ },
+ "SwayIntensityAuto": {
+  "ja": "自動",
+  "en": "Auto",
+  "ko": "자동",
+  "zhTW": "自動",
+  "zhCN": "自动"
  },
  "SwayIntensityHard": {
   "ja": "固め",
@@ -2716,5 +2801,89 @@
   "ko": "(자동) {0}",
   "zhTW": "（自動）{0}",
   "zhCN": "（自动）{0}"
+ },
+ "TitleOutputDirectory": {
+  "ja": "出力フォルダー",
+  "en": "Output directory",
+  "ko": "출력 폴더",
+  "zhTW": "輸出目錄",
+  "zhCN": "输出目录"
+ },
+ "BtnOutputDirectory": {
+  "ja": "出力フォルダー…",
+  "en": "Output directory…",
+  "ko": "출력 폴더…",
+  "zhTW": "輸出目錄…",
+  "zhCN": "输出目录…"
+ },
+ "BtnOpenOutputDirectory": {
+  "ja": "開く",
+  "en": "Open folder",
+  "ko": "폴더 열기",
+  "zhTW": "開啟目錄",
+  "zhCN": "打开目录"
+ },
+ "BtnSaveOutputDirectory": {
+  "ja": "保存して使用",
+  "en": "Save and use",
+  "ko": "저장 후 사용",
+  "zhTW": "儲存並使用",
+  "zhCN": "保存并使用"
+ },
+ "OutputDirectoryHelp": {
+  "ja": "変換モデル、Unity出力、プレビューを保存する固定フォルダーです。設定はアプリ更新後も引き継がれます。変更時に以前のファイルは移動しません。",
+  "en": "Choose a fixed folder for converted models, Unity exports and previews. Updates retain this setting. Changing it does not move existing files.",
+  "ko": "변환 모델, Unity 내보내기 및 미리보기를 저장할 고정 폴더입니다. 업데이트 후에도 유지됩니다. 변경 시 기존 파일을 이동하지 않습니다.",
+  "zhTW": "指定轉換模型、Unity 匯出與預覽的固定儲存目錄。更新程式後仍保留設定；變更時不會搬移原有檔案。",
+  "zhCN": "指定转换模型、Unity 导出和预览的固定存放目录。更新软件后仍保留此设置；更改时不会搬动原有文件。"
+ },
+ "MsgOutputDirectoryBusy": {
+  "ja": "変換、Unity出力、共通データ準備の完了後に出力フォルダーを変更してください。",
+  "en": "Wait for conversion, Unity export or cache preparation to finish before changing the output directory.",
+  "ko": "변환, Unity 내보내기 또는 캐시 준비가 끝난 후 출력 폴더를 변경하세요.",
+  "zhTW": "請等待轉換、Unity 匯出或快取準備完成後，再變更輸出目錄。",
+  "zhCN": "请等待转换、Unity 导出或缓存准备完成后，再更改输出目录。"
+ },
+ "MsgOutputDirectorySaveFailed": {
+  "ja": "出力フォルダーを保存できませんでした。以前の設定を維持します。\n\n{0}",
+  "en": "The output directory could not be saved. The previous setting is retained.\n\n{0}",
+  "ko": "출력 폴더를 저장하지 못했습니다. 이전 설정이 유지됩니다.\n\n{0}",
+  "zhTW": "無法儲存輸出目錄，仍保留原設定。\n\n{0}",
+  "zhCN": "无法保存输出目录，仍保留原设置。\n\n{0}"
+ },
+ "MsgOutputDirectoryMissing": {
+  "ja": "このフォルダーは存在しません。先に保存するか、既存のフォルダーを選んでください。",
+  "en": "This folder does not exist. Save it first or choose an existing folder.",
+  "ko": "이 폴더가 없습니다. 먼저 저장하거나 기존 폴더를 선택하세요.",
+  "zhTW": "此目錄不存在，請先儲存或選取現有目錄。",
+  "zhCN": "此目录不存在，请先保存或选择已有目录。"
+ },
+ "MsgOutputDirectoryInvalid": {
+  "ja": "出力フォルダー設定を確認してください",
+  "en": "Check output directory settings",
+  "ko": "출력 폴더 설정 확인",
+  "zhTW": "請檢查輸出目錄設定",
+  "zhCN": "请检查输出目录设置"
+ },
+ "MsgConfiguredOutputUnavailable": {
+  "ja": "設定済みの出力フォルダーを使用できません：\n{0}\n\n{1}\n\n出力フォルダー設定から修正してください。別の場所へ自動的に保存しません。",
+  "en": "The configured output directory is unavailable:\n{0}\n\n{1}\n\nCorrect it in Output directory settings. Files will not be silently saved elsewhere.",
+  "ko": "설정된 출력 폴더를 사용할 수 없습니다:\n{0}\n\n{1}\n\n출력 폴더 설정을 수정하세요. 다른 위치에 자동 저장하지 않습니다.",
+  "zhTW": "設定的輸出目錄無法使用：\n{0}\n\n{1}\n\n請在「輸出目錄」中修正；程式不會自動改存其他位置。",
+  "zhCN": "设置的输出目录无法使用：\n{0}\n\n{1}\n\n请在“输出目录”中修正；程序不会自动改存到其他位置。"
+ },
+ "MsgLinkedModelReadOnly": {
+  "ja": "このモデルは以前の保存先へのリンクです。読み込みと復元はできますが、再変換には新しいモデル名または別の出力フォルダーを使用してください。",
+  "en": "This model links to a historical folder. It can be read and restored. To convert again, use a new model name or another output directory.",
+  "ko": "이 모델은 이전 폴더에 연결되어 있습니다. 읽기와 복원은 가능하지만 다시 변환하려면 새 모델 이름이나 다른 출력 폴더를 사용하세요.",
+  "zhTW": "此模型連結至歷史目錄，可讀取和還原。若要重新轉換，請使用新的模型名稱或其他輸出目錄。",
+  "zhCN": "此模型链接到历史目录，可以读取和恢复。若要重新转换，请使用新的模型名称或另一个输出目录。"
+ },
+ "NoteLinkedModelDelete": {
+  "ja": "この操作は一覧のリンクだけを削除します。リンク先の以前のモデルは削除しません。",
+  "en": "Only the library link will be removed. The historical model at its target will be kept.",
+  "ko": "목록의 링크만 삭제합니다. 대상 폴더의 이전 모델은 유지됩니다.",
+  "zhTW": "此操作僅移除模型庫中的連結，不會刪除連結目標的歷史模型。",
+  "zhCN": "此操作仅移除模型库中的链接，不会删除链接目标的历史模型。"
  }
 }

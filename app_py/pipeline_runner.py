@@ -72,6 +72,7 @@ import lab_raw_sway_params_store  # noqa: E402  (dev#1418ラボ機能「生パ�
 # 全解放パネル」、work\wp_1418_rawparam\BRIEF.md: equipment_filter_store等と
 # 同じ理由でtkinter非依存モジュールのみをimportする。)
 import settings  # noqa: E402
+import work_paths  # noqa: E402
 import sway_chain_override_store  # noqa: E402  (dev#19揺れものUIプロトタイプ、
 # work\rd_19_flight\briefs\uimock2_embedded.md: ラボ「揺れもの詳細設定」の
 # 選択状態読み出し。equipment_filter_store等と同じ理由でtkinter非依存
@@ -220,6 +221,16 @@ def read_job(job_json_path: str) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 
+def validate_output_job_dir(work_root: str, vrm_path: str) -> str:
+    name = sanitize_name(os.path.splitext(os.path.basename(vrm_path))[0])
+    job_dir = os.path.join(work_root, name)
+    work_paths.require_direct_job_child(work_root, job_dir)
+    work_paths.require_local_output(job_dir)
+    if vrm_path.lower().endswith(".prefab"):
+        work_paths.require_local_output(resolve_unity_export_out_dir(work_root, vrm_path))
+    return job_dir
+
+
 def write_job(
     app_root: str,
     work_root: str,
@@ -229,11 +240,12 @@ def write_job(
     merge_fingers: bool = False,
     unlit: bool = False,
     force_two_sided: bool = True,
-    shadow_bar_value: int = 30,
+    shadow_bar_value: int = 100,
     drop_bones_text: str = "",
     license_confirmed: bool = False,
     uniform_scale: float = 1.0,
-    sway_intensity: str = "normal",
+    size_fit_mode: str = "legacy",
+    sway_intensity: str = "auto",
 ) -> str:
     """WriteJob() L.1771-1817相当。job.jsonを書き出し、そのファイルパスを返す。
 
@@ -255,14 +267,15 @@ def write_job(
     apply_output_scale()側が早期returnする完全no-opのため、このキーワード
     引数を省略する既存呼び出し元(未変更のまま)には一切影響が無い。
 
-    sway_intensity(dev#1572、2026-08-18裁定「かたさが配線されていない問題」
-    案C、v2.11方式の復元): 標準機能「揺れの度合い」(main_window.py
-    swayIntensityBar)の4択、値は"none"/"soft"/"normal"/"hard"。dev#1508
-    W2b(2026-08-16)がこれを一時的にON/OFFトグルへ置換していたが、本WPで
-    4択へ復元した(個別鎖の「ゆれかた」調整UIは画面から隠蔽、標準機能の
-    この4択のみが揺れの強さを選ぶ手段になる)。
+    size_fit_mode: "vanilla" matches the original player's head-to-ankle
+    span before the additional uniform_scale adjustment. "legacy" preserves
+    the former torso-based fit for existing headless callers.
 
-    job["sway_intensity"]は"soft"/"normal"/"hard"のいずれかのときだけ
+    sway_intensity: "auto" (new default), "none", or the existing
+    "soft"/"normal"/"hard" presets. Auto writes sway_adaptation="physbone-v1"
+    with normal as the fallback preset. Explicit old presets do not opt in.
+
+    job["sway_intensity"]は有効時に"soft"/"normal"/"hard"として
     書く("none"のときはキー自体を省略する——dev#19プロトタイプ時代からの
     元々の設計そのもの、ラボ憲章④「既定値のときは未実装状態と完全に同一」
     と同型)。この値はpipeline\\py\\sway_abp_build.py
@@ -276,10 +289,8 @@ def write_job(
     auto_assign_sway_chains()・pipeline\\py\\preflight_pak.py等)が「揺れもの
     処理そのものを行うか」のゲートとして直接読んでおり、どのdonor鎖を採用
     するか(候補判定・無偏向判定・量子化)を決める別軸のロジックのため、
-    4択のうちどれを選んでも(soft/normal/hardいずれでも)Trueを書く
-    ——4択は「選ばれた鎖にどの硬さを刻印するか」だけを制御し、「どの鎖を
-    選ぶか」には関与しない(この2軸の分離はW1c/W2a-1導入時からの既存設計、
-    本WPはそこへ触れていない)。
+    auto/soft/normal/hardでTrueを書く。autoはさらに源設定適応を有効にし、
+    既存プリセットは従来の硬さ設定だけを使う。
 
     旧`sway_enabled`(bool、dev#1508 W2b由来のGUI内部専用キー)は本WPで
     廃止した——job.jsonへは二度と書かない。ただしmain_window.py
@@ -287,8 +298,10 @@ def write_job(
     されたもの)を読んだ場合の移行規則を持つ(True→"normal"、False→
     "none")。
     """
+    if size_fit_mode not in ("legacy", "vanilla"):
+        raise ValueError(f"Unknown size_fit_mode: {size_fit_mode!r}")
     name = sanitize_name(os.path.splitext(os.path.basename(vrm_path))[0])
-    job_dir = os.path.join(work_root, name)
+    job_dir = validate_output_job_dir(work_root, vrm_path)
     os.makedirs(job_dir, exist_ok=True)
 
     blender = find_blender(app_root)
@@ -326,6 +339,7 @@ def write_job(
         "license_confirmed": bool(license_confirmed),
         "engine_mode": ENGINE_MODE,
         "uniform_scale": uniform_scale_clamped,
+        "size_fit_mode": size_fit_mode,
         # dev#1230(2026-08-08オーナー裁定): ユーザーサイド(このGUI経由)の
         # 変換フローは常にpreflight非ブロック(FAIL時もpakを完成させ、
         # GUIが警告ダイアログを出す)。devtools\relgate.py/release.pyが
@@ -427,17 +441,14 @@ def write_job(
         if springbones:
             job["springbones"] = springbones
 
-    # dev#1572(2026-08-18裁定、案C: v2.11方式の復元、docstring参照):
-    # 標準機能「揺れの度合い」4択(なし/やわらかめ/ふつう/かため)を
-    # job["sway_intensity"]("soft"/"normal"/"hard")+job["sway_enable"]
-    # (bool、アロケータのゲート)へ書く。"none"のときはどちらのキーも
-    # 書かない——ラボ憲章④(既定値のときは未実装状態と完全に同一)を
-    # ここでも踏襲する(dev#19プロトタイプ時代の元の設計そのもの)。
-    # 旧`sway_enabled`(bool、dev#1508 W2b由来のGUI内部専用キー)はもう
-    # 書かない(job.jsonへ出力するのは本WPで廃止、docstring参照)。
-    if sway_intensity in ("soft", "normal", "hard"):
-        job["sway_intensity"] = sway_intensity
+    # Auto uses the versioned source-adaptation mode with a normal fallback.
+    # Explicit old presets retain their old meaning. None/unknown writes no
+    # sway fields, including the adaptation marker, so retry stays disabled.
+    if sway_intensity in ("auto", "soft", "normal", "hard"):
+        job["sway_intensity"] = "normal" if sway_intensity == "auto" else sway_intensity
         job["sway_enable"] = True
+        if sway_intensity == "auto":
+            job["sway_adaptation"] = "physbone-v1"
 
     # dev#19揺れものUIプロトタイプ(仕様2-3): ラボ「揺れもの詳細設定」で
     # 保存済みのチェーン単位の上書き(ON/OFF・かたさ・手動追加・安全域)の
@@ -848,6 +859,111 @@ _AVATAR_WARNING_TEMPLATES: list[tuple[re.Pattern, dict[str, str]]] = [
 ]
 
 
+def _translate_sway_report(raw: str, lang: str) -> Optional[str]:
+    """Translate the compact JSON note emitted with the existing warning marker.
+
+    The marker carries facts only; completion wording remains in the GUI's
+    translation layer. Malformed/newer markers fall back to their original text.
+    """
+    prefix = "SWAY_REPORT_V1 "
+    if not raw.startswith(prefix):
+        return None
+    labels = {
+        "zhCN": ("动态独立节点分配", "女性", "男性", "未知", "节点容量", "个源部件",
+                 "未获独立节点", "特殊约束未自动启用", "无权重", "设置中关闭", "安全排除",
+                 "姿态排除", "骨", "报告", "上列未启用部件保持静态；主动关闭及无权重项不属于转换错误。",
+                 "报告输入不完整，详情见报告。", "全局动态关闭，本次未评估部件。"),
+        "zhTW": ("動態獨立節點分配", "女性", "男性", "未知", "節點容量", "個源部件",
+                 "未獲獨立節點", "特殊約束未自動啟用", "無權重", "設定中關閉", "安全排除",
+                 "姿態排除", "骨", "報告", "上述未啟用部件保持靜態；主動關閉及無權重項不屬於轉換錯誤。",
+                 "報告輸入不完整，詳情見報告。", "全域動態關閉，本次未評估部件。"),
+        "en": ("Independent physics node allocation", "Female", "Male", "unknown", "node capacity", "source components",
+               "no independent node allocated", "special limits not enabled", "no mesh weights", "disabled in settings", "safety exclusions",
+               "posture exclusions", "bone", "Report", "The inactive components listed above remain static; disabled or unweighted items are not conversion errors.",
+               "Some report inputs are unavailable; see the report.", "Physics is globally disabled; components were not evaluated."),
+        "ja": ("揺れの適用状況", "女性", "男性", "不明", "ノード容量", "個の元部位",
+               "独立ノード未割り当て", "特殊制約で未適用", "ウェイトなし", "設定で無効", "安全検査で除外",
+               "姿勢の差で除外", "ボーン", "報告", "上記の未適用部位は静止します。無効設定やウェイトなしは変換エラーではありません。",
+               "報告の入力が不完全です。詳細は報告をご確認ください。", "揺れが全体で無効のため、部位を検査していません。"),
+        "ko": ("동적 적용 범위", "여성", "남성", "알 수 없음", "노드 용량", "원본 부위",
+               "독립 노드 미할당", "특수 제약으로 미적용", "가중치 없음", "설정에서 비활성", "안전 검사 제외",
+               "자세 차이로 제외", "뼈", "보고서", "위의 미적용 부위는 정지합니다. 비활성 또는 가중치 없는 항목은 변환 오류가 아닙니다.",
+               "보고서 입력이 불완전합니다. 보고서를 확인하세요.", "전체 흔들림이 비활성화되어 부위를 검사하지 않았습니다."),
+    }
+    words = labels.get(lang, labels["ja"])
+    final_labels = {
+        "zhCN": ("最终安全检查", "通过", "未通过，不能确认动态可用", "未知，缺少有效检查结果", "报告保存失败；转换结果已保留，详情见转换日志。"),
+        "zhTW": ("最終安全檢查", "通過", "未通過，無法確認動態可用", "未知，缺少有效檢查結果", "報告儲存失敗；轉換結果已保留，詳情請見轉換記錄。"),
+        "en": ("Final safety checks", "passed", "failed; physics is not verified", "unknown; valid check results unavailable", "Report could not be saved; conversion outputs are retained. See the conversion log."),
+        "ja": ("最終安全検査", "合格", "不合格、揺れの動作を確認できません", "不明、有効な検査結果がありません", "報告を保存できませんでした。変換結果は保持しています。詳細は変換ログをご確認ください。"),
+        "ko": ("최종 안전 검사", "통과", "실패, 동작을 확인할 수 없음", "알 수 없음, 유효한 검사 결과 없음", "보고서를 저장하지 못했습니다. 변환 결과는 유지됩니다. 변환 로그를 확인하세요."),
+    }
+    final_words = final_labels.get(lang, final_labels["ja"])
+    nested_labels = {
+        "zhCN": ("随父级动态（兼容模式；子参数不单独生效）", "父级动态未启用"),
+        "zhTW": ("隨父級動態（相容模式；子參數不單獨生效）", "父級動態未啟用"),
+        "en": ("follows parent physics (compatibility mode; child settings are not applied independently)", "parent physics unavailable"),
+        "ja": ("親の揺れに追従（互換モード・子の設定は個別に適用しません）", "親の揺れが未適用"),
+        "ko": ("부모 동적 효과 따름 (호환 모드, 자식 설정은 독립 적용되지 않음)", "부모 동적 효과 미적용"),
+    }
+    nested_words = nested_labels.get(lang, nested_labels["ja"])
+    try:
+        data = json.loads(raw[len(prefix):])
+        genders = data["genders"]
+        counts = data["counts"]
+        if not isinstance(genders, dict) or not isinstance(counts, dict):
+            return None
+        names = {"female": words[1], "male": words[2]}
+        rows = []
+        for gender, values in genders.items():
+            if values.get("globally_disabled"):
+                rows.append(names.get(gender, gender) + ": " + words[16])
+            else:
+                active = values.get("active")
+                total = values.get("total")
+                amount = words[3] if active is None or total is None else f"{active}/{total}"
+                capacity = values.get("capacity")
+                rows.append(f"{names.get(gender, gender)} {amount} ({words[4]} {capacity if capacity is not None else words[3]})")
+        lines = [words[0] + ": " + "; ".join(rows)]
+        categories = [("capacity_overflow", words[6]), ("unsupported_limit", words[7]),
+                      ("no_weighted_chain", words[8]), ("disabled", words[9]),
+                      ("nested_parent_unavailable", nested_words[1])]
+        parts = [f"{label} {counts.get(key, 0)}" for key, label in categories if counts.get(key, 0)]
+        if data.get("safety_excluded_components"):
+            parts.append(f"{words[10]} {data['safety_excluded_components']} {words[5]}")
+        if parts:
+            lines.append("; ".join(parts))
+        posture = data.get("posture", [])
+        if posture:
+            details = []
+            for component in posture[:3]:
+                measured = []
+                for measurement in component.get("measurements", []):
+                    gender = measurement.get("gender", "?")
+                    measured.append(f"{names.get(gender, gender)}; {words[12]} {measurement.get('bone', '?')}; "
+                                    f"{measurement.get('angle', '?')}° > {measurement.get('threshold', '?')}°")
+                details.append(f"{component['anchor']} ({'; '.join(measured)})")
+            lines.append(f"{words[11]} {data.get('posture_components', len(posture))} {words[5]}: " + "; ".join(details))
+        if parts:
+            lines.append(words[14])
+        if counts.get("nested_follow_parent"):
+            lines.append(f"{nested_words[0]}: {counts['nested_follow_parent']} {words[5]}")
+        final_statuses = data.get("final_checks", {})
+        final_names = {"passed": final_words[1], "failed": final_words[2], "unknown": final_words[3]}
+        lines.append(final_words[0] + ": " + "; ".join(
+            names.get(gender, gender) + " " + final_names.get(final_statuses.get(gender), final_words[3])
+            for gender in genders))
+        if data.get("input_warnings"):
+            lines.append(words[15])
+        if data.get("report_write_errors"):
+            lines.append(final_words[4])
+        if data.get("report_path"):
+            lines.append(words[13] + ": " + data["report_path"])
+        return "\n".join(lines)
+    except (ValueError, KeyError, TypeError, AttributeError, IndexError):
+        return None
+
+
 def translate_avatar_warning(raw: str, lang: Optional[str] = None) -> str:
     """dev#939 ②: parse_avatar_warning()が抜き出した##AVATAR_WARNING##の中身
     (常に英語)を、現在のUI言語へ翻訳する。translate_progress_label_dynamic
@@ -857,6 +973,9 @@ def translate_avatar_warning(raw: str, lang: Optional[str] = None) -> str:
     if not raw:
         return raw
     use_lang = lang or i18n.current_lang
+    summary = _translate_sway_report(raw, use_lang)
+    if summary is not None:
+        return summary
     for pattern, fmt_table in _AVATAR_WARNING_TEMPLATES:
         m = pattern.match(raw)
         if not m:
@@ -1087,7 +1206,7 @@ class ProcessHandle:
 # バックする」): 揺れ処理起因のエラーで変換全体が失敗したとき、自動的に
 # 揺れ無しで変換をやり直して完走させ、GUIで警告する。
 #
-# 発動条件は「揺れ有効(sway_intensityがsoft/normal/hardのいずれか)で、
+# 発動条件は「揺れ有効(sway_intensityがauto/soft/normal/hardのいずれか)で、
 # フル変換(preview_only/materials_onlyいずれもFalse)が失敗(exit code!=0)」
 # という素朴な形にした(dev#1649指示書どおり「判断の少なさを優先」)。
 # 段階の分類(Blender step02のsway割当なのか、Python側sway_abp_buildなのか、
@@ -1111,7 +1230,7 @@ class ProcessHandle:
 # 返す一方、対象時のみ_SwayFallbackHandleでラップする)。
 # ---------------------------------------------------------------------------
 
-_SWAY_FALLBACK_RETRY_ENABLED_INTENSITIES = frozenset({"soft", "normal", "hard"})
+_SWAY_FALLBACK_RETRY_ENABLED_INTENSITIES = frozenset({"auto", "soft", "normal", "hard"})
 
 
 def _sway_fallback_eligible(sway_intensity: str, preview_only: bool, materials_only: bool) -> bool:
@@ -1139,7 +1258,7 @@ def _clean_job_dir_for_retry(job_dir: Optional[str]) -> None:
     削除に失敗しても(権限・ロック中ファイル等)例外を投げない(fail-open。
     write_job()がos.makedirs(exist_ok=True)するため、削除が一部失敗しても
     既存job_dirへ上書きする形でそのまま再実行を試みられる)。"""
-    if job_dir and os.path.isdir(job_dir):
+    if job_dir and os.path.isdir(job_dir) and not work_paths.is_directory_link(job_dir):
         shutil.rmtree(job_dir, ignore_errors=True)
 
 
@@ -1259,6 +1378,22 @@ class _SwayFallbackHandle:
             self._on_exit(self._primary_code)
 
 
+def size_settings_match_build(
+    work_root: str, vrm_path: str, *, size_fit_mode: str = "legacy",
+    uniform_scale: float = 1.0,
+) -> bool:
+    """Compare against the last cooked build, never a preview's mutable job."""
+    name = sanitize_name(os.path.splitext(os.path.basename(vrm_path))[0])
+    snapshot = read_job(os.path.join(work_root, name, "build", "job_snapshot.json"))
+    if not isinstance(snapshot, dict):
+        return False
+    try:
+        return (snapshot.get("size_fit_mode", "legacy") == size_fit_mode
+                and float(snapshot.get("uniform_scale", 1.0)) == float(uniform_scale))
+    except (TypeError, ValueError):
+        return False
+
+
 def run_pipeline(
     app_root: str,
     work_root: str,
@@ -1272,11 +1407,12 @@ def run_pipeline(
     merge_fingers: bool = False,
     unlit: bool = False,
     force_two_sided: bool = True,
-    shadow_bar_value: int = 30,
+    shadow_bar_value: int = 100,
     drop_bones_text: str = "",
     license_confirmed: bool = False,
     uniform_scale: float = 1.0,
-    sway_intensity: str = "normal",
+    size_fit_mode: str = "legacy",
+    sway_intensity: str = "auto",
     log: Optional[Callable[[str], None]] = None,
 ):
     """RunPipeline() L.2547-2607相当。job.json書き出し→convert.ps1起動までを
@@ -1287,8 +1423,8 @@ def run_pipeline(
     uniform_scale: dev#560 第③段。write_job()へそのまま転送する(docstring
     参照)。
 
-    sway_intensity(dev#1572): 標準機能「揺れの度合い」4択
-    ("none"/"soft"/"normal"/"hard")。write_job()へそのまま転送する
+    sway_intensity: 標準機能「揺れの度合い」5択(autoが新規変換の既定)
+    ("none"/"auto"/"soft"/"normal"/"hard")。write_job()へそのまま転送する
     (write_job()のdocstring参照)。
 
     log(dev#1242申し送り②): find_pwsh()の探索ログを受け取る任意コールバック。
@@ -1301,6 +1437,10 @@ def run_pipeline(
     ときだけ_SwayFallbackHandle(ProcessHandleと同じ形の薄いラッパー)を
     返す。呼び出し側の型注釈上の互換性のため戻り値の型ヒントはあえて
     ProcessHandleへ固定していない(duck typing、コメント参照)。"""
+    if materials_only and not size_settings_match_build(
+        work_root, vrm_path, size_fit_mode=size_fit_mode, uniform_scale=uniform_scale,
+    ):
+        raise ValueError("Size settings differ from the cooked build; Full Convert is required.")
     job_json = write_job(
         app_root,
         work_root,
@@ -1313,6 +1453,7 @@ def run_pipeline(
         drop_bones_text=drop_bones_text,
         license_confirmed=license_confirmed,
         uniform_scale=uniform_scale,
+        size_fit_mode=size_fit_mode,
         sway_intensity=sway_intensity,
     )
     script = build_convert_script_path(app_root)
@@ -1342,6 +1483,7 @@ def run_pipeline(
             drop_bones_text=drop_bones_text,
             license_confirmed=license_confirmed,
             uniform_scale=uniform_scale,
+            size_fit_mode=size_fit_mode,
         ),
         on_line=on_line,
         on_exit=on_exit,
@@ -1369,6 +1511,7 @@ def run_unity_export(
     受け取る任意コールバック。"""
     script = build_unity_export_script_path(app_root)
     out_dir = resolve_unity_export_out_dir(work_root, prefab_path)
+    work_paths.require_local_output(out_dir)
     args = build_unity_export_args(script, prefab_path, out_dir)
     shell = find_pwsh(app_root, log=log)
     handle = ProcessHandle(shell, args, on_line, on_exit)

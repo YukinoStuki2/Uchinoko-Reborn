@@ -107,7 +107,7 @@ class _FakeSelfForLabBlock:
             "dropBonesBox": tk.Entry(root),
         }
 
-    def _is_preview_fresh(self, _vrm_path: str) -> bool:
+    def _is_preview_fresh(self, _vrm_path: str, **_kwargs) -> bool:
         return self._fresh
 
 

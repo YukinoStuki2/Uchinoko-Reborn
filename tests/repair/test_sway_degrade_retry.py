@@ -2,7 +2,7 @@
 
 Only geometry access is substituted. Allocation, wiring, source selection,
 posture and pivot gates, retry attribution and JSON emission are real code.
-The real-rurune Blender check complements these small deterministic cases.
+The optional Blender Blender check complements these small deterministic cases.
 """
 import ast
 import json
@@ -53,18 +53,21 @@ def transform(pos=(0, 0, 1), direction=(0, 0, 1)):
 
 
 class Scenario:
-    def __init__(self, tmp_path, n=12, broken="first", initial_overrides=None):
+    def __init__(self, tmp_path, n=12, broken="first", initial_overrides=None,
+                 entries=None, automatic=False):
         self.ns = production_namespace()
         self.conv = tmp_path / "converted"
         self.conv.mkdir()
         atlas = tmp_path / "build" / "atlas"
         atlas.mkdir(parents=True)
-        self.entries = [{"anchor": f"Hair{i:02d}", "chains": [[f"Hair{i:02d}_tip"]],
+        self.entries = entries if entries is not None else [
+                        {"anchor": f"Hair{i:02d}", "chains": [[f"Hair{i:02d}_tip"]],
                          "params": {"limit_type": "None", "pull": .5, "spring": .5}}
                         for i in range(n)]
         self.raw = {"physbones": self.entries}
         self.plan = allocator.allocate(physbones_json=self.raw,
-                                       lab_assignments=initial_overrides)
+                                       lab_assignments=initial_overrides,
+                                       refill_nested=automatic)
         roots = tuple(f"slot{i}" for i in range(9))
         names = ("root",) + roots + tuple(f"free{i}" for i in range(90))
         catalog = sway_hub.SkeletonCatalog.from_bones_list([
@@ -73,7 +76,7 @@ class Scenario:
             for i, name in enumerate(names)])
         self.wiring = sway_hub.plan_hub_wiring(
             self.plan, catalog, sway_hub.HubSlots(female=roots, male=roots), frozenset())
-        assert len(self.wiring.group_plans) == min(n, 9)
+        assert len(self.wiring.group_plans) == len(self.plan.accepted)
         self.base = {b: "head" for u in self.plan.all_units
                      for b in sway_source_bones.expand_unit_source_bones(u)}
         self.base["Head"] = "head"
@@ -94,6 +97,8 @@ class Scenario:
         source.write_text(json.dumps(self.raw))
         self.job = {"job_dir": str(tmp_path), "sway_enable": True,
                     "physbones_json": str(source)}
+        if automatic:
+            self.job["sway_adaptation"] = "physbone-v1"
         self.ns["place_hub_donor_chains"] = self.place
         self.ns["_sway_gate_live_source_transforms"] = self.source_transforms
         self.ns["_sway_gate_donor_transforms_and_weights"] = self.donor_transforms
@@ -107,7 +112,10 @@ class Scenario:
         return {d: [0, 0, 0, 1] for d in mapping.values()}
 
     def source_transforms(self, arm, names, output_scale, dz, use_rest=True):
-        return {n: self.source[n] for n in names if n in self.source}
+        return {n: dict(self.source[n],
+                        pos=[v * output_scale for v in self.source[n]["pos"]],
+                        tail=[v * output_scale for v in self.source[n]["tail"]])
+                for n in names if n in self.source}
 
     def donor_transforms(self, arm, meshes, names):
         return ({n: self.current_donors[n] for n in names if n in self.current_donors},
@@ -190,6 +198,31 @@ def test_no_failure_preserves_initial_wiring_and_all_donors(tmp_path, count):
     assert result[0] == case.wiring
     assert not result[-1]
     assert case.final_gate() == original
+
+
+@pytest.mark.parametrize("output_scale", [.8, 1.2])
+def test_output_scale_preserves_dynamic_chains_before_and_after_scaling(tmp_path, output_scale):
+    case = Scenario(tmp_path, n=2, broken=None)
+    case.job["uniform_scale"] = output_scale
+    original = sway_hub_wire.source_to_donor_bone_map(case.wiring, "Female")
+
+    # Retry runs before the final mesh/bone scale. A healthy source and donor
+    # must still agree here; scaling only the source falsely culls its pivot.
+    result = case.run()
+    assert result[0] == case.wiring
+    assert not result[-1]
+    assert result[-2] == []
+
+    # Mirror the geometry boundary before the final source/weight gate. Both
+    # the dynamic anchors and their humanoid parents have now been scaled.
+    case.current_donors = {
+        name: dict(t, pos=[v * output_scale for v in t["pos"]],
+                   tail=[v * output_scale for v in t["tail"]])
+        for name, t in case.current_donors.items()
+    }
+    assert case.final_gate() == original
+    pivot = json.loads((case.conv / "sway_pivot_axiom_female.json").read_text())
+    assert pivot["ok"] is True and pivot["checked"] == 2
 
 
 def test_force_on_survivor_keeps_explicit_style_after_retry(tmp_path):

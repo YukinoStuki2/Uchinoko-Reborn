@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from typing import Optional
 
 _LANGUAGE_FILE = "settings_language.txt"
@@ -131,3 +132,52 @@ def load_paksdir(app_root: str) -> Optional[str]:
 
 def save_paksdir(app_root: str, paks_dir: str) -> None:
     _write_text(paksdir_file(app_root), paks_dir)
+
+
+def shared_settings_dir() -> str:
+    """Version-independent user settings; an explicit override supports portability."""
+    override = os.environ.get("UCHINOKO_REBORN_SETTINGS_DIR", "").strip()
+    if override:
+        return normalize_work_root(override)
+    base = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
+    if not base:
+        base = os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "UchinokoReborn")
+
+
+def work_root_file() -> str:
+    return os.path.join(shared_settings_dir(), "settings_workroot.txt")
+
+
+def normalize_work_root(value: str) -> str:
+    path = os.path.expandvars(os.path.expanduser(value.strip().strip('"')))
+    if not path or not os.path.isabs(path) or "\x00" in path or "\n" in path or "\r" in path:
+        raise ValueError("Choose an absolute output directory")
+    return os.path.normpath(path)
+
+
+def load_work_root() -> Optional[str]:
+    """Only a missing preference means default; invalid/unreadable data must fail visibly."""
+    try:
+        with open(work_root_file(), "r", encoding="utf-8-sig") as source:
+            return normalize_work_root(source.read())
+    except FileNotFoundError:
+        return None
+
+
+def save_work_root(path: str) -> str:
+    """Persist before switching the live UI, without swallowing write failures."""
+    normalized = normalize_work_root(path)
+    config_dir = shared_settings_dir()
+    os.makedirs(config_dir, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix=".workroot-", suffix=".tmp", dir=config_dir)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as target:
+            target.write(normalized + "\n")
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary, work_root_file())
+    finally:
+        if os.path.exists(temporary):
+            os.remove(temporary)
+    return normalized

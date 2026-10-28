@@ -94,9 +94,10 @@ class _FakeHandle:
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_work_root_success_when_primary_writable(tmp_path):
+def test_resolve_work_root_success_when_primary_writable(tmp_path, monkeypatch):
     """主系が書き込み可能なら、フォールバック判定・失敗判定のどちらも
     立たないこと(既存の正常経路が壊れていないことの確認)。"""
+    monkeypatch.setattr(mw.settings, "load_work_root", lambda: None)
     fake = _bare_window()
     fake.app_root = str(tmp_path)
 
@@ -112,6 +113,7 @@ def test_resolve_work_root_falls_back_when_primary_unwritable(tmp_path, monkeypa
     """主系が書き込み不可・フォールバック先が書き込み可能なら、
     workRootUsedFallback=True・workRootFailed=Falseで、返り値はフォールバック
     先になること(WorkRootResolveLogic.Resolve L.6458-6469相当)。"""
+    monkeypatch.setattr(mw.settings, "load_work_root", lambda: None)
     fake = _bare_window()
     app_root = tmp_path / "app_root"
     fallback_root = tmp_path / "fallback_local_appdata"
@@ -142,6 +144,7 @@ def test_resolve_work_root_fails_when_both_unwritable(tmp_path, monkeypatch):
     workRootFailed=Trueが立ち、例外を外へ漏らさず(アプリをクラッシュさせず)
     フォールバック先のパス文字列を返すこと(WorkRootResolveLogic.Resolve
     L.6470-6476: Failed=trueでも下流が安全に動けるようPathは残す、の移植)。"""
+    monkeypatch.setattr(mw.settings, "load_work_root", lambda: None)
     fake = _bare_window()
     app_root = tmp_path / "app_root"
     fallback_root = tmp_path / "local_appdata"
@@ -313,12 +316,14 @@ def test_set_running_ui_state_reenables_normally_when_not_failed(tmp_path):
         os.path.join(build, "build_provenance.json"), "w", encoding="utf-8"
     ) as fh:
         fh.write("{}")
+    with open(os.path.join(build, "job_snapshot.json"), "w", encoding="utf8") as fh:
+        fh.write("{}")
     fake = _bare_window()
     fake.work_root = str(tmp_path)
     fake._work_root_failed = False
     fake._blender_ready = True
     fake._active_handle = None
-    fake._is_preview_fresh = lambda _vrm_path: True
+    fake._is_preview_fresh = lambda _vrm_path, **_kwargs: True
     fake.widgets = {
         "vrmBox": _FakeEntry(str(vrm)),
         "convertButton": _FakeButton(),

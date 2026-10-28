@@ -80,7 +80,7 @@ def test_bias_none_type_is_unbiased_even_with_nonzero_rotation_leftover():
 
 def test_bias_angle_zero_rotation_is_unbiased():
     is_biased, reason = m._judge_pb_bias(  # noqa: SLF001
-        {"limit_type": "Angle", "limit_rotation": [0, 0, 0]})
+        {"limit_type": "Angle", "max_angle_x": 45, "limit_rotation": [0, 0, 0]})
     assert is_biased is False
     assert reason == ""
 
@@ -393,18 +393,19 @@ def test_multi_avatar_capacity_budget_is_shared_via_capacity_argument():
 
 # --- 負の対照: 偏向鎖は採用されない ----------------------------------------
 
-def test_biased_chain_never_accepted():
+def test_unsupported_constraints_stay_disabled_but_inner_cone_is_preserved():
     pbj = _physbones(
         _pb("Hinged", 5, limit_type="Hinge", max_angle_x=30.0, limit_rotation=(30, 0, 0)),
         _pb("Polared", 5, limit_type="Polar"),
         _pb("OffAxisAngle", 5, limit_type="Angle", limit_rotation=(10, 0, 0)),
     )
     plan = m.allocate(physbones_json=pbj)
-    assert plan.accepted == ()
+    assert [g.anchor for g in plan.accepted] == ["OffAxisAngle"]
+    assert plan.accepted[0].units[0].limit_angle == pytest.approx(35)
     reasons = {u.anchor: u.excluded_reason for u in plan.rejected_units}
     assert "偏向のため既定OFF" in reasons["Hinged"]
     assert "偏向のため既定OFF" in reasons["Polared"]
-    assert "偏向のため既定OFF" in reasons["OffAxisAngle"]
+    assert "OffAxisAngle" not in reasons
 
 
 # =====================================================================

@@ -1716,7 +1716,8 @@ def compute_sway_source_bone_names(job):
         job, physbone_entries, springbone_entries)
     plan = sway_allocator.allocate(
         physbones_json=physbones_raw, springbones_json=springbones_raw,
-        lab_assignments=lab_assignments)
+        lab_assignments=lab_assignments,
+        refill_nested=job.get("sway_adaptation") == "physbone-v1")
     return sway_source_bones.all_accepted_source_bone_names(plan)
 
 

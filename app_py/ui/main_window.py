@@ -44,6 +44,7 @@ import platform
 import queue
 import re
 import sys
+import tempfile
 import threading
 import time
 import tkinter as tk
@@ -71,6 +72,7 @@ import progress_eta  # noqa: E402
 import settings  # noqa: E402
 import update_check  # noqa: E402
 import warm_startup  # noqa: E402
+import work_paths  # noqa: E402
 from ui import dnd  # noqa: E402
 from ui import lab_window  # noqa: E402  (dev#1186: ラボUI基盤)
 from ui import preflight_warning_dialog  # noqa: E402  (dev#1230: preflight非ブロック化の警告ダイアログ)
@@ -80,7 +82,7 @@ from ui import workarea  # noqa: E402
 # DiveToPalworld.cs L.704 (devtools\release.py がリリース時にスタンプする値。
 # WP-A1の骨格では固定値で近似し、実際の版管理はB1/D1側の課題とする)
 TOOL_VERSION = "v2.13.0"
-REPAIR_VERSION = TOOL_VERSION + "-reborn.1"
+REPAIR_VERSION = TOOL_VERSION + "-reborn.12"
 TOOL_DISPLAY_NAME = "Uchinoko Reborn"
 
 # オンラインマニュアルのURL(指揮者裁定: マニュアルを開く導線があれば既定
@@ -164,27 +166,18 @@ _KODAWARI_PANEL_DELTA = 136 + 44 - 8
 # ため(ui\lab_window.py LAB_FEATURESから除去、コードは温存)、揺れの
 # 強さはこの標準4択が唯一の調整手段になる。
 #
-# 内部値(job.json `sway_intensity`キーの値そのもの、英語ASCII固定)と、
-# スライダーindexの対応順は、当初issue #1572本文の列挙順(AIが書いた実装
-# メモの語順)「なし/やわらかめ/ふつう/かため」で実装したが、オーナーの
-# 記憶「v2.11の並びと違う」指摘(2026-08-19)を受けてv2.11.0タグの実ソース
-# (git show v2.11.0:app_py/ui/main_window.py、コミットd0f0346e)で当時の
-# 並びを確認したところ ["none","hard","normal","soft"](「なし/固め/ふつう/
-# やわらかめ」)だった(dev#19プロトタイプ時代からv2.11.0まで不変)。
-# 本WPでv2.11.0実測の並びへ復元する——並び順のみの変更であり、内部値・
-# job.json`sway_intensity`へのマッピング・意味は変えない(既定選択
-# "normal"も不変)。表示文言はSWAY_INTENSITY_I18N_KEYSで引く(既存キー
-# SwayIntensityNone/Soft/Normal/Hardをそのまま再利用、新規追加なし)。
-# 既定indexは"normal"(2026-08-11 UX評価「標準機能はふつう始まり」を
-# 踏襲、dev#1508 W2bの既定ON=中立値"normal"とも整合)。
-SWAY_INTENSITY_VALUES = ["none", "hard", "normal", "soft"]
+# New conversions default to source PhysBone adaptation. The runner serializes
+# "auto" as sway_adaptation="physbone-v1" plus the legacy normal fallback.
+# Explicit old presets retain their previous meaning and never gain the marker.
+SWAY_INTENSITY_VALUES = ["none", "auto", "hard", "normal", "soft"]
 SWAY_INTENSITY_I18N_KEYS = [
-    "SwayIntensityNone", "SwayIntensityHard", "SwayIntensityNormal", "SwayIntensitySoft",
+    "SwayIntensityNone", "SwayIntensityAuto", "SwayIntensityHard", "SwayIntensityNormal", "SwayIntensitySoft",
 ]
-_SWAY_INTENSITY_DEFAULT_INDEX = SWAY_INTENSITY_VALUES.index("normal")
+_SWAY_INTENSITY_DEFAULT_INDEX = SWAY_INTENSITY_VALUES.index("auto")
 
 # job.json**復元**時(_apply_restored_settings、下記参照)の移行規則
 # (dev#1572、3世代のjob.jsonを矛盾なく吸収する):
+#   0. physbone-v1かつsway_enable有効なら"auto"へ復元する。
 #   1. 新キー`sway_intensity`が存在しSWAY_INTENSITY_VALUESに含まれれば、
 #      その値をそのまま使う(本WP以降・dev#19プロトタイプ時代の両方の
 #      job.jsonがこの形)。
@@ -495,6 +488,8 @@ _FOOTER_OPEN_GEOMETRY: dict[str, dict[str, int]] = {
     "deleteButton": dict(x=890, y=724, width=180, height=28),
     "reportButton": dict(x=890, y=760, width=180, height=28),
     "autoApplyCheck": dict(x=12, y=794, width=500, height=20),
+    "outputDirectoryButton": dict(x=520, y=790, width=150, height=27),
+    "outputDirectoryLabel": dict(x=678, y=794, width=392, height=20),
     # updateLabel/updateNowButtonは更新通知が無い間place_forget()済み。
     # layout_content_area()はwinfo_ismapped()で現在の表示状態を見て、
     # 非表示中は座標を動かさない(表示するときは_show_update_notice()が
@@ -903,59 +898,122 @@ class MainWindow:
         except Exception:  # noqa: BLE001 -- アイコン設定の失敗でGUIを殺さない
             pass
 
-    def _resolve_work_root(self) -> str:
-        """WorkRootResolveLogic.Resolve(DiveToPalworld.cs L.6446-6477)相当。
-        appRoot\\work への書き込みを試し、失敗すれば%LOCALAPPDATA%\\Uchinoko\\work
-        へフォールバックする(DESIGN.md §2.8「外部依存パスの原則」の三点セット
-        のうち①②)。
+    @staticmethod
+    def _probe_work_root(path: str) -> str | None:
+        try:
+            os.makedirs(path, exist_ok=True)
+            with tempfile.NamedTemporaryFile(prefix=".uchinoko-write-", dir=path):
+                pass
+            return None
+        except OSError as exc:
+            return str(exc)
 
-        dev#621: 両方とも書き込めない(稀)場合を明示的に検知できるよう、
-        C#版のworkRootFailed/workRootUsedFallback/workRootPrimaryPath/
-        workRootFallbackPath/workRootPrimaryError/workRootFallbackError
-        フィールド(L.691-696)相当をインスタンス属性として残す(呼び出し元は
-        _check_work_root_failed_on_startup()。③探索した場所と判定を全部ログへ、
-        の材料もここに揃う)。両方失敗した場合もC#と同じくフォールバック先の
-        パス文字列をwork_rootとして返す(下流コードが例外で落ちないようにする
-        ためだけの値で、実際には書き込めない。押しても失敗するだけの状態は
-        変換系ボタンの無効化で防ぐ)。"""
+    def _resolve_work_root(self) -> str:
+        """Honor a shared explicit location; only unconfigured installs may fall back."""
         primary = os.path.join(self.app_root, "work")
         fallback = os.path.join(
             os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "Uchinoko", "work"
         )
         self._work_root_primary_path = primary
         self._work_root_fallback_path = fallback
+        self._work_root_primary_error = None
+        self._work_root_fallback_error = None
         self._work_root_used_fallback = False
         self._work_root_failed = False
-
-        def probe(path: str) -> str | None:
-            """書き込み可能ならNone、不可なら理由文字列を返す
-            (ProbeWorkRootWritable相当)。"""
-            try:
-                os.makedirs(path, exist_ok=True)
-                probe_file = os.path.join(path, ".d2p_write_probe")
-                with open(probe_file, "w", encoding="utf-8") as f:
-                    f.write("")
-                os.remove(probe_file)
-                return None
-            except OSError as ex:
-                return str(ex)
-
-        self._work_root_primary_error = probe(primary)
+        self._work_root_configured = False
+        try:
+            configured = settings.load_work_root()
+        except (OSError, ValueError) as exc:
+            self._work_root_configured = True
+            self._work_root_failed = True
+            self._work_root_primary_error = str(exc)
+            return ""
+        if configured is not None:
+            self._work_root_configured = True
+            self._work_root_primary_path = configured
+            self._work_root_primary_error = self._probe_work_root(configured)
+            self._work_root_failed = self._work_root_primary_error is not None
+            return configured
+        self._work_root_primary_error = self._probe_work_root(primary)
         if self._work_root_primary_error is None:
             return primary
-
-        self._work_root_fallback_error = probe(fallback)
+        self._work_root_fallback_error = self._probe_work_root(fallback)
         if self._work_root_fallback_error is None:
             self._work_root_used_fallback = True
             return fallback
-
         self._work_root_failed = True
         return fallback
+
+    def _work_root_change_busy(self) -> bool:
+        handle = getattr(self, "_active_handle", None)
+        cache_status = getattr(self, "_warm_cache_status", None)
+        return bool(getattr(self, "_is_pipeline_running", False)
+                    or getattr(self, "_blender_setup_running", False)
+                    or getattr(self, "_warm_startup_dispatching", False)
+                    or (handle is not None and handle.is_running())
+                    or (cache_status is not None and cache_status.is_pending()))
+
+    def _on_output_directory_settings(self) -> None:
+        from ui.work_root_dialog import WorkRootDialog
+        WorkRootDialog(self.root, self.work_root, self._apply_output_directory)
+
+    def _refresh_output_directory_label(self) -> None:
+        label = self.widgets.get("outputDirectoryLabel")
+        if label is not None:
+            label.config(text=self.work_root or i18n.S("MsgOutputDirectoryInvalid"),
+                         fg="#b00000" if self._work_root_failed else "#444444")
+
+    def _apply_output_directory(self, value: str) -> bool:
+        if self._work_root_change_busy():
+            messagebox.showinfo(i18n.S("TitleOutputDirectory"), i18n.S("MsgOutputDirectoryBusy"))
+            return False
+        try:
+            candidate = settings.normalize_work_root(value)
+            error = self._probe_work_root(candidate)
+            if error:
+                raise OSError(error)
+            candidate = settings.save_work_root(candidate)
+        except (OSError, ValueError) as exc:
+            self._log(f"[work-root] preference not changed: {exc}")
+            messagebox.showerror(i18n.S("TitleOutputDirectory"),
+                                 i18n.F("MsgOutputDirectorySaveFailed", str(exc)))
+            return False
+        self.work_root = candidate
+        self._work_root_primary_path = candidate
+        self._work_root_primary_error = None
+        self._work_root_failed = False
+        self._work_root_configured = True
+        self._work_root_used_fallback = False
+        self._active_handle = None
+        self._pending_prefab_export_path = None
+        self._early_preview_loaded_this_run = False
+        self._warm_cache_status = warm_startup.WarmCacheStatus()
+        self._warm_cache_status_pending_last = False
+        self._status_before_warm_cache = None
+        self._preview_images = {}
+        for key in ("previewFront", "previewSide"):
+            if key in self.widgets:
+                self.widgets[key].config(image="", text="")
+        self._refresh_output_directory_label()
+        self._on_refresh_pak_list()
+        source = self.widgets["vrmBox"].get().strip()
+        if source:
+            name = pipeline_runner.sanitize_name(os.path.splitext(os.path.basename(source))[0])
+            self._apply_restored_settings(os.path.join(self.work_root, name), set_vrm_path=False)
+        self._update_button_states()
+        self._refresh_convert_button_freshness()
+        self._log(self._work_root_resolution_line())
+        if getattr(self, "_blender_ready", False):
+            self._warm_startup_after_blender_ready()
+        return True
 
     def _work_root_resolution_line(self) -> str:
         """WorkRootResolutionLine() (DiveToPalworld.cs L.3255-3266) 相当。
         フォールバックが起きた/起きなかったに関わらず必ず1行を返す
         (「成功時にも構造が残らないと診断できない」CLAUDE.md方針)。"""
+        if getattr(self, "_work_root_configured", False):
+            status = self._work_root_primary_error if self._work_root_failed else "writable"
+            return f"work_root: {self.work_root or '(invalid preference)'} (shared explicit setting; {status}; no fallback)"
         if not self._work_root_used_fallback and not self._work_root_failed:
             return f"work_root: {self.work_root} (install location, writable)"
         if self._work_root_used_fallback:
@@ -991,14 +1049,16 @@ class MainWindow:
         self._log("[!] " + i18n.S("TitleWorkRootUnwritable"))
         for key in ("convertButton", "matsButton", "previewButton"):
             self.widgets[key].config(state="disabled")
-        messagebox.showerror(
-            i18n.S("TitleWorkRootUnwritable"),
-            i18n.F(
-                "MsgWorkRootUnwritableFormat",
-                self._work_root_primary_path,
-                self._work_root_fallback_path,
-            ),
-        )
+        if getattr(self, "_work_root_configured", False):
+            messagebox.showerror(i18n.S("TitleOutputDirectory"),
+                                 i18n.F("MsgConfiguredOutputUnavailable", self.work_root or "?",
+                                        self._work_root_primary_error or "?"))
+        else:
+            messagebox.showerror(
+                i18n.S("TitleWorkRootUnwritable"),
+                i18n.F("MsgWorkRootUnwritableFormat", self._work_root_primary_path,
+                       self._work_root_fallback_path),
+            )
 
     def _current_os_culture_name(self) -> str | None:
         """CultureInfo.CurrentUICulture.Name相当(L.830で渡される実際の値)。
@@ -1932,13 +1992,13 @@ class MainWindow:
         shadow_bar = tk.Scale(
             kodawari_panel, from_=0, to=100, orient="horizontal", showvalue=False,
         )
-        shadow_bar.set(30)
+        shadow_bar.set(100)
         # dev#1136追撃: 旧版はy=行top+0(行の一番上に張り付き)だったのを、
         # +4だけ下げてラベル/値/ボタンの縦中心(行top+25)へ揃えた
         # (スライダー高26なので中心は(row1_top+4)+13=row1_top+17…と
         # ラベル側の中心row1_top+9+8=row1_top+17が一致する計算)。
         shadow_bar.place(x=col_slider_x, y=row1_top + 4, width=col_slider_w, height=26)
-        shadow_label = tk.Label(kodawari_panel, text="30%")
+        shadow_label = tk.Label(kodawari_panel, text="100%")
         shadow_label.place(x=col_value_x, y=row1_top + 9, width=60)  # = 共通value列幅
 
         def _on_shadow_change(_value, bar=shadow_bar, lbl=shadow_label):
@@ -2002,6 +2062,8 @@ class MainWindow:
 
         def _on_height_scale_change(_value, lbl=height_scale_label):
             lbl.config(text=f"{int(float(_value))}%")
+            if "previewButton" in self.widgets:
+                self._update_button_states()
 
         height_scale_bar.config(command=_on_height_scale_change)
         self._register_tip(height_scale_bar, "TipHeightScale")
@@ -2018,6 +2080,16 @@ class MainWindow:
         self._register_tip(reset_height_scale_button, "TipResetHeightScale")
         self.widgets["resetHeightScaleButton"] = reset_height_scale_button  # #12c
 
+        self._size_fit_var = tk.BooleanVar(value=True)
+        size_fit_check = tk.Checkbutton(
+            kodawari_panel, text=i18n.S("CheckVanillaSize"),
+            variable=self._size_fit_var, anchor="w", command=self._update_button_states,
+        )
+        size_fit_check.place(x=578, y=row2_top + 3, width=360, height=28)
+        self._register_text(size_fit_check, "CheckVanillaSize")
+        self._register_tip(size_fit_check, "TipVanillaSize")
+        self.widgets["sizeFitCheck"] = size_fit_check
+
         # ---- 揺れの度合い行(dev#1572、2026-08-18裁定「かたさが配線されて
         # いない問題」案C: v2.11方式の復元。dev#1508 W2b(2026-08-16)が
         # 一時的にON/OFFトグルへ置換していたものを、本WPで4段の標準機能
@@ -2025,7 +2097,7 @@ class MainWindow:
         # 影の濃さ/身長と同じ列(col_label_x/col_slider_x)・同じ行高(44)で
         # 3行目に置く(行自体はレイアウト無変更、中身だけ差し替え)。
         # 「揺れの度合い」は「なし(揺れ無し)/かため/ふつう/やわらかめ」の
-        # 4択(v2.11.0実測順、SWAY_INTENSITY_VALUES直前コメント参照)で、
+        # 5択(既定auto、既存3プリセットとnoneを維持)で、
         # job.json `sway_intensity` キーへ結線する(既存の一括刻印
         # 経路 pipeline\py\sway_abp_build.py hardness_key_for_intensity()
         # が読む値そのもの、write_job()参照)。
@@ -2042,7 +2114,7 @@ class MainWindow:
         self._register_text(lbl_sway_intensity, "LabelSwayIntensity")
 
         sway_intensity_bar = tk.Scale(
-            kodawari_panel, from_=0, to=3, resolution=1,
+            kodawari_panel, from_=0, to=len(SWAY_INTENSITY_VALUES)-1, resolution=1,
             orient="horizontal", showvalue=False,
         )
         sway_intensity_bar.set(_SWAY_INTENSITY_DEFAULT_INDEX)
@@ -2239,6 +2311,17 @@ class MainWindow:
         self.widgets["autoApplyCheck"] = auto_apply_check  # #22
         self._auto_apply_var = auto_apply_var
 
+        output_button = tk.Button(root, text=i18n.S("BtnOutputDirectory"),
+                                  command=self._on_output_directory_settings)
+        output_button.place(**_FOOTER_OPEN_GEOMETRY["outputDirectoryButton"])
+        self._register_text(output_button, "BtnOutputDirectory")
+        self.widgets["outputDirectoryButton"] = output_button
+        output_label = tk.Label(root, text=getattr(self, "work_root", ""), anchor="w")
+        output_label.place(**_FOOTER_OPEN_GEOMETRY["outputDirectoryLabel"])
+        self.widgets["outputDirectoryLabel"] = output_label
+        if hasattr(self, "_work_root_failed"):
+            self._refresh_output_directory_label()
+
         # ---- 検証済みPalworldバージョン表示 (#26, dev#495) ----
         # ストアの動作環境欄に「検証済みの最新バージョンはツール内の表示を
         # ご覧ください」と書く前提を満たすための常時表示。従来は
@@ -2378,6 +2461,10 @@ class MainWindow:
         self._log(path)
         name = pipeline_runner.sanitize_name(os.path.splitext(os.path.basename(path))[0])
         job_dir = os.path.join(self.work_root, name)
+        # New avatars opt in; a saved job below restores its own mode.
+        size_fit_var = getattr(self, "_size_fit_var", None)
+        if size_fit_var is not None:
+            size_fit_var.set(True)
         self._apply_restored_settings(job_dir, set_vrm_path=False)
         # dev#611: ApplyAvatarLoad() L.1591-1597相当。アバター登録の全経路
         # (browse/D&D/prefabのUnity輸出完了)がこの_set_vrm_pathへ集約している
@@ -2453,10 +2540,17 @@ class MainWindow:
         scale = max(0.5, min(2.0, scale))
         self.widgets["heightScaleBar"].set(int(round(scale * 100)))
 
+        # A missing key belongs to a pre-size-fit job. Preserve that model's
+        # output until the user explicitly enables vanilla sizing.
+        size_fit_var = getattr(self, "_size_fit_var", None)
+        if size_fit_var is not None:
+            size_fit_var.set(data.get("size_fit_mode", "legacy") == "vanilla")
+
         # sway_intensity (dev#1572、2026-08-18裁定「かたさが配線されていない
         # 問題」案C): job.jsonの`sway_intensity`をswayIntensityBarへ反映
         # する。**移行規則**(モジュール冒頭のSWAY_INTENSITY_VALUES直前コメント
         # 「job.json復元時の移行規則」参照、3世代を吸収):
+        #   0. physbone-v1かつsway_enable有効ならautoへ戻す。
         #   1. `sway_intensity`がSWAY_INTENSITY_VALUESに含まれればそのまま
         #      使う(本WP以降、および dev#19プロトタイプ時代のjob.json)。
         #   2. 無ければdev#1508 W2b期の`sway_enabled`(bool)を見る:
@@ -2471,7 +2565,8 @@ class MainWindow:
         # 起動しない(実測確認済み)ため、値ラベル(swayIntensityValueLabel)の
         # テキストもここで明示的に更新しないと、復元直後は前回の表示文言の
         # まま取り残される。
-        raw_sway_intensity = data.get("sway_intensity")
+        raw_sway_intensity = ("auto" if data.get("sway_adaptation") == "physbone-v1"
+                              and data.get("sway_enable") else data.get("sway_intensity"))
         if raw_sway_intensity in SWAY_INTENSITY_VALUES:
             sway_intensity = raw_sway_intensity
         elif "sway_enabled" in data:
@@ -2546,7 +2641,7 @@ class MainWindow:
             return
         self._start_pipeline(preview_only=True, materials_only=False, auto=True)
 
-    def _is_preview_fresh(self, vrm_path: str) -> bool:
+    def _is_preview_fresh(self, vrm_path: str, *, allow_size_change: bool = False) -> bool:
         """IsPreviewFresh() L.2416-2425相当。呼び出し時点のdropBonesBox等の
         現在値を使うライブ判定(C#もコントロールの現在値を毎回読む。開始時点の
         スナップショットではない)。"""
@@ -2556,6 +2651,7 @@ class MainWindow:
             self._shoulder_offset_deg,
             self._merge_fingers,
             self.widgets["dropBonesBox"].get(),
+            **MainWindow._size_settings(self), allow_size_change=allow_size_change,
         )
 
     def _save_preview_sig(self, vrm_path: str) -> None:
@@ -2566,7 +2662,16 @@ class MainWindow:
             self._shoulder_offset_deg,
             self._merge_fingers,
             self.widgets["dropBonesBox"].get(),
+            **MainWindow._size_settings(self),
         )
+
+    def _size_settings(self) -> dict:
+        size_fit_var = getattr(self, "_size_fit_var", None)
+        slider = self.widgets.get("heightScaleBar")
+        return {
+            "size_fit_mode": "vanilla" if size_fit_var is not None and size_fit_var.get() else "legacy",
+            "uniform_scale": float(slider.get()) / 100.0 if slider is not None else 1.0,
+        }
 
     def _finalize_fresh_preview(self, vrm_path: str) -> None:
         """OnPipelineDone() L.2914-2915相当(`SavePreviewSig(); UpdateButtonStates();
@@ -2623,7 +2728,7 @@ class MainWindow:
             return
         vrm_path = self.widgets["vrmBox"].get().strip()
         has_vrm = os.path.isfile(vrm_path)
-        fresh = has_vrm and self._is_preview_fresh(vrm_path)
+        fresh = has_vrm and self._is_preview_fresh(vrm_path, allow_size_change=True)
         self.widgets["convertButton"].config(state=("normal" if fresh else "disabled"))
         running = self._active_handle is not None and self._active_handle.is_running()
         if running or not has_vrm:
@@ -3133,6 +3238,8 @@ class MainWindow:
         if targets["ue_project_dir"] and os.path.isdir(targets["ue_project_dir"]):
             lines.append(i18n.F("LineUeProjectFormat", targets["ue_project_dir"]))
         lines.append("")
+        if work_paths.is_directory_link(targets["job_dir"]):
+            lines.append(i18n.S("NoteLinkedModelDelete"))
         lines.append(i18n.S("NoteVrmNotDeleted"))
         lines.append(i18n.S("NoteReloadVrmToRedo"))
 
@@ -3308,6 +3415,9 @@ class MainWindow:
         (fatal_code==pipeline_runner.PALWORLD_NOT_FOUND_FATAL_CODE)で
         _resolve_paks_dir_interactive()を直接呼ぶ形で解消済み(ここ=事前
         チェック側は無変更)。"""
+        if getattr(self, "_work_root_failed", False):
+            self._log("[work-root] conversion blocked: output directory unavailable")
+            return
         if self._active_handle is not None and self._active_handle.is_running():
             if not auto:
                 messagebox.showinfo(i18n.S("TitleConfirm"), i18n.S("MsgAlreadyRunning"))
@@ -3316,6 +3426,20 @@ class MainWindow:
         if not os.path.isfile(vrm_path):
             if not auto:
                 messagebox.showinfo(i18n.S("TitleConfirm"), i18n.S("MsgSpecifyVrmFile"))
+            return
+        if materials_only and not pipeline_runner.size_settings_match_build(
+            self.work_root, vrm_path, **MainWindow._size_settings(self),
+        ):
+            self._log("[size-fit] materials update blocked: Full Convert is required")
+            if not auto:
+                messagebox.showinfo(i18n.S("TitleConfirm"), i18n.S("MsgSizeNeedsFullConvert"))
+            return
+        try:
+            pipeline_runner.validate_output_job_dir(self.work_root, vrm_path)
+        except ValueError as exc:
+            self._log(f"[work-root] {exc}")
+            if not auto:
+                messagebox.showwarning(i18n.S("TitleOutputDirectory"), i18n.S("MsgLinkedModelReadOnly"))
             return
         # MODを作る操作(プレビュー以外)はアバター規約の確認が要る(L.2552相当)。
         # auto経由は常にpreview_only=True(呼び出し元_maybe_auto_preview参照)
@@ -3353,9 +3477,9 @@ class MainWindow:
         # dev#560 第③段: heightScaleBarは50〜200(%)の整数を持つ。job.jsonの
         # `uniform_scale`は0.5〜2.0のfloatなので/100.0して渡す。write_job()
         # 側でも重ねて0.5〜2.0へクランプする(多重防御)。
-        uniform_scale = float(self.widgets["heightScaleBar"].get()) / 100.0
+        size_settings = MainWindow._size_settings(self)
         # dev#1572(2026-08-18裁定、案C): swayIntensityBarの選択index
-        # (既定index=_SWAY_INTENSITY_DEFAULT_INDEX="normal")をjob設定キー
+        # (既定index=_SWAY_INTENSITY_DEFAULT_INDEX="auto")をjob設定キー
         # 用の内部値へ変換して渡す。範囲外(-1、未初期化のフェイクself等)は
         # 安全側の"none"へ倒す。
         sway_idx = int(self.widgets["swayIntensityBar"].get())
@@ -3375,7 +3499,7 @@ class MainWindow:
             shadow_bar_value=shadow_value,
             drop_bones_text=drop_bones_text,
             license_confirmed=self._license_confirmed,
-            uniform_scale=uniform_scale,
+            **size_settings,
             sway_intensity=sway_intensity,
             # dev#1242申し送り②: find_pwsh()の探索ログをログ欄(self._log、
             # 「ログをコピー」に載る経路)へ結線する。_start_pipeline()は
@@ -3855,6 +3979,10 @@ class MainWindow:
         ゲート込み、PR #647統合)へ委譲する。
         """
         self._is_pipeline_running = running
+        for key in ("sizeFitCheck", "heightScaleBar", "resetHeightScaleButton"):
+            widget = self.widgets.get(key)
+            if widget is not None:
+                widget.config(state="disabled" if running else "normal")
         self._update_button_states()
         self.widgets["cancelButton"].config(state=("normal" if running else "disabled"))
         # dev#602追補: どのフェーズが走っているかを覚えておく(Unity輸出
@@ -3921,6 +4049,8 @@ class MainWindow:
         preview_state = "normal" if base_enabled else "disabled"
         mats_enabled = base_enabled and noue_full_build.has_noue_full_build(
             getattr(self, "work_root", ""), vrm_path
+        ) and pipeline_runner.size_settings_match_build(
+            getattr(self, "work_root", ""), vrm_path, **MainWindow._size_settings(self),
         )
         mats_state = "normal" if mats_enabled else "disabled"
         self.widgets["previewButton"].config(state=preview_state)
@@ -3956,6 +4086,9 @@ class MainWindow:
         出さない。statusLabel/ログはBlenderセットアップの進捗表示が既に担っている。
         セットアップ成功時、_on_blender_setup_done()がこの保留パスを取り出して
         本メソッドを自動的に呼び直す(ユーザー操作はドロップ1回で済む)。"""
+        if getattr(self, "_work_root_failed", False):
+            self._log("[work-root] Unity export blocked: output directory unavailable")
+            return
         if not self._blender_ready:
             self._pending_prefab_drop_path = prefab_path
             self._log(f"[prefab] blender not ready yet, deferring drop: {prefab_path}")
@@ -3984,6 +4117,9 @@ class MainWindow:
         self._clear_log()
         # dev#602: Unity輸出は構造的に##PROGRESS##マーカーが来ない工程
         # (RunUnityExport() L.2677コメント)なのでindeterminate(Marquee相当)。
+        if work_paths.is_directory_link(out_dir):
+            messagebox.showwarning(i18n.S("TitleOutputDirectory"), i18n.S("MsgLinkedModelReadOnly"))
+            return
         self._set_running_ui_state(True, phase=pipeline_runner.PHASE_UNITY_EXPORT)
         self._set_status(lambda: i18n.S("StatusUnityExporting"))
         # dev#602追補: ハートビート計測開始(構造的に無音のこのフェーズで、
@@ -4282,6 +4418,14 @@ class MainWindow:
         冒頭docstring「D1への結線手順」のとおり)。プロセス起動を伴うため
         ワーカースレッドで実行し、UIスレッドをブロックしない。"""
 
+        if getattr(self, "_work_root_failed", False):
+            return
+        if getattr(self, "_warm_startup_dispatching", False):
+            return
+        self._warm_startup_dispatching = True
+        selected_work_root = self.work_root
+        selected_status = self._warm_cache_status
+
         def worker() -> None:
             try:
                 blender_exe = blender_setup.find_blender(self.app_root)
@@ -4294,17 +4438,19 @@ class MainWindow:
                 )
                 warm_startup.warm_startup_after_blender_ready(
                     self.app_root,
-                    self.work_root,
+                    selected_work_root,
                     blender_exe,
                     pak_path,
                     conversion_pending=self._active_handle is not None,
-                    status=self._warm_cache_status,
+                    status=selected_status,
                 )
             except Exception as ex:  # noqa: BLE001 -- warm_startup自体が全例外を
                 # 握りつぶす設計だが(warm_startup.py参照)、find_blender()等の
                 # 呼び出し前処理の例外はここで追加防御する(起動シーケンスを
                 # 絶対に止めないための最終防壁)。
-                self.root.after(0, lambda: self._log(f"[warm_startup] skipped: {ex}"))
+                self.root.after(0, lambda error=str(ex): self._log(f"[warm_startup] skipped: {error}"))
+            finally:
+                self._warm_startup_dispatching = False
 
         threading.Thread(target=worker, daemon=True, name="WarmStartup").start()
 

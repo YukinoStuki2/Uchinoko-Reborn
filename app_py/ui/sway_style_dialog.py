@@ -126,6 +126,7 @@ import sway_chain_defaults  # noqa: E402  (dev#1572第3便、issue #1572追記
 # _resolve_unit_enabled()参照、旧コメント「enabled/hardnessフィールドは
 # 本パネルの管理対象外」は本WPで終了]。
 from ui import window_pos  # noqa: E402
+from ui.sway_motion_dialog import show_motion_dialog  # noqa: E402
 from ui import sway_chain_dialog as _legacy_chain_dialog  # noqa: E402  (読み取り
 # 専用の再利用: query_sway_catalog()(sway_styles_store.load_state_with_migration()
 # が要求する鎖単位[bones配列]のcatalog_chainsを組み立てるためだけに使う――
@@ -172,9 +173,18 @@ MAX_SLOTS = 9  # 同時に効かせられるスロット数(親骨×ゆれかた
 # 常にFalse(このモジュール変数の既定値)。
 _SWAY_STYLE_PICKER_VISIBLE = False
 
-reset = _store.reset
-is_active = _store.is_active
-state_summary = _store.state_summary
+def reset(app_root):
+    _store.reset(app_root)
+    _chain_store.reset(app_root)
+
+
+def is_active(app_root, avatar_path):
+    return _store.is_active(app_root, avatar_path) or _chain_store.is_active(app_root, avatar_path)
+
+
+def state_summary(app_root, avatar_path, lang=None):
+    return (_chain_store.state_summary(app_root, avatar_path, lang)
+            or _store.state_summary(app_root, avatar_path, lang))
 
 _ZERO_PARAMS: Dict[str, float] = {k: 0.0 for k in STYLE_PARAM_KEYS}
 
@@ -430,6 +440,12 @@ def show_sway_style_dialog(parent: tk.Misc, ctx: SwayStyleContext) -> tk.Topleve
                 "display_name": unit["display_name"], "type": unit.get("type", "physbone"),
                 "params": unit.get("params"), "style": style, "manual": False,
                 "safety_margin": margin, "enabled": enabled,
+                "motion": next((chain_override_by_bones[key].get("motion")
+                                for key in sway_pb_catalog.unit_bones_keys(unit["anchor"], unit["chains"])
+                                if key in chain_override_by_bones), None),
+                "preserve_segments": any(
+                    chain_override_by_bones.get(key, {}).get("preserve_segments") is True
+                    for key in sway_pb_catalog.unit_bones_keys(unit["anchor"], unit["chains"])),
             })
         # 手動行(旧鎖単位assignmentsのうち、カタログに存在しないもの)。
         for a in assignments_loaded:
@@ -442,6 +458,7 @@ def show_sway_style_dialog(parent: tk.Misc, ctx: SwayStyleContext) -> tk.Topleve
                 "type": "manual", "params": None, "style": a["style"], "manual": True,
                 "safety_margin": safety_margin_by_bones.get(key, DEFAULT_SAFETY_MARGIN),
                 "enabled": bool(prior["enabled"]) if prior is not None else True,
+                "preserve_segments": (prior or {}).get("preserve_segments") is True,
             })
         return rows
 
@@ -761,6 +778,26 @@ def show_sway_style_dialog(parent: tk.Misc, ctx: SwayStyleContext) -> tk.Topleve
         wraplength=720, justify="left", anchor="w", fg="#555555")
     safety_margin_hint.pack(fill="x")
     i18n.register(safety_margin_hint, "LabSwayChainSafetyMarginHint")
+
+    motion_hint = tk.Label(chains_frame, text=i18n.S("MotionPanelHint"),
+                           wraplength=720, justify="left", anchor="w")
+    motion_hint.pack(fill="x", pady=(4, 4))
+    i18n.register(motion_hint, "MotionPanelHint")
+    motion_toolbar = tk.Frame(chains_frame)
+    motion_toolbar.pack(fill="x")
+
+    def _apply_motion_profile(profile):
+        for row in working_rows:
+            if row.get("enabled", True) and not row.get("manual"):
+                row["motion"] = {"profile": profile, "amount": 1.0} if profile else None
+        _rebuild_rows()
+
+    for key, profile in (("MotionApplySource", "source"), ("MotionApplyCalm", "calm"),
+                         ("MotionClearEnabled", None)):
+        button = tk.Button(motion_toolbar, text=i18n.S(key),
+                            command=lambda p=profile: _apply_motion_profile(p))
+        button.pack(side="left", padx=(0, 5))
+        i18n.register(button, key)
 
     if ctx.sample_mode:
         sample_notice = tk.Label(chains_frame, text=i18n.S("LabSwayChainSampleModeNotice"),
@@ -1085,6 +1122,27 @@ def show_sway_style_dialog(parent: tk.Misc, ctx: SwayStyleContext) -> tk.Topleve
 
             margin_var.trace_add("write", _on_margin_change)
 
+            if not row["manual"]:
+                def _edit_motion(i=idx):
+                    selected = working_rows[i]
+
+                    def _save_motion(settings, enabled, preserve_segments):
+                        selected["motion"] = settings
+                        selected["enabled"] = enabled
+                        selected["preserve_segments"] = preserve_segments
+                        _rebuild_rows()
+
+                    show_motion_dialog(dlg, selected["display_name"],
+                                       selected.get("motion"), _save_motion,
+                                       enabled=selected.get("enabled", True),
+                                       preserve_segments=selected.get("preserve_segments", False))
+
+                motion_key = ("MotionConfigureActive" if row.get("motion") or row.get("preserve_segments")
+                              else "MotionConfigure")
+                motion_btn = tk.Button(rows_inner, text=i18n.S(motion_key), command=_edit_motion)
+                motion_btn.grid(row=idx, column=3, padx=4, pady=1)
+                motion_btn.bind("<MouseWheel>", rows_mousewheel)
+
             if row["manual"]:
                 del_btn = tk.Button(rows_inner, text=i18n.S("BtnRemoveManualChain"),
                                      command=lambda i=idx: _on_delete_row(i), width=6)
@@ -1142,6 +1200,8 @@ def show_sway_style_dialog(parent: tk.Misc, ctx: SwayStyleContext) -> tk.Topleve
                     "hardness": hardness,
                     "manual": row["manual"],
                     "safety_margin": row["safety_margin"],
+                    **({"motion": row["motion"]} if row.get("motion") else {}),
+                    **({"preserve_segments": True} if row.get("preserve_segments") else {}),
                 })
         _store.save_state(ctx.app_root, ctx.avatar_path, working_styles, assignments)
         _chain_store.save_config(

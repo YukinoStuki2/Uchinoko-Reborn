@@ -74,7 +74,7 @@ def _reset_instances():
 
 
 def _run(monkeypatch, tmp_path, *, sway_intensity="normal", preview_only=False,
-          materials_only=False):
+          materials_only=False, size_fit_mode="legacy", uniform_scale=1.0):
     """run_pipeline()を、on_line収集リスト・on_exit結果セル・work_rootと
     ともに起動する共通セットアップ。"""
     _reset_instances()
@@ -84,13 +84,19 @@ def _run(monkeypatch, tmp_path, *, sway_intensity="normal", preview_only=False,
     os.makedirs(work_root, exist_ok=True)
     os.makedirs(app_root, exist_ok=True)
 
+    if materials_only:
+        build = os.path.join(work_root, "fakeavatar", "build")
+        os.makedirs(build, exist_ok=True)
+        with open(os.path.join(build, "job_snapshot.json"), "w", encoding="utf8") as out:
+            json.dump({"size_fit_mode":size_fit_mode, "uniform_scale":uniform_scale}, out)
+
     lines: list[str] = []
     exits: list[int] = []
     handle = pr.run_pipeline(
         app_root, work_root, VRM_PATH,
         preview_only=preview_only, materials_only=materials_only,
         on_line=lines.append, on_exit=exits.append,
-        sway_intensity=sway_intensity,
+        sway_intensity=sway_intensity, size_fit_mode=size_fit_mode, uniform_scale=uniform_scale,
     )
     return handle, lines, exits, work_root
 
@@ -109,6 +115,17 @@ def test_sway_success_no_fallback(tmp_path, monkeypatch):
     assert exits == [0]
     assert not any("AVATAR_WARNING" in ln for ln in lines)
     assert not any("dev#1649" in ln for ln in lines)
+
+
+def test_size_settings_survive_sway_retry(tmp_path, monkeypatch):
+    handle, lines, exits, work_root = _run(
+        monkeypatch, tmp_path, sway_intensity="normal", size_fit_mode="vanilla", uniform_scale=0.85)
+    first = pr.read_job(_job_json_path(work_root))
+    assert first["size_fit_mode"] == "vanilla" and first["uniform_scale"] == 0.85
+    FakeProcessHandle.instances[0].fire_exit(1)
+    assert len(FakeProcessHandle.instances) == 2
+    second = pr.read_job(_job_json_path(work_root))
+    assert second["size_fit_mode"] == "vanilla" and second["uniform_scale"] == 0.85
 
 
 def test_sway_disabled_failure_no_fallback(tmp_path, monkeypatch):
@@ -151,6 +168,28 @@ def test_sway_enabled_failure_then_fallback_success(tmp_path, monkeypatch):
     assert exits == [0], "フォールバック成功後の最終結果はexit=0であるべき"
     assert any("##AVATAR_WARNING##" in ln for ln in lines), "GUI警告マーカーが出ていない"
     assert any("Sway (jiggle) physics processing caused an error" in ln for ln in lines)
+
+
+def test_auto_failure_falls_back_without_leaving_source_adaptation_enabled(tmp_path, monkeypatch):
+    _, lines, exits, work_root = _run(monkeypatch, tmp_path, sway_intensity="auto")
+    with open(_job_json_path(work_root), encoding="utf-8") as stream:
+        assert json.load(stream)["sway_adaptation"] == "physbone-v1"
+    FakeProcessHandle.instances[0].fire_exit(1)
+    assert len(FakeProcessHandle.instances) == 2
+    with open(_job_json_path(work_root), encoding="utf-8") as stream:
+        retry = json.load(stream)
+    assert not {"sway_intensity", "sway_enable", "sway_adaptation"} & set(retry)
+    FakeProcessHandle.instances[1].fire_exit(0)
+    assert exits == [0]
+
+
+def test_explicit_old_presets_do_not_write_auto_marker(tmp_path, monkeypatch):
+    for intensity in ("hard", "normal", "soft", "none"):
+        _, _, _, work_root = _run(monkeypatch, tmp_path, sway_intensity=intensity)
+        with open(_job_json_path(work_root), encoding="utf-8") as stream:
+            job = json.load(stream)
+        assert "sway_adaptation" not in job
+        assert job.get("sway_intensity") == (intensity if intensity != "none" else None)
 
 
 def test_sway_enabled_failure_then_fallback_also_fails(tmp_path, monkeypatch):

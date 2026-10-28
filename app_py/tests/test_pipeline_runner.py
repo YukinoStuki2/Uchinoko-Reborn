@@ -195,17 +195,19 @@ def test_write_job_top_level_keys_match_design_schema(tmp_path):
     # dev#560第③段でuniform_scaleを追加した版、dev#1230(2026-08-08)で
     # preflight_nonblockingを追加した版、dev#1572(2026-08-18、「揺れの度合い」
     # 4択の復元でsway_intensity/sway_enableを追加した版)——write_job()の
-    # 既定sway_intensity="normal"により、無指定呼び出しでもこの2キーが常に
-    # 書かれるようになった。旧`sway_enabled`(dev#1508 W2b由来のGUI内部専用
+    # 既定autoにより、無指定呼び出しではnormal+enable+adaptationを出力する。
+    # 旧`sway_enabled`(dev#1508 W2b由来のGUI内部専用
     # bool)は本WPでjob.jsonへの出力を廃止した)。
     expected_keys = {
         "vrm_path", "avatar_name", "shoulder_offset_deg", "merge_fingers",
         "unlit", "force_two_sided", "shadow_lift", "drop_bones",
-        "license_confirmed", "engine_mode", "uniform_scale",
+        "license_confirmed", "engine_mode", "uniform_scale", "size_fit_mode",
         "preflight_nonblocking", "paths",
-        "sway_intensity", "sway_enable",
+        "sway_intensity", "sway_enable", "sway_adaptation",
     }
     assert set(job.keys()) == expected_keys
+    assert job["sway_intensity"] == "normal"
+    assert job["sway_adaptation"] == "physbone-v1"
     assert set(job["paths"].keys()) == {"blender_exe", "vrm_addon_zip", "palworld_pak"} \
         or set(job["paths"].keys()) == {"blender_exe", "vrm_addon_zip"}
 
@@ -321,7 +323,7 @@ def test_write_job_uniform_scale_default_is_one(tmp_path):
     # 呼び出しであっても他のテストと同じ既定値のまま(=このWPの追加が
     # 既存フィールドへ副作用を持たないことの確認)。
     assert job["shoulder_offset_deg"] == 0
-    assert job["shadow_lift"] == 0.7
+    assert job["shadow_lift"] == 0.0
 
 
 def test_write_job_uniform_scale_value_wired(tmp_path):
@@ -333,6 +335,43 @@ def test_write_job_uniform_scale_value_wired(tmp_path):
     with open(job_json_path, encoding="utf-8") as f:
         job = json.load(f)
     assert job["uniform_scale"] == 0.8
+
+
+def test_write_job_size_fit_is_explicit_and_legacy_by_default(tmp_path):
+    app_root = _make_app_root(tmp_path)
+    vrm = _make_vrm(tmp_path)
+    path = pr.write_job(app_root, str(tmp_path / "work"), vrm)
+    assert pr.read_job(path)["size_fit_mode"] == "legacy"
+    path = pr.write_job(app_root, str(tmp_path / "work"), vrm,
+                        size_fit_mode="vanilla", uniform_scale=0.9)
+    job = pr.read_job(path)
+    assert job["size_fit_mode"] == "vanilla" and job["uniform_scale"] == 0.9
+    with pytest.raises(ValueError, match="size_fit_mode"):
+        pr.write_job(app_root, str(tmp_path / "work"), vrm, size_fit_mode="typo")
+
+
+def test_materials_size_guard_uses_cooked_snapshot_before_writing_job(tmp_path):
+    app_root = _make_app_root(tmp_path)
+    vrm = _make_vrm(tmp_path)
+    work = str(tmp_path / "work")
+    path = pr.write_job(app_root, work, vrm, size_fit_mode="vanilla", uniform_scale=0.9)
+    job_dir = os.path.dirname(path)
+    os.makedirs(os.path.join(job_dir, "build"), exist_ok=True)
+    snapshot_path = os.path.join(job_dir, "build", "job_snapshot.json")
+    with open(snapshot_path, "w", encoding="utf8") as out:
+        json.dump({"uniform_scale":1.0}, out)
+    before = open(path, "rb").read()
+    # A preview already wrote vanilla/0.9 to job.json; cooked output is still legacy/1.0.
+    assert not pr.size_settings_match_build(work, vrm, size_fit_mode="vanilla", uniform_scale=0.9)
+    assert not pr.size_settings_match_build(work, vrm, uniform_scale=0.9)
+    assert pr.size_settings_match_build(work, vrm)
+    with pytest.raises(ValueError, match="Full Convert"):
+        pr.run_pipeline(app_root, work, vrm, on_line=lambda line: None,
+                        on_exit=lambda code: None, materials_only=True,
+                        size_fit_mode="vanilla", uniform_scale=0.9)
+    assert open(path, "rb").read() == before
+    os.unlink(snapshot_path)
+    assert not pr.size_settings_match_build(work, vrm)
 
 
 def test_write_job_uniform_scale_clamped_to_dev158_range(tmp_path):

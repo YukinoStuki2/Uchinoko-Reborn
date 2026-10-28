@@ -30,6 +30,14 @@ using UnityEngine;
 
 public static class DiveToPalworldExporter
 {
+    // Batch exports exit Unity afterwards; a reused Editor must release our
+    // private native Mesh/Texture allocations explicitly after each export.
+    static List<UnityEngine.Object> editorExportTemporaries;
+    static T TrackEditorTemporary<T>(T value) where T : UnityEngine.Object
+    {
+        if (editorExportTemporaries != null) editorExportTemporaries.Add(value);
+        return value;
+    }
     [MenuItem("Tools/DiveToPalworld/Export Avatar")]
     static void ExportMenu()
     {
@@ -132,7 +140,32 @@ public static class DiveToPalworldExporter
         throw new Exception("missing argument: " + name);
     }
 
-    static void Export(GameObject target, string outDir)
+    // Reuse the conversion pipeline in an open Editor without touching its scenes.
+    // The request always names a saved prefab; unsaved scene/Prefab Stage changes
+    // are deliberately neither read nor saved by this bridge.
+    public static void ExportForEditorBridge(string prefabPath, string outDir)
+    {
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+        if (prefab == null) throw new Exception("cannot read saved prefab: " + prefabPath);
+        if (editorExportTemporaries != null) throw new InvalidOperationException("An Editor export is already running");
+        var scene = UnityEditor.SceneManagement.EditorSceneManager.NewPreviewScene();
+        editorExportTemporaries = new List<UnityEngine.Object>();
+        try { Export(prefab, outDir, scene); }
+        finally
+        {
+            try { UnityEditor.SceneManagement.EditorSceneManager.ClosePreviewScene(scene); }
+            finally
+            {
+                foreach (var temporary in editorExportTemporaries)
+                    if (temporary != null && !AssetDatabase.Contains(temporary))
+                        UnityEngine.Object.DestroyImmediate(temporary);
+                editorExportTemporaries = null;
+            }
+        }
+    }
+
+    static void Export(GameObject target, string outDir,
+                       UnityEngine.SceneManagement.Scene exportScene = default)
     {
         Directory.CreateDirectory(outDir);
         // NDMFベイクとinactive除去で破壊的に変更するため、常に複製を処理する
@@ -144,7 +177,9 @@ public static class DiveToPalworldExporter
         }
         else
         {
-            instance = (GameObject)PrefabUtility.InstantiatePrefab(target);
+            instance = (GameObject)(exportScene.IsValid()
+                ? PrefabUtility.InstantiatePrefab(target, exportScene)
+                : PrefabUtility.InstantiatePrefab(target));
             // 子の削除を許すため完全アンパック
             PrefabUtility.UnpackPrefabInstance(instance,
                 PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
@@ -231,7 +266,7 @@ public static class DiveToPalworldExporter
             catch (Exception e)
             {
                 Debug.LogWarning("D2P: ExtractPhysBoneChains failed (" + e.GetType().Name + ": " + e.Message +
-                    ") — physbones.json may be missing or incomplete; export continues (fail-open, dev#1508 W1a)");
+                    ") — physbones.json may be missing or incomplete; export continues (fail-open, dev#1508 W1a)\n" + e.StackTrace);
             }
             StripNonEssentialPostBake(instance);                  // ④-a 第2段: 必須5型以外を除去(ExportHumanoidの直前)
             D2PDiagDump(instance, "11 after StripNonEssentialPostBake");
@@ -504,6 +539,8 @@ public static class DiveToPalworldExporter
 
         {
             var camGo = new GameObject("D2PDiagCam");
+            if (UnityEditor.SceneManagement.EditorSceneManager.IsPreviewScene(root.scene))
+                UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(camGo, root.scene);
             var cam = camGo.AddComponent<Camera>();
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0.6f, 0.6f, 0.6f, 1f);
@@ -517,12 +554,12 @@ public static class DiveToPalworldExporter
             cam.farClipPlane = dist * 4f;
 
             int w = 512, h = 768;
-            var rt = new RenderTexture(w, h, 24);
+            var rt = TrackEditorTemporary(new RenderTexture(w, h, 24));
             cam.targetTexture = rt;
             cam.Render();
             var prevActive = RenderTexture.active;
             RenderTexture.active = rt;
-            var tex = new Texture2D(w, h, TextureFormat.RGB24, false);
+            var tex = TrackEditorTemporary(new Texture2D(w, h, TextureFormat.RGB24, false));
             tex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
             tex.Apply();
             RenderTexture.active = prevActive;
@@ -1152,6 +1189,11 @@ public static class DiveToPalworldExporter
         {
             if (r.sharedMesh == null || r.bones == null || r.bones.Length == 0)
                 continue;
+            // FlattenSkinnedMeshes may skip incomplete rigs. In a running Editor
+            // their sharedMesh can still be the persistent project asset; rebind
+            // a private copy so exporting never mutates the user's loaded mesh.
+            if (AssetDatabase.Contains(r.sharedMesh))
+                r.sharedMesh = TrackEditorTemporary(UnityEngine.Object.Instantiate(r.sharedMesh));
             var bp = new Matrix4x4[r.bones.Length];
             for (int b = 0; b < r.bones.Length; b++)
                 bp[b] = r.bones[b] != null
@@ -1193,7 +1235,7 @@ public static class DiveToPalworldExporter
         var mf = t.GetComponent<MeshFilter>();
         if (mf != null && mf.sharedMesh != null && Mathf.Abs(acc2 - 1f) > 1e-6f)
         {
-            var mesh = UnityEngine.Object.Instantiate(mf.sharedMesh);
+            var mesh = TrackEditorTemporary(UnityEngine.Object.Instantiate(mf.sharedMesh));
             mesh.name = mf.sharedMesh.name;
             var verts = mesh.vertices;
             for (int i = 0; i < verts.Length; i++) verts[i] *= acc2;
@@ -1252,7 +1294,7 @@ public static class DiveToPalworldExporter
             }
 
             var srcMesh = mf.sharedMesh;
-            var mesh = UnityEngine.Object.Instantiate(srcMesh);
+            var mesh = TrackEditorTemporary(UnityEngine.Object.Instantiate(srcMesh));
             mesh.name = srcMesh.name;
 
             var weights = new BoneWeight[mesh.vertexCount];
@@ -1507,7 +1549,7 @@ public static class DiveToPalworldExporter
             }
             Matrix4x4 uniformM = boneMats[0];
 
-            var mesh = UnityEngine.Object.Instantiate(src);
+            var mesh = TrackEditorTemporary(UnityEngine.Object.Instantiate(src));
             mesh.name = src.name;
             var verts = mesh.vertices;
             var normals = mesh.normals;
@@ -1768,7 +1810,7 @@ public static class DiveToPalworldExporter
             if (toAdd.Count == 0) continue;
 
             var src = r.sharedMesh;
-            var mesh = UnityEngine.Object.Instantiate(src);
+            var mesh = TrackEditorTemporary(UnityEngine.Object.Instantiate(src));
             mesh.name = src.name;
             var oldBones = r.bones;
             var oldBp = src.bindposes;
@@ -2169,7 +2211,7 @@ public static class DiveToPalworldExporter
                 newBpList.Add(i < oldBp.Length ? oldBp[i] : Matrix4x4.identity);
             }
 
-            var mesh = UnityEngine.Object.Instantiate(src);
+            var mesh = TrackEditorTemporary(UnityEngine.Object.Instantiate(src));
             mesh.name = src.name;
             var weights = mesh.boneWeights;
             if (weights != null && weights.Length == mesh.vertexCount)
@@ -3474,6 +3516,23 @@ public static class DiveToPalworldExporter
                             if (it != null) ignoreNames.Add(it.name);
                         }
                 }
+                // Recent SDKs can also exclude another PhysBone's whole root.
+                // Apply the same boundary before deriving chains and depths.
+                if (BoolFieldJson(physBoneType.GetField("ignoreOtherPhysBones", F), comp) == "true")
+                {
+                    foreach (var other in comps)
+                    {
+                        var otherComp = other as Component;
+                        if (otherComp == null || otherComp == comp) continue;
+                        // A baked avatar can retain a managed reference to a
+                        // destroyed Unity Transform. Use Unity's null check,
+                        // as for this component's own root above; CLR ?? would
+                        // keep the destroyed reference and abort all PB export.
+                        var otherRoot = rootField?.GetValue(otherComp) as Transform;
+                        if (otherRoot == null) otherRoot = otherComp.transform;
+                        if (otherRoot != anchor) ignoreNames.Add(otherRoot.name);
+                    }
+                }
                 var childrenByName = BuildChildrenByNameMap(anchor);
                 var chains = BuildPhysBoneLeafChains(anchor.name, childrenByName, ignoreNames);
                 if (chains.Count == 0)
@@ -3488,6 +3547,8 @@ public static class DiveToPalworldExporter
                 chainSb.AppendFormat("      \"anchor_explicit_root\": {0},\n", anchorExplicitRoot ? "true" : "false");
                 chainSb.AppendFormat("      \"pb_object_name\": \"{0}\",\n", J(comp.gameObject.name));
                 chainSb.AppendFormat("      \"pb_object_path\": \"{0}\",\n", J(GetHierarchyPath(comp.transform)));
+                chainSb.AppendFormat("      \"enabled\": {0},\n", comp is Behaviour behaviour ? (behaviour.enabled ? "true" : "false") : "null");
+                chainSb.AppendFormat("      \"active_in_hierarchy\": {0},\n", comp.gameObject.activeInHierarchy ? "true" : "false");
                 chainSb.Append("      \"chains\": [\n");
                 for (int ci = 0; ci < chains.Count; ci++)
                 {
@@ -3505,7 +3566,7 @@ public static class DiveToPalworldExporter
                     immobileField, immobileTypeField, limitTypeField, maxAngleXField, maxAngleZField,
                     limitRotationField, radiusField,
                     integrationTypeField, ignoreTransformsField, endpointPositionField, multiChildTypeField,
-                    collidersField, colliderKeys));
+                    collidersField, colliderKeys, anchor, chains));
                 chainSb.Append("\n    }");
                 entries.Add(chainSb.ToString());
             }
@@ -3513,7 +3574,9 @@ public static class DiveToPalworldExporter
                        + entries.Count + " with chains, " + skipped + " skipped (no descendants)");
         }
 
-        sb.Append("{\n  \"format\": \"divetopalworld-physbones-1\",\n  \"physbones\": [\n");
+        sb.Append("{\n  \"format\": \"divetopalworld-physbones-1\",\n  \"schema_revision\": 2,\n  \"source\": ");
+        sb.Append(PhysBoneSourceJson(physBoneType));
+        sb.Append(",\n  \"physbones\": [\n");
         sb.Append(string.Join(",\n", entries));
         sb.Append("\n  ],\n  \"colliders\": [\n");
         sb.Append(string.Join(",\n", colliderEntries));
@@ -3539,7 +3602,8 @@ public static class DiveToPalworldExporter
         FieldInfo limitRotationField, FieldInfo radiusField,
         FieldInfo integrationTypeField, FieldInfo ignoreTransformsField,
         FieldInfo endpointPositionField, FieldInfo multiChildTypeField,
-        FieldInfo collidersField, Dictionary<Component, string> colliderKeys)
+        FieldInfo collidersField, Dictionary<Component, string> colliderKeys,
+        Transform anchor, List<List<string>> chains)
     {
         var p = new StringBuilder();
         p.Append("{\n");
@@ -3559,9 +3623,261 @@ public static class DiveToPalworldExporter
         p.AppendFormat("        \"ignore_transforms\": {0},\n", TransformNameListFieldJson(ignoreTransformsField, comp));
         p.AppendFormat("        \"endpoint_position\": {0},\n", Vector3FieldJson(endpointPositionField, comp));
         p.AppendFormat("        \"multi_child_type\": {0},\n", EnumFieldJson(multiChildTypeField, comp));
-        p.AppendFormat("        \"colliders\": {0}\n", ColliderRefsJson(collidersField, comp, colliderKeys));
+        p.AppendFormat("        \"colliders\": {0},\n", ColliderRefsJson(collidersField, comp, colliderKeys));
+        const BindingFlags F = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        var type = comp.GetType();
+        p.AppendFormat("        \"version\": {0},\n", EnumFieldJson(type.GetField("version", F), comp));
+        p.AppendFormat("        \"stretch_motion\": {0},\n", FloatFieldJson(type.GetField("stretchMotion", F), comp));
+        p.AppendFormat("        \"max_stretch\": {0},\n", FloatFieldJson(type.GetField("maxStretch", F), comp));
+        p.AppendFormat("        \"max_squish\": {0},\n", FloatFieldJson(type.GetField("maxSquish", F), comp));
+        p.AppendFormat("        \"is_animated\": {0},\n", BoolFieldJson(type.GetField("isAnimated", F), comp));
+        p.AppendFormat("        \"reset_when_disabled\": {0},\n", BoolFieldJson(type.GetField("resetWhenDisabled", F), comp));
+        p.AppendFormat("        \"ignore_other_physbones\": {0},\n", BoolFieldJson(type.GetField("ignoreOtherPhysBones", F), comp));
+        var depths = ReadPhysBoneDepths(comp, chains, endpointPositionField, anchor.name);
+        p.Append("        \"geometry\": ");
+        p.Append(PhysBoneGeometryJson(anchor, chains, endpointPositionField, comp, depths));
+        p.Append(",\n        \"curves\": ");
+        p.Append(PhysBoneCurvesJson(comp, depths.SampleRatios));
+        p.Append("\n");
         p.Append("      }");
         return p.ToString();
+    }
+
+    // Preserve SDK data rather than treating every joint as the root value. The
+    // JSON remains additive: old consumers keep using scalar params/chains.
+    // Curve samples come from Unity itself (including weighted tangents). Empty
+    // VRC curves mean a constant multiplier of one, not AnimationCurve.Evaluate's
+    // zero. Missing SDK fields remain null and are distinguishable from defaults.
+    static string PhysBoneCurvesJson(Component comp, IEnumerable<float> sampleRatios)
+    {
+        string[] names = { "pull", "spring", "stiffness", "gravity", "gravityFalloff",
+            "immobile", "maxAngleX", "maxAngleZ", "limitRotationX", "limitRotationY",
+            "limitRotationZ", "radius", "stretchMotion", "maxStretch", "maxSquish" };
+        string[] keys = { "pull", "spring", "stiffness", "gravity", "gravity_falloff",
+            "immobile", "max_angle_x", "max_angle_z", "limit_rotation_x", "limit_rotation_y",
+            "limit_rotation_z", "radius", "stretch_motion", "max_stretch", "max_squish" };
+        const BindingFlags F = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        var sb = new StringBuilder("{\n");
+        for (int i = 0; i < names.Length; i++)
+        {
+            sb.AppendFormat("          \"{0}\": ", keys[i]);
+            var field = comp.GetType().GetField(names[i] + "Curve", F);
+            object value = null;
+            if (field != null) { try { value = field.GetValue(comp); } catch { } }
+            sb.Append(value is AnimationCurve curve ? PhysBoneCurveJson(curve, sampleRatios) : "null");
+            sb.Append(i + 1 < names.Length ? ",\n" : "\n");
+        }
+        sb.Append("        }");
+        return sb.ToString();
+    }
+
+    static string PhysBoneCurveJson(AnimationCurve curve, IEnumerable<float> sampleRatios)
+    {
+        if (curve == null) return "null";
+        var sb = new StringBuilder("{\"keys\": [");
+        var keys = curve.keys;
+        for (int i = 0; i < keys.Length; i++)
+        {
+            var key = keys[i];
+            if (i > 0) sb.Append(", ");
+            sb.Append("{\"time\": ").Append(PhysBoneNumberJson(key.time));
+            sb.Append(", \"value\": ").Append(PhysBoneNumberJson(key.value));
+            sb.Append(", \"in_tangent\": ").Append(PhysBoneNumberJson(key.inTangent, true));
+            sb.Append(", \"out_tangent\": ").Append(PhysBoneNumberJson(key.outTangent, true));
+            sb.Append(", \"in_weight\": ").Append(PhysBoneNumberJson(key.inWeight));
+            sb.Append(", \"out_weight\": ").Append(PhysBoneNumberJson(key.outWeight));
+            sb.Append(", \"weighted_mode\": ").Append(((int)key.weightedMode).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            sb.Append("}");
+        }
+        sb.AppendFormat("], \"pre_wrap\": \"{0}\", \"post_wrap\": \"{1}\", \"samples\": [",
+            J(curve.preWrapMode.ToString()), J(curve.postWrapMode.ToString()));
+        var times = new SortedSet<float>();
+        for (int i = 0; i <= 16; i++) times.Add(i / 16f);
+        foreach (var key in keys)
+            if (!float.IsNaN(key.time) && !float.IsInfinity(key.time) && key.time >= 0f && key.time <= 1f) times.Add(key.time);
+        if (sampleRatios != null)
+            foreach (var ratio in sampleRatios)
+                if (!float.IsNaN(ratio) && !float.IsInfinity(ratio) && ratio >= 0f && ratio <= 1f) times.Add(ratio);
+        bool firstSample = true;
+        foreach (var time in times)
+        {
+            if (!firstSample) sb.Append(", ");
+            firstSample = false;
+            sb.Append("{\"time\": ").Append(PhysBoneNumberJson(time));
+            sb.Append(", \"value\": ").Append(PhysBoneNumberJson(keys.Length == 0 ? 1f : curve.Evaluate(time)));
+            sb.Append("}");
+        }
+        sb.Append("]}");
+        return sb.ToString();
+    }
+
+    // Step keys use infinite tangents. JSON has no Infinity literal, so preserve
+    // that tangent as a string; evaluated samples are always numbers or null.
+    static string PhysBoneNumberJson(float value, bool preserveSpecial = false)
+    {
+        if (float.IsNaN(value) || float.IsInfinity(value))
+            return preserveSpecial ? "\"" + value.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\"" : "null";
+        return value.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    static string BoolFieldJson(FieldInfo field, Component comp)
+    {
+        if (field == null) return "null";
+        try { return field.GetValue(comp) is bool value ? (value ? "true" : "false") : "null"; }
+        catch { return "null"; }
+    }
+
+    static string PhysBoneSourceJson(Type physBoneType)
+    {
+        string sdkVersion = null;
+        string assemblyVersion = null;
+        if (physBoneType != null)
+        {
+            assemblyVersion = physBoneType.Assembly.GetName().Version?.ToString();
+            try { sdkVersion = UnityEditor.PackageManager.PackageInfo.FindForAssembly(physBoneType.Assembly)?.version; }
+            catch { }
+        }
+        return "{\"unity_version\": \"" + J(Application.unityVersion) + "\", \"vrchat_base_version\": "
+            + (sdkVersion == null ? "null" : "\"" + J(sdkVersion) + "\"")
+            + ", \"physbone_assembly_version\": "
+            + (assemblyVersion == null ? "null" : "\"" + J(assemblyVersion) + "\"") + "}";
+    }
+
+    static string PhysBoneVectorJson(Vector3 value)
+    {
+        return "[" + PhysBoneNumberJson(value.x) + ", " + PhysBoneNumberJson(value.y)
+            + ", " + PhysBoneNumberJson(value.z) + "]";
+    }
+
+    static string PhysBoneRotationJson(Quaternion value)
+    {
+        return "[" + PhysBoneNumberJson(value.x) + ", " + PhysBoneNumberJson(value.y)
+            + ", " + PhysBoneNumberJson(value.z) + ", " + PhysBoneNumberJson(value.w) + "]";
+    }
+
+    sealed class PhysBoneDepths
+    {
+        public readonly Dictionary<string, int> Indices = new Dictionary<string, int>();
+        public readonly Dictionary<int, float> ForceRatios = new Dictionary<int, float>();
+        public readonly Dictionary<int, float> TransformRatios = new Dictionary<int, float>();
+        public readonly SortedSet<float> SampleRatios = new SortedSet<float>();
+        public int MaxChainIndex;
+        public bool? EndpointNonzero;
+        public bool SdkRatios;
+    }
+
+    static PhysBoneDepths ReadPhysBoneDepths(Component comp, List<List<string>> chains,
+        FieldInfo endpointField, string anchorName)
+    {
+        var result = new PhysBoneDepths();
+        result.Indices[anchorName] = 0;
+        foreach (var chain in chains)
+        {
+            result.MaxChainIndex = Math.Max(result.MaxChainIndex, chain.Count);
+            for (int i = 0; i < chain.Count; i++) result.Indices[chain[i]] = i + 1;
+        }
+        if (endpointField != null)
+        {
+            try { if (endpointField.GetValue(comp) is Vector3 endpoint) result.EndpointNonzero = endpoint != Vector3.zero; }
+            catch { }
+        }
+        const BindingFlags F = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        var type = comp.GetType();
+        var indexField = type.GetField("maxBoneChainIndex", F);
+        var forceMethod = type.GetMethod("CalcBoneRatio", F, null, new[] { typeof(int) }, null);
+        var transformMethod = type.GetMethod("CalcTransformRatio", F, null, new[] { typeof(int) }, null);
+        if (indexField == null || indexField.FieldType != typeof(int) || forceMethod == null || transformMethod == null) return result;
+        // Only the temporary export clone's nonserialized index is changed.
+        // Calling InitTransforms would initialize SDK simulation state; avoid it.
+        object savedIndex = indexField.GetValue(comp);
+        try
+        {
+            indexField.SetValue(comp, result.MaxChainIndex);
+            for (int depth = 0; depth <= result.MaxChainIndex; depth++)
+            {
+                var force = forceMethod.Invoke(comp, new object[] { depth });
+                var transform = transformMethod.Invoke(comp, new object[] { depth });
+                if (force is float f && !float.IsNaN(f) && !float.IsInfinity(f))
+                { result.ForceRatios[depth] = f; result.SampleRatios.Add(f); }
+                if (transform is float t && !float.IsNaN(t) && !float.IsInfinity(t))
+                { result.TransformRatios[depth] = t; result.SampleRatios.Add(t); }
+            }
+            result.SdkRatios = true;
+        }
+        catch (Exception e) { Debug.LogWarning("D2P: SDK PhysBone depth ratios unavailable: " + e.GetType().Name); }
+        finally { indexField.SetValue(comp, savedIndex); }
+        return result;
+    }
+
+    // Capture geometry after NDMF and unique-name normalization, at exactly the
+    // same stage as params/chains. Curve ratios in the SDK are depth based; these
+    // physical lengths must not be substituted for CalcBone/TransformRatio.
+    static string PhysBoneGeometryJson(Transform anchor, List<List<string>> chains,
+        FieldInfo endpointField, Component comp, PhysBoneDepths depths)
+    {
+        var transforms = new Dictionary<string, Transform>();
+        foreach (var t in anchor.GetComponentsInChildren<Transform>(true)) transforms[t.name] = t;
+        var names = new List<string> { anchor.name };
+        var seen = new HashSet<string>(names);
+        foreach (var chain in chains)
+            foreach (var name in chain) if (seen.Add(name)) names.Add(name);
+        Vector3 endpoint = Vector3.zero;
+        bool hasEndpoint = false;
+        if (endpointField != null)
+        {
+            try
+            {
+                if (endpointField.GetValue(comp) is Vector3 value) { endpoint = value; hasEndpoint = true; }
+            }
+            catch { }
+        }
+        var sb = new StringBuilder("{\"coordinate_system\": \"unity_world_lh_yup_meters\"");
+        sb.Append(", \"max_chain_index\": ").Append(depths.MaxChainIndex);
+        sb.Append(", \"endpoint_nonzero\": ").Append(depths.EndpointNonzero.HasValue ? (depths.EndpointNonzero.Value ? "true" : "false") : "null");
+        sb.Append(", \"ratio_source\": ").Append(depths.SdkRatios ? "\"sdk\"" : "null");
+        sb.Append(", \"transforms\": [");
+        for (int i = 0; i < names.Count; i++)
+        {
+            if (i > 0) sb.Append(", ");
+            var t = transforms[names[i]];
+            sb.AppendFormat("{{\"name\": \"{0}\", \"parent\": {1}", J(t.name), t.parent == null ? "null" : "\"" + J(t.parent.name) + "\"");
+            int depth = depths.Indices[t.name];
+            sb.Append(", \"depth\": ").Append(depth);
+            sb.Append(", \"force_ratio\": ").Append(depths.ForceRatios.TryGetValue(depth, out var force) ? PhysBoneNumberJson(force) : "null");
+            sb.Append(", \"transform_ratio\": ").Append(depths.TransformRatios.TryGetValue(depth, out var transform) ? PhysBoneNumberJson(transform) : "null");
+            sb.Append(", \"position\": ").Append(PhysBoneVectorJson(t.position));
+            sb.Append(", \"rotation\": ").Append(PhysBoneRotationJson(t.rotation));
+            sb.Append(", \"lossy_scale\": ").Append(PhysBoneVectorJson(t.lossyScale));
+            sb.Append(", \"local_position\": ").Append(PhysBoneVectorJson(t.localPosition));
+            sb.Append(", \"local_rotation\": ").Append(PhysBoneRotationJson(t.localRotation));
+            sb.Append(", \"local_scale\": ").Append(PhysBoneVectorJson(t.localScale)).Append("}");
+        }
+        sb.Append("], \"chains\": [");
+        for (int ci = 0; ci < chains.Count; ci++)
+        {
+            if (ci > 0) sb.Append(", ");
+            var chain = chains[ci];
+            sb.Append("{\"bones\": [\"").Append(J(anchor.name)).Append("\"");
+            foreach (var name in chain) sb.Append(", \"").Append(J(name)).Append("\"");
+            sb.Append("], \"segment_lengths\": [");
+            float total = 0f;
+            Transform previous = anchor;
+            for (int ni = 0; ni < chain.Count; ni++)
+            {
+                var current = transforms[chain[ni]];
+                float length = Vector3.Distance(previous.position, current.position);
+                total += length;
+                if (ni > 0) sb.Append(", ");
+                sb.Append(PhysBoneNumberJson(length));
+                previous = current;
+            }
+            sb.Append("], \"total_length\": ").Append(PhysBoneNumberJson(total));
+            sb.Append(", \"endpoint_world\": ").Append(hasEndpoint ? PhysBoneVectorJson(previous.TransformPoint(endpoint)) : "null");
+            sb.Append(", \"endpoint_length\": ").Append(hasEndpoint ? PhysBoneNumberJson(previous.TransformVector(endpoint).magnitude) : "null");
+            sb.Append("}");
+        }
+        sb.Append("]}");
+        return sb.ToString();
     }
 
     static string FloatFieldJson(FieldInfo field, Component comp)
@@ -3807,7 +4123,7 @@ public static class DiveToPalworldExporter
             Graphics.Blit(tex, rt);
             var prev = RenderTexture.active;
             RenderTexture.active = rt;
-            var read = new Texture2D(tex.width, tex.height, TextureFormat.RGBA32, false);
+            var read = TrackEditorTemporary(new Texture2D(tex.width, tex.height, TextureFormat.RGBA32, false));
             read.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0);
             read.Apply();
             RenderTexture.active = prev;

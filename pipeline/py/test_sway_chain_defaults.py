@@ -40,9 +40,9 @@ def test_biased_pb_default_disabled_even_if_tail_named():
         "pb", _pb_params(limit_type="Hinge")) is False
 
 
-def test_biased_angle_offset_default_disabled():
+def test_offset_angle_with_positive_inner_cone_default_enabled():
     assert m.is_default_enabled(
-        "pb", _pb_params(limit_type="Angle", limit_rotation=(5, 0, 0))) is False
+        "pb", _pb_params(limit_type="Angle", limit_rotation=(5, 0, 0))) is True
 
 
 def test_unbiased_angle_zero_offset_default_enabled():

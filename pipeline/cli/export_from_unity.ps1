@@ -2,8 +2,7 @@
 # 使い方: pwsh -File export_from_unity.ps1 -Prefab "C:\...\Assets\...\avatar.prefab" [-Out <出力フォルダ>]
 #         pwsh -File export_from_unity.ps1 -ResolveUnityOnly   # Unity発見だけ検証(診断用、dev#22)
 # 出力: FBXコピー + humanoid.json + 実テクスチャPNG + material_map.json
-# 対象: Unity 2022.3.x(VRChat想定)。プロジェクトを開いたままだと起動できない
-#       (その場合はUnityのメニュー Tools > DiveToPalworld > Export Avatar で手動輸出)
+# 対象: Unity 2022.3.x(VRChat想定)。開いている同一プロジェクトはEditor bridgeで輸出する。
 param(
     [string]$Prefab = "",
     [string]$Out = "",
@@ -160,7 +159,7 @@ function ConvertTo-D2PQuotedArg([string]$Arg) {
     return $Arg
 }
 
-function Invoke-D2PPythonNoWindow([string]$PythonExe, [string[]]$ArgumentList, [hashtable]$EnvOverrides) {
+function Invoke-D2PPythonNoWindow([string]$PythonExe, [string[]]$ArgumentList, [hashtable]$EnvOverrides, [switch]$StreamOutput) {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $PythonExe
     $psi.Arguments = (($ArgumentList | ForEach-Object { ConvertTo-D2PQuotedArg $_ }) -join " ")
@@ -172,8 +171,15 @@ function Invoke-D2PPythonNoWindow([string]$PythonExe, [string[]]$ArgumentList, [
         foreach ($k in $EnvOverrides.Keys) { $psi.EnvironmentVariables[$k] = $EnvOverrides[$k] }
     }
     $proc = [System.Diagnostics.Process]::Start($psi)
-    $stdout = $proc.StandardOutput.ReadToEnd()
-    $stderr = $proc.StandardError.ReadToEnd()
+    # Read stderr concurrently so verbose failures cannot block a full pipe.
+    $stderrTask = $proc.StandardError.ReadToEndAsync()
+    if ($StreamOutput) {
+        while ($null -ne ($line = $proc.StandardOutput.ReadLine())) { Write-Host $line }
+        $stdout = ""
+    } else {
+        $stdout = $proc.StandardOutput.ReadToEnd()
+    }
+    $stderr = $stderrTask.GetAwaiter().GetResult()
     $proc.WaitForExit()
     $lines = @()
     if ($stdout) { $lines += @($stdout -split "`r?`n") }
@@ -324,6 +330,38 @@ What to do:
 # dev#22: 旧実装(C:\Program Files\Unity\Hub\Editor 決め打ち+ディレクトリ名走査のみ)は
 # Hubのインストール先変更・別ドライブ・Hub非経由に不可視だった。共通resolver
 # (冒頭のresolver節。正本 pipeline\py\dep_resolver.py)で解決する。
+# 3) プロジェクトが開かれていないか(二重起動はUnityが禁止)
+$lock = Join-Path $proj "Temp\UnityLockfile"
+if (Test-Path -LiteralPath $lock) {
+    try {
+        $fs = [IO.File]::Open($lock, "Open", "ReadWrite", "None"); $fs.Close()
+    } catch {
+        # Keep Unity's project lock intact. Dispatch to that Editor instead of
+        # launching a second instance or copying the user's project/Library.
+        $bridgePython = Find-D2PPython
+        if (-not $bridgePython) { throw "Python is required for the open Unity Editor bridge" }
+        if (-not $Out) {
+            $name = [IO.Path]::GetFileNameWithoutExtension($Prefab)
+            $Out = Join-Path $Root "work\${name}_export"
+        }
+        # Packaged builds put app_py under res/app; source checkouts use app_py.
+        $bridge = Join-Path $Root "app\unity_editor_bridge.py"
+        if (-not (Test-Path -LiteralPath $bridge -PathType Leaf)) {
+            $bridge = Join-Path $Root "app_py\unity_editor_bridge.py"
+        }
+        if (-not (Test-Path -LiteralPath $bridge -PathType Leaf)) {
+            throw "The Unity Editor bridge is missing from this installation; reinstall Uchinoko Reborn"
+        }
+        $bridgeResult = Invoke-D2PPythonNoWindow -PythonExe $bridgePython -ArgumentList @(
+            $bridge, "--project", $proj, "--prefab", $Prefab, "--out", $Out, "--app-root", $Root
+        ) -EnvOverrides @{ PYTHONIOENCODING = "utf-8"; PYTHONUTF8 = "1" } -StreamOutput
+        foreach ($line in $bridgeResult.Lines) { Write-Host $line }
+        exit $bridgeResult.ExitCode
+    }
+}
+
+# A running Editor owns the project already, so only the batch path needs to
+# discover a Unity executable (custom Hub locations may not have a ledger).
 $editor = Resolve-D2PUnityEditor -ProjectVersion $projVer -Family $SupportedFamily
 if (-not $editor -or -not (Test-Path -LiteralPath $editor)) {
     Write-Error ("Could not find a matching Unity ($projVer / $SupportedFamily family). `n" +
@@ -331,18 +369,6 @@ if (-not $editor -or -not (Test-Path -LiteralPath $editor)) {
     exit 1
 }
 Write-Host "Unity: $(Format-DiagPath $editor) (project=$projVer)"
-
-# 3) プロジェクトが開かれていないか(二重起動はUnityが禁止)
-$lock = Join-Path $proj "Temp\UnityLockfile"
-if (Test-Path -LiteralPath $lock) {
-    try {
-        $fs = [IO.File]::Open($lock, "Open", "ReadWrite", "None"); $fs.Close()
-    } catch {
-        Write-Error ("This project is currently open in Unity. Close Unity and run again, `n" +
-            "or use the Unity menu Tools > DiveToPalworld > Export Avatar to export manually")
-        exit 1
-    }
-}
 
 # 3.5) 統合FBX書き出しに必須のFBX Exporterが無ければmanifestへ追記(次回起動時にDL)
 #      manifest.json / packages-lock.json は実行前に退避し、finally で必ずバイト単位で復元する

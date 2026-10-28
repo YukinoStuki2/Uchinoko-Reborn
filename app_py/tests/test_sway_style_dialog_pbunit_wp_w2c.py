@@ -267,7 +267,7 @@ def test_force_setup_warning_message_exact_japanese_text():
 
 
 def test_force_setup_creates_styles_and_assigns_biased_rows(hidden_root, tmp_path, monkeypatch):
-    """公開合成fixture(偏向26行)で、ボタンがゆれかた生成+割当を行う
+    """公開合成fixture(偏向18行、Angle8行は安全な内接錐へ変換)で、ボタンがゆれかた生成+割当を行う
     こと。メッセージダイアログはconftest.pyの既定ブロックを明示的に
     monkeypatchして経路の呼び出しだけを確認する(実ダイアログは開かない)。"""
     doc = _load_synthetic_doc()
@@ -297,7 +297,7 @@ def test_force_setup_creates_styles_and_assigns_biased_rows(hidden_root, tmp_pat
 
     custom = store.load_custom_styles(str(tmp_path))
     auto_names = [n for n in custom if n.startswith(i18n.S("LabSwayStyleForceSetupNameFormat").split("{0}")[0])]
-    assert len(auto_names) == 26, f"偏向26行ぶんの自動生成ゆれかたが期待どおりでない: {len(auto_names)}"
+    assert len(auto_names) == 18, f"Expected 18 unsupported constraints after recovering eight Angle cones: {len(auto_names)}"
 
     override = store.get_job_override(str(tmp_path), avatar_path)
     assert override is not None
@@ -347,7 +347,7 @@ def test_force_setup_generated_values_correspond_to_pb_actual_values(hidden_root
 
 def test_force_setup_ignores_slot_count_and_still_applies_over_9(hidden_root, tmp_path, monkeypatch):
     """スロット数(n/9)はこのボタンでは検査も阻止もしない(2026-08-16
-    オーナー指定「カウントも一応無視」)。公開合成fixtureには偏向26行あり、
+    オーナー指定「カウントも一応無視」)。公開合成fixtureには偏向18行あり、
     容量9を大きく超えても全行に適用されること。"""
     doc = _load_synthetic_doc()
     avatar_path = _write_prefab_sidecar(tmp_path, doc)
@@ -366,7 +366,7 @@ def test_force_setup_ignores_slot_count_and_still_applies_over_9(hidden_root, tm
         raise
 
     custom = store.load_custom_styles(str(tmp_path))
-    assert len(custom) == 26  # 容量9を大きく超えても全26行に適用される
+    assert len(custom) == 18  # Explicit configuration can exceed the nine runtime slots.
 
 
 def test_force_setup_skips_unbiased_and_manual_rows(hidden_root, tmp_path, monkeypatch):

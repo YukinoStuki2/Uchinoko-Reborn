@@ -42,10 +42,14 @@ import sway_hub_wire  # dev#1508 W2a-2c: ハブ配線の高レベル入口(ア�
 import sway_hub_placement  # dev#1508 W2a-2c: 座標配置の共通quat演算(build_donor_chain_quats)
                             # と、pak側shared-skeleton reparent計画(plan_reparent_steps)
 import sway_shared_skeleton  # dev#1508 W2a-2c: ReparentStepのjsonシリアライズに使う型
+import sway_reparent_store
 import sway_source_bones  # dev#1508 受入ゲート正本化: 対象骨集合の独立導出(配線実装を経由しない)
 import sway_source_gate  # dev#1508 受入ゲート正本化: ソース基準1:1比較(fail-closed)
 import sway_pivot_axiom  # dev#1508 hubwire final: オーナー制定公理(支点の対親相対位置不変)の検査
 import sway_degrade  # dev#1508 graceful-degrade(night_20260817 laneI): 揺れ鎖の明示的縮退
+import sway_coverage
+import sway_motion
+import vp_avatar_size
 import sway_chain_defaults  # dev#1572第3便: 既定enabled判定の唯一の共有関数
                              # (GUI側app_py\ui\sway_style_dialog.pyと同一関数を呼ぶ)
 from vp_bl import core
@@ -116,7 +120,8 @@ def _pose_head_world(arm, name):
     return arm.matrix_world @ arm.pose.bones[name].head
 
 
-def global_scale_and_place(avatar_arm, pal_arm, pal_map, warnings=None):
+def global_scale_and_place(avatar_arm, pal_arm, pal_map, warnings=None,
+                           *, size_fit_mode="legacy", report=None):
     """体幹長(hips→head)の比で全体スケールを決め、腰位置を合わせる。
 
     warnings: step01が avatar_meta.json へ残した警告文字列のリスト(省略可、
@@ -173,7 +178,20 @@ def global_scale_and_place(avatar_arm, pal_arm, pal_map, warnings=None):
                      "assignment is likely broken (the two bones sit at nearly the same "
                      "position). Re-check the Hips/Head assignment in the tool that "
                      "exported this avatar (e.g. Unity's Configure Avatar)." + dup_note)
-    s = (pal_head - pal_pelvis).length / av_len
+    markers = ("pelvis", "head", "foot_l", "foot_r") if size_fit_mode == "vanilla" else ("pelvis", "head")
+    try:
+        measurement = vp_avatar_size.fit_measurement(
+            {n: tuple(_bone_world(avatar_arm, pal_map[n])) for n in markers},
+            {n: tuple(_bone_world(pal_arm, n)) for n in markers}, size_fit_mode)
+    except (KeyError, ValueError) as exc:
+        core.die(TAG, f"Avatar size fitting failed: {exc}. Check Unity Humanoid Head / Hips / Feet assignments.")
+    # Preserve the exact old arithmetic for legacy jobs.
+    s = measurement["source_to_cm_scale"] if size_fit_mode == "vanilla" else (pal_head - pal_pelvis).length / av_len
+    if report is not None:
+        report.update(measurement)
+    print(f"[{TAG}] size fit: {size_fit_mode}, metric={measurement['metric']}, "
+          f"source={measurement['source_span']:.6f}, reference={measurement['reference_span_cm']:.3f} cm, "
+          f"relative to legacy={measurement['relative_to_legacy']:.3%}")
     avatar_arm.scale = (s, s, s)
     bpy.context.view_layer.update()
     av_hips2 = _bone_world(avatar_arm, pal_map["pelvis"])
@@ -186,6 +204,7 @@ def global_scale_and_place(avatar_arm, pal_arm, pal_map, warnings=None):
     bpy.context.view_layer.objects.active = avatar_arm
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     print(f"[{TAG}] global fit: scale x{s:.3f}, pelvis aligned")
+    return s
 
 
 def auto_fit_pose(avatar_arm, pal_arm, pal_map):
@@ -268,8 +287,8 @@ def apply_output_scale(pal_arm, meshes, k):
     """
     if k == 1.0:
         return
-    if k <= 0:
-        core.die(TAG, f"uniform_scale must be > 0 (got {k})")
+    if not math.isfinite(k) or k <= 0:
+        core.die(TAG, f"uniform_scale must be finite and > 0 (got {k})")
     bpy.ops.object.select_all(action="DESELECT")
     pal_arm.select_set(True)
     bpy.context.view_layer.objects.active = pal_arm
@@ -2802,7 +2821,11 @@ def wire_sway_hub_auto(job, gender, physbone_entries, vanilla, group_targets,
         lab_assignments=lab_assignments,
         default_safety_margin=SWAY_DEFAULT_SAFETY_MARGIN,
         safety_margin_by_chain=_safety_margin_overrides_from_job(
-            job, weighted_bone_names=weighted_bone_names))
+            job, weighted_bone_names=weighted_bone_names),
+        preserve_chain_anchors=sway_hub_wire.preserve_chain_anchors_from_overrides(
+            job.get("sway_chain_overrides")),
+        auto_preserve_segments=job.get("sway_adaptation") == "physbone-v1",
+        refill_nested=job.get("sway_adaptation") == "physbone-v1")
 
     wiring = sway_hub.filter_wiring_by_resolvable_anchor(result.wiring, group_targets)
     node_overrides = sway_hub.node_overrides_from_wiring_plan(wiring)
@@ -2963,45 +2986,7 @@ def place_hub_donor_chains(pal_arm, avatar_arm, wiring, gender, anchor_pal_map, 
         hub_eb.parent = anchor_eb
 
         def _resolve_hub_segment(cp):
-            # dev#1572(夜間便2): tailの向きは「source_chain[1](=fit後の
-            # 代表骨)自身」ではなく、`sway_hub.donor_group_members()`で
-            # 引いたその代表グループの**先頭骨**(根元寄り、常に元の鎖の
-            # chain[0]そのもの)のheadを使う——節数フィットで代表が先端側
-            # (マージ区間の末尾)へ動いても、hub root自身のtail方向は
-            # 常に「アバターの実際に次の関節」を指す(モジュールdocstring
-            # 「①ハブroot自身」の意図どおり)。旧実装は代表名を直接
-            # av_pointしていたため、フィットが発動するとhub root自身が
-            # マージ区間の末尾まで異常に伸びていた(実測: flatapron耳、
-            # 7.8cmのはずが26.7cmに肥大)。
-            # dev#1572(第2便、安全域マージの全結合(実効節数1)修理):
-            # headの側にも同じ理屈を適用する。`src[0]`(=fit後の唯一の
-            # 代表)は通常(根本がマージされていない)ならそれ自身が根本
-            # (=anchor)だが、実効節数1の全結合(`fit_chain_to_length(
-            # chain,1)`)が発動すると`src[0]`はグループの末尾側(先端寄り)
-            # 要素名になり、真のanchor(グループの先頭骨)の位置とは
-            # 一致しない(共有Skeleton側`sway_hub_placement.
-            # _hub_root_real_segment_transform()`の同型修正と同じ考え方)。
-            # `sway_hub.donor_group_members(cp)[src[0]][0]`は常にその
-            # グループの先頭骨を指すため、これ経由でheadを引く(通常
-            # ケースは`members0[0]==src[0]`で無変更)。
-            src = list(cp.source_chain)
-            if not src:
-                return None
-            members0 = sway_hub.donor_group_members(cp).get(src[0], (src[0],))
-            head = av_point(members0[0])
-            if head is None:
-                return None
-            if len(src) < 2:
-                tail = av_point(src[0], use_tail=True)
-                return None if tail is None else (head, tail)
-            rep = src[1]
-            members = sway_hub.donor_group_members(cp).get(rep, (rep,))
-            tail = av_point(members[0])
-            if tail is None:
-                tail = av_point(rep)  # 退化フォールバック(旧来どおり代表自身)
-            if tail is None:
-                return None
-            return head, tail
+            return sway_hub_placement.resolve_hub_root_segment(cp, av_point)
 
         hub_segment = sway_hub_placement.select_first_resolved_hub_segment(
             gp.chain_plans, _resolve_hub_segment)
@@ -3166,7 +3151,7 @@ def place_hub_donor_chains(pal_arm, avatar_arm, wiring, gender, anchor_pal_map, 
 # =====================================================================
 
 def sway_gate_compute_source_bone_names(physbone_entries, springbone_entries,
-                                         lab_assignments=None):
+                                         lab_assignments=None, *, refill_nested=False):
     """`sway_source_bones.py`(配線実装(sway_hub/sway_hub_wire)から独立)で
     「揺れると判定された全ボーン」(anchor含む)の名前集合+骨名->
     group_key集合の対応を導出する。
@@ -3202,7 +3187,7 @@ def sway_gate_compute_source_bone_names(physbone_entries, springbone_entries,
     springbones_raw = {"springbones": list(springbone_entries or [])}
     plan = sway_allocator.allocate(
         physbones_json=physbones_raw, springbones_json=springbones_raw,
-        lab_assignments=lab_assignments)
+        lab_assignments=lab_assignments, refill_nested=refill_nested)
     return (sway_source_bones.all_accepted_source_bone_names(plan),
             sway_source_bones.bone_group_keys(plan),
             sway_source_bones.accepted_anchor_names(plan),
@@ -3340,7 +3325,7 @@ class _SwayGatePrep:
 def _sway_gate_prepare(job, gender, physbone_entries, springbone_entries,
                         avatar_arm, pal_arm, meshes, group_targets,
                         hub_wiring, dz, pal_map, source_parent_of,
-                        lab_assignments=None, quiet=False):
+                        lab_assignments=None, quiet=False, *, output_scale=None):
     """`run_sway_source_gate()`(remap後・weight込みの最終防衛線)と、
     縮退ループの事前チェック(`place_hub_donor_chains()`直後・remap前、
     `meshes=[]`でweight取得を省く)の両方が共有する準備ロジック
@@ -3351,7 +3336,8 @@ def _sway_gate_prepare(job, gender, physbone_entries, springbone_entries,
     として扱う)。"""
     all_source_bone_names, bone_group_keys, accepted_anchors, plan = \
         sway_gate_compute_source_bone_names(
-            physbone_entries, springbone_entries, lab_assignments=lab_assignments)
+            physbone_entries, springbone_entries, lab_assignments=lab_assignments,
+            refill_nested=job.get("sway_adaptation") == "physbone-v1")
     if not all_source_bone_names:
         if not quiet:
             print(f"[{TAG}] sway_source_gate: no judged-swaying bones (non-sway job "
@@ -3392,7 +3378,8 @@ def _sway_gate_prepare(job, gender, physbone_entries, springbone_entries,
     anchor_parent_of = sway_pivot_axiom.resolve_anchor_parent_avatar_names(
         sorted(accepted_anchors & source_bone_names), pal_map, source_parent_of)
 
-    output_scale = float(job.get("uniform_scale", 1.0))
+    if output_scale is None:
+        output_scale = float(job.get("uniform_scale", 1.0))
     source_transform_snapshot = _sway_gate_live_source_transforms(
         avatar_arm, source_bone_names, output_scale, dz)
 
@@ -3606,7 +3593,8 @@ def run_sway_source_gate(job, gender, physbone_entries, springbone_entries,
         source_transform_snapshot, source_weight_snapshot,
         donor_transform_snapshot, donor_weight_snapshot,
         merge_groups=sway_hub.merged_weight_groups(hub_wiring),
-        representative_of=sway_hub.representative_of_map(hub_wiring))
+        representative_of=sway_hub.representative_of_map(hub_wiring),
+        source_geometry_groups=sway_hub.source_geometry_groups(hub_wiring))
 
     # dev#1508 hubwire final(公理検査、2026-08-16オーナー制定「揺れものの
     # 支点は、その親humanoidボーンに対して相対位置が一切変わらない」):
@@ -3711,25 +3699,25 @@ def _sway_degrade_precheck(job, gender, physbone_entries, springbone_entries,
     prep = _sway_gate_prepare(
         job, gender, physbone_entries, springbone_entries, avatar_arm, pal_arm,
         [], attempt_group_targets, wiring, dz, pal_map, source_parent_of,
-        lab_assignments=lab_assignments, quiet=True)
+        lab_assignments=lab_assignments, quiet=True, output_scale=1.0)
     if prep is None:
         return None, {}, attempt_group_targets
 
     failed_bone_reasons: Dict[str, List[str]] = {}
 
-    # dev#1551(chain-length-fit WP): 節数フィット(先端マージ)発動時、
-    # donorのジオメトリは常に「マージグループの代表(先端側)骨」の
-    # transformで配置される(sway_hub.fit_chain_to_length()「マージ後の
-    # 代表点はマージ区間の端点を保つ」設計)。代表**でない**(マージされて
-    # 消えた側の)骨を自分自身の生transformとdonorとで比較すると構造的に
-    # 不一致になる——バグではなく設計どおりの結果なので、この骨について
-    # 位置/向き/スケール検査をスキップする(donor欠落自体の検査は従来
-    # どおり行う。sway_source_gate.run_gate()のrepresentative_of引数と
-    # 同じ考え方)。
+    # Check each effective donor group once. Non-representative members still
+    # undergo donor-presence and weight checks, but have no independent rest
+    # transform after fitting. The representative identifies the group; its
+    # original single-bone transform does not define the group's full span.
     representative_of = sway_hub.representative_of_map(wiring)
+    # Donor placement uses the whole fitted group (first head -> last tail),
+    # not the final member's original direction. Read that expected span from
+    # the independent source snapshot; the 16.5-degree safety gate stays intact.
+    expected_transforms = sway_source_gate.source_transforms_for_geometry_groups(
+        prep.source_transform_snapshot, sway_hub.source_geometry_groups(wiring))
     for bone in sorted(prep.real_source_bone_names):
         donor = attempt_group_targets.get(bone)
-        src = prep.source_transform_snapshot.get(bone)
+        src = expected_transforms.get(bone)
         dst = prep.donor_transform_snapshot.get(donor) if donor else None
         if donor is None:
             failed_bone_reasons.setdefault(bone, []).append(
@@ -3860,7 +3848,8 @@ def run_sway_degrade_loop(job, gender, physbone_entries, springbone_entries,
     initial_plan = sway_allocator.allocate(
         physbones_json={"physbones": list(physbone_entries or [])},
         springbones_json={"springbones": list(springbone_entries or [])},
-        lab_assignments=initial_lab_overrides)
+        lab_assignments=initial_lab_overrides,
+        refill_nested=job.get("sway_adaptation") == "physbone-v1")
     # The armature and donor wiring were built from attempt 0. Re-allocating
     # after a cull must not fill the vacant slot with a previously rejected
     # unit: no donor was built for that unit. Freeze the rejected set before
@@ -3901,7 +3890,8 @@ def run_sway_degrade_loop(job, gender, physbone_entries, springbone_entries,
         retry_plan = sway_allocator.allocate(
             physbones_json={"physbones": list(physbone_entries or [])},
             springbones_json={"springbones": list(springbone_entries or [])},
-            lab_assignments=current_lab_overrides)
+            lab_assignments=current_lab_overrides,
+            refill_nested=job.get("sway_adaptation") == "physbone-v1")
         retry_node_overrides = sway_hub.node_overrides_from_wiring_plan(retry_wiring)
         retry_diagnostics_lines = sway_hub.build_diagnostics_lines(
             retry_plan, retry_wiring, gender)
@@ -4281,6 +4271,8 @@ def main():
         # `run_sway_source_gate()`呼び出し)なので、二重実装なしに両経路が
         # 同じフィルタ済み値を見る。
         weighted_bone_names = collect_weighted_avatar_bone_names(avatar_arm, meshes)
+        sway_raw_physbone_entries = list(physbone_entries)
+        sway_raw_springbone_entries = list(job.get("springbones") or [])
         physbone_entries = sway_hub_wire.filter_entries_by_weighted_bones(
             physbone_entries, weighted_bone_names)
         job["springbones"] = sway_hub_wire.filter_entries_by_weighted_bones(
@@ -4501,7 +4493,12 @@ def main():
         print(f"[{TAG}] sway_chain (experimental): {sway_bones} -> "
               f"anchor={anchor_bone} chain={e['cloth_chain']}")
 
-    global_scale_and_place(avatar_arm, pal_arm, pal_map, meta.get("warnings"))
+    size_report = {"gender": gender, "uniform_scale": float(job.get("uniform_scale", 1.0))}
+    source_fit_scale = global_scale_and_place(
+        avatar_arm, pal_arm, pal_map, meta.get("warnings"),
+        size_fit_mode=job.get("size_fit_mode", "legacy"), report=size_report)
+    with open(os.path.join(conv, f"size_fit_{gender.lower()}.json"), "w", encoding="utf-8") as stream:
+        json.dump(size_report, stream, ensure_ascii=False, indent=2)
     auto_fit_pose(avatar_arm, pal_arm, pal_map)
     apply_shoulder_offset(avatar_arm, pal_map,
                           float(job.get("shoulder_offset_deg", 0.0)))
@@ -4577,7 +4574,17 @@ def main():
         # (未上書きのままでも実害は無い——除外された鎖のdonor骨はweight 0の
         # ままpal_arm内に留まるだけで見た目に影響しない——が、上書きした方が
         # より正確)。
-        node_overrides_final = {**manual_node_overrides, **hub_node_overrides}
+        node_overrides_final = sway_motion.attach_motion_overrides(
+            hub_wiring, job, {**manual_node_overrides, **hub_node_overrides})
+        if job.get("sway_adaptation") == "physbone-v1":
+            import sway_auto
+            node_overrides_final, adaptation = sway_auto.attach_source_profiles(
+                hub_wiring, job, node_overrides_final, gender,
+                {b.name: tuple(b.head_local) for b in pal_arm.data.bones},
+                sway_raw_physbone_entries, source_fit_scale=source_fit_scale)
+            with open(os.path.join(conv, f"sway_adaptation_{gender.lower()}.json"),
+                      "w", encoding="utf-8") as stream:
+                json.dump(adaptation, stream, ensure_ascii=False, indent=2)
         overrides_path = os.path.join(conv, sway_allocator_wire.NODE_OVERRIDES_FILENAME)
         with open(overrides_path, "w", encoding="utf-8") as f:
             json.dump(node_overrides_final, f, ensure_ascii=False)
@@ -4594,8 +4601,22 @@ def main():
         # 書く)+1鎖1行のWARN(ユーザーの「ログをコピー」に載る)。
         sway_full_plan = sway_allocator.allocate(
             physbones_json={"physbones": list(physbone_entries or [])},
-            springbones_json={"springbones": list(job.get("springbones") or [])})
+            springbones_json={"springbones": list(job.get("springbones") or [])},
+            refill_nested=job.get("sway_adaptation") == "physbone-v1")
         sway_degrade_total_units = len(sway_degrade.all_unit_keys(sway_full_plan))
+        coverage = sway_coverage.build_coverage_report(
+            physbone_entries=sway_raw_physbone_entries,
+            springbone_entries=sway_raw_springbone_entries,
+            filtered_physbone_entries=physbone_entries,
+            filtered_springbone_entries=job.get("springbones"),
+            initial_assignments=job_lab_assignments, wiring=hub_wiring,
+            exclusions=sway_exclusion_entries, gender=gender, job=job)
+        coverage_path = os.path.join(conv, f"sway_coverage_{gender.lower()}.json")
+        with open(coverage_path, "w", encoding="utf-8") as f:
+            json.dump(coverage, f, ensure_ascii=False, indent=2)
+        print(f"[{TAG}] sway coverage: {coverage['active_components']}/"
+              f"{coverage['total_components']} components active; "
+              f"{coverage['counts']} (see {coverage_path})")
         # Capacity exclusions are recorded by the loop from its actual initial
         # plan, including the user's overrides. Re-allocating without overrides
         # here could mislabel an explicitly selected chain as overflow.
@@ -4640,6 +4661,9 @@ def main():
         sway_lab_overrides = None
         sway_exclusions_report = sway_degrade.ExclusionReport(
             gender=gender.lower(), total_units=0, fully_disabled=False, excluded=())
+        coverage_path = os.path.join(conv, f"sway_coverage_{gender.lower()}.json")
+        with open(coverage_path, "w", encoding="utf-8") as f:
+            json.dump(sway_coverage.disabled_coverage_report(gender), f, ensure_ascii=False, indent=2)
         sway_exclusions_path = os.path.join(conv, f"sway_exclusions_{gender.lower()}.json")
         with open(sway_exclusions_path, "w", encoding="utf-8") as f:
             json.dump(sway_exclusions_report.to_dict(), f, ensure_ascii=False, indent=1)
@@ -4658,6 +4682,11 @@ def main():
     # 回転(hub_donor_quats、既にUE規約で計算済み)を集め、
     # plan_reparent_steps()へ渡すことで、mesh bind基準と共有Skeleton
     # reparent基準を同一ソースへ統一し、ズレを構造的に無くす。
+    # Source profiles above use pre-output geometry and account for k once.
+    # From here on, shared Skeleton planning and mesh bind poses must both
+    # read the final geometry. Planning before this scale left donor offsets
+    # at their old size, even though mesh vertices were already smaller.
+    apply_output_scale(pal_arm, meshes, float(job.get("uniform_scale", 1.0)))
     exact_donor_world = {}
     for gp in hub_wiring.group_plans:
         # dev#1551(ゼロ長root廃止修理): hub root自身も今やsource_chain[0]
@@ -4686,40 +4715,11 @@ def main():
                 pos_ue = (w.x, -w.y, w.z)
                 exact_donor_world[name] = (hub_donor_quats[name], pos_ue)
 
-    # dev#1508 W2a-2c(pak側、Phase 3.7結線): ハブroot+donor鎖の共有Skeleton
-    # (SK_PalHuman_Skeleton)側reparent計画を`sway_hub_placement.
-    # plan_reparent_steps()`(bpy非依存)で計算し、job_dir/converted/
-    # sway_hub_reparent.jsonへ書く(`build_pak_from_avatar.py`
-    # `_run_sway_hub_reparent_patch()`が読む契約、Phase 3.7)。
-    # avatar_dumpはbake_pose_into_meshes()後・dz確定後のavatar_arm実ポーズ
-    # (`build_avatar_dump()`、`place_hub_donor_chains()`のav_point()と
-    # 同一座標規約)、anchor_pal_name_ofは`anchor_pal_map`(`group_targets`の
-    # sway donor上書き前スナップショット、`place_hub_donor_chains()`
-    # docstring「2026-08-16実データ実測バグ」節参照——`group_targets`
-    # そのものを渡すと循環参照によるトポロジ違反で変換が停止する)。
-    #
-    # 性別ごとに1回ずつ実行されるこのstep02が、同一job_dirへ2回(Male/Female、
-    # convert.ps1のPhase1では実際には並列バックグラウンドジョブとして同時に
-    # 走る——書き込み順序は保証されない)書き込む——共有Skeletonは男女の
-    # ハブroot/donor骨名を両方(F_/M_接頭辞)同時に持つため、両性別ぶんの
-    # ReparentStepを**マージ**して書く(単純な上書きだと後に走った性別のみが
-    # 反映され、先に走った性別のKP物理が抜け落ちる)。
-    #
-    # dev#1551(性別またぎdedup漏れ修正、issue #1551、正本work\run_1551\
-    # integG\RESULT.md): 「両性別のターゲット骨名は接頭辞が異なり衝突しない」
-    # という以前のコメントの前提は、ハブroot自身には真だが、donor鎖の続き骨
-    # (`ChainDonorPlan.donor_chain`、旧単一フィールド)には**偽**だった——
-    # donor鎖続き骨の絶対名は性別非依存の同一名で払い出されており、Male先行
-    # 処理でF_接頭root向けのdonor鎖登録が丸ごとdedupで落ちていた(実測:
-    # 両検体・全bivariantタグでFemale側donor鎖が0件)。`sway_hub.
-    # plan_hub_wiring()`を修正し、ハブrootが性別で異なる名前を持つ
-    # (bivariant)スロットではdonor鎖続き骨も女性向け/男性向けで**互いに素な**
-    # 骨集合を割り当てるようにした(`ChainDonorPlan.donor_chain_for()`
-    # docstring参照)——これにより「両性別のターゲット骨名は衝突しない」が
-    # 構造的に真になり、以下の素直な追記マージ(既存targetを後着で
-    # 上書きしない)が並列書き込みの順序に関わらず安全に成立する
-    # (univariantスロット(耳・しっぽ等、女性/男性で同一名)は従来どおり
-    # 両性別が同一内容を書くため、dedupで片方が省かれても実害が無い)。
+    # Each Blender worker replaces its complete per-gender plan, including
+    # [] after disabling physics. The packager merges requested genders only
+    # after both workers finish; no shared read/append/write can retain old
+    # geometry or lose the other worker's changes.
+    reparent_steps = []
     if hub_wiring.group_plans:
         avatar_dump = build_avatar_dump(avatar_arm, dz)
         catalog_path = os.path.join(vanilla, "sk_palhuman_full.json")
@@ -4746,35 +4746,12 @@ def main():
         except sway_hub_placement.SwayHubPlacementError as e:
             core.die(TAG, f"sway hub reparent planning failed (dev#1508 W2a-2c): {e}")
 
-        def _step_to_json(s):
-            return {
-                "target": s.target, "new_parent": s.new_parent,
-                "new_local_transform": (
-                    [list(s.new_local_transform[0]), list(s.new_local_transform[1]),
-                     list(s.new_local_transform[2])]
-                    if s.new_local_transform is not None else None),
-                "tag": s.tag,
-            }
-
-        reparent_path = os.path.join(conv, "sway_hub_reparent.json")
-        existing_steps = []
-        if os.path.isfile(reparent_path):
-            with open(reparent_path, encoding="utf-8") as f:
-                existing_steps = json.load(f)
-        existing_targets = {s["target"] for s in existing_steps}
-        new_steps_json = [_step_to_json(s) for s in reparent_steps
-                           if s.target not in existing_targets]
-        merged_steps = existing_steps + new_steps_json
-        with open(reparent_path, "w", encoding="utf-8") as f:
-            json.dump(merged_steps, f, ensure_ascii=False)
-        print(f"[{TAG}] sway hub reparent steps written: {reparent_path} "
-              f"({len(new_steps_json)} new, {len(merged_steps)} total)")
-
-    # dev#560(2026-08-07): L1完結の一様スケール。既定1.0では完全no-op
-    # (関数側でも早期return、負の対照はtest_uniform_scale_l1.pyで検証)。
-    # chibi_fit_armature()の直後・世界座標系がpal_arm/meshesで揃っている
-    # このタイミングでのみ安全に呼べる(apply_output_scale()のdocstring参照)。
-    apply_output_scale(pal_arm, meshes, float(job.get("uniform_scale", 1.0)))
+    steps_json = [dict(target=s.target, new_parent=s.new_parent,
+                       new_local_transform=s.new_local_transform, tag=s.tag)
+                  for s in reparent_steps]
+    reparent_path = sway_reparent_store.write_gender(conv, gender, steps_json)
+    print(f"[{TAG}] sway hub reparent steps written: {reparent_path} "
+          f"({len(steps_json)} current steps)")
 
     # U21: 指の破裂状変形の根治(noueパイプライン専用)。
     #

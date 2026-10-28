@@ -1,8 +1,10 @@
 """Opt-in real Blender regression; does not build a PAK or touch the source app.
 
-Set UCHINOKO_RURUNE_FIXTURE to the prior rurune_conversion evidence directory
-and UCHINOKO_RURUNE_OUTPUT to a new, empty evidence directory. The fixture must
-contain fixed/ (animation-free step01), and end_to_end_safe_sway/vanilla/.
+Set UCHINOKO_BLENDER_FIXTURE to an external fixture directory and
+UCHINOKO_BLENDER_OUTPUT to a new, empty evidence directory. The fixture must
+contain fixed/ (animation-free step01), end_to_end_safe_sway/vanilla/, and
+expected_checks.json with positive source_bones, pivots and unique_donors counts.
+Avatar files and expected model-specific counts are deliberately not shipped.
 """
 import json
 import os
@@ -16,11 +18,14 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.mark.skipif(not os.environ.get("UCHINOKO_RURUNE_FIXTURE"),
-                    reason="requires local rurune/Blender evidence fixture")
-def test_rurune_keeps_valid_dynamics_without_model_specific_overrides():
-    fixture = Path(os.environ["UCHINOKO_RURUNE_FIXTURE"])
-    output = Path(os.environ["UCHINOKO_RURUNE_OUTPUT"])
+@pytest.mark.skipif(not os.environ.get("UCHINOKO_BLENDER_FIXTURE"),
+                    reason="requires an explicitly supplied external Blender fixture")
+def test_keeps_valid_dynamics_without_model_specific_overrides():
+    fixture = Path(os.environ["UCHINOKO_BLENDER_FIXTURE"])
+    output = Path(os.environ["UCHINOKO_BLENDER_OUTPUT"])
+    expected = json.loads((fixture / 'expected_checks.json').read_text(encoding='utf8'))
+    assert all(type(expected.get(key)) is int and expected[key] > 0
+               for key in ('source_bones', 'pivots', 'unique_donors'))
     assert not output.exists(), "Use a fresh directory; preserve earlier evidence"
     output.mkdir(parents=True)
     shutil.copytree(fixture / "fixed" / "converted", output / "converted")
@@ -68,11 +73,10 @@ def test_rurune_keeps_valid_dynamics_without_model_specific_overrides():
                      unique_donors=len(set(donors.values())))
         (output / "result.json").write_text(json.dumps(report, ensure_ascii=False, indent=2),
                                              encoding="utf-8")
-        assert gate["ok"] and gate["checked"] == 35
-        assert pivot["ok"] and pivot["checked"] == 6
+        assert gate["ok"] and gate["checked"] == expected['source_bones']
+        assert pivot["ok"] and pivot["checked"] == expected['pivots']
         assert not exclusions["fully_disabled"]
-        # The original donor assignment is retained. The earlier per-model
-        # workaround assigned different slots and merged two source bones;
-        # its count of 33 is not the invariant for the general retry fix.
-        assert len(set(donors.values())) == 35
+        # Retain independently established source counts instead of blessing
+        # whatever count the converter happened to emit during this run.
+        assert len(set(donors.values())) == expected['unique_donors']
         assert not ({"head", "spine_03"} & set(donors.values()))

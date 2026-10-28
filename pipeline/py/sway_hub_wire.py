@@ -51,6 +51,24 @@ TAG = "sway_hub_wire"
 _AUTO = object()
 
 
+def preserve_chain_anchors_from_overrides(overrides) -> FrozenSet[str]:
+    """Read explicit per-component opt-ins without treating truthy text as True."""
+    if not isinstance(overrides, list):
+        return frozenset()
+    anchors = set()
+    for entry in overrides:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("preserve_segments") is not True or entry.get("enabled") is False:
+            continue
+        bones = entry.get("bones")
+        if (not isinstance(bones, list) or not bones or
+                any(not isinstance(name, str) or not name.strip() for name in bones)):
+            continue
+        anchors.add(bones[0])
+    return frozenset(anchors)
+
+
 # =====================================================================
 # dev#1572(積み荷A、issue #1572追記3、2026-08-18オーナー最終裁定
 # 「無weightボーンには僕は興味がなく、ないものと扱ってます」)
@@ -141,6 +159,9 @@ def wire_and_diagnose_hub(
     known_moving=_AUTO,
     default_safety_margin: int = 0,
     safety_margin_by_chain: Optional[Mapping[Tuple[str, ...], int]] = None,
+    preserve_chain_anchors: FrozenSet[str] = frozenset(),
+    auto_preserve_segments: bool = False,
+    refill_nested: bool = False,
 ) -> HubWireResult:
     """入力アダプタ+アロケータ実行+ハブ配線計画+診断ログ+refskel-dict生成を
     1本化した高レベル入口(`sway_allocator_wire.wire_and_diagnose()`の
@@ -188,7 +209,8 @@ def wire_and_diagnose_hub(
     springbones_raw = {"springbones": list(springbone_entries or [])}
     plan = sway_allocator.allocate(
         physbones_json=physbones_raw, springbones_json=springbones_raw,
-        lab_assignments=lab_assignments, capacity=capacity)
+        lab_assignments=lab_assignments, capacity=capacity,
+        refill_nested=refill_nested)
 
     resolved_amplitude_rank = (
         sway_hub.load_root_amplitude_rank() if amplitude_rank is _AUTO else amplitude_rank)
@@ -202,7 +224,9 @@ def wire_and_diagnose_hub(
         plan, catalog, hub_slots, reserved, protected=common_bones,
         known_moving=resolved_known_moving, amplitude_rank=resolved_amplitude_rank,
         default_safety_margin=default_safety_margin,
-        safety_margin_by_chain=safety_margin_by_chain)
+        safety_margin_by_chain=safety_margin_by_chain,
+        preserve_chain_anchors=preserve_chain_anchors,
+        auto_preserve_segments=auto_preserve_segments)
 
     node_overrides = sway_hub.node_overrides_from_wiring_plan(wiring)
     diagnostics_lines = tuple(sway_hub.build_diagnostics_lines(plan, wiring, gender))
@@ -257,3 +281,44 @@ def source_to_donor_bone_map(wiring: sway_hub.HubWiringPlan, gender: str) -> Dic
                 if donor is not None:
                     out[original] = donor
     return out
+
+
+def source_adaptation_manifest(wiring: sway_hub.HubWiringPlan, gender: str) -> dict:
+    """Record final surviving PB subtrees after placement and safety gates.
+
+    The packer needs all active subtrees, including fallback chains, to keep
+    their real unweighted terminals. A requested component that was culled
+    must not be inferred from a stale job setting.
+    """
+    mapping = source_to_donor_bone_map(wiring, gender)
+    weighted = set(mapping.values())
+    components = []
+    for gp in wiring.group_plans:
+        chain_plans = iter(gp.chain_plans)
+        for unit in gp.group.units:
+            representative, branches = sway_hub.select_tuft_representative(unit.chains)
+            if not representative and not branches:
+                continue
+            cp = next(chain_plans)
+            if unit.source != "pb":
+                continue
+            source = cp.representative_source or (unit.anchor,) + representative
+            retained = len({mapping[n] for n in source if n in mapping})
+            terminal_count = 0
+            for donor in reversed(cp.donor_chain_for(gender)):
+                if donor in weighted:
+                    break
+                terminal_count += 1
+            components.append({"unit_key": unit.key, "anchor": unit.anchor,
+                               "representative_source_joints": len(source),
+                               "independent_mapped_joints": retained,
+                               "unweighted_terminal_bones": terminal_count,
+                               "merged_secondary_branches": len(branches),
+                               "preserved": retained == len(source) and terminal_count > 0})
+    return {"format": "uchinoko-reborn-sway-adaptation-1", "mode": "physbone-v1",
+            "gender": gender.lower(),
+            "active_physbone_anchors": sorted({r["anchor"] for r in components}),
+            "preserved_physbone_anchors": sorted({r["anchor"] for r in components if r["preserved"]}),
+            "components": components,
+            "planner_diagnostics": [event for event in wiring.chain_fit_events
+                                    if event.startswith("[sway-auto-preserve]")]}

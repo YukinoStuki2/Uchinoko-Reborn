@@ -81,6 +81,7 @@ class RefSkeletonLocation:
     map_count_pos: int
     map_data: int
     map_end: int
+    fnames: Tuple[Tuple[str, int], ...] = ()  # Serialized base and internal number.
 
 
 def scan_full_refskeleton(
@@ -113,6 +114,7 @@ def scan_full_refskeleton(
             continue
         ok = True
         bones: List[Tuple[str, int]] = []
+        fnames: List[Tuple[str, int]] = []
         for i in range(count):
             idx, num, parent = struct.unpack_from("<iii", data, pos + i * 12)
             if not (0 <= idx < n_names) or not (0 <= num < 100000):
@@ -126,6 +128,7 @@ def scan_full_refskeleton(
                 break
             name = names[idx] if num == 0 else f"{names[idx]}_{num - 1}"
             bones.append((name, parent))
+            fnames.append((names[idx], num))
         if not ok:
             continue
         tpos_count = pos + count * 12
@@ -156,8 +159,13 @@ def scan_full_refskeleton(
         map_ok = True
         for i in range(count):
             idx, num, val = struct.unpack_from("<iii", data, map_data + i * 12)
-            nm = names[idx] if num == 0 else f"{names[idx]}_{num - 1}"
-            if val != i or nm != bones[i][0]:
+            if not (0 <= idx < n_names) or not (0 <= num < 100000):
+                map_ok = False
+                break
+            # FName equality includes Number. Literal "tail_10"/0 does not
+            # identify the same bone as "tail"/11, despite equal display text.
+            base, number = fnames[i]
+            if val != i or (names[idx].casefold(), num) != (base.casefold(), number):
                 map_ok = False
                 break
         if not map_ok:
@@ -167,6 +175,7 @@ def scan_full_refskeleton(
             bones=tuple(bones), tsize=tsize, data=data,
             bi_count_pos=off, tpos=tpos,
             map_count_pos=map_count_pos, map_data=map_data, map_end=map_end,
+            fnames=tuple(fnames),
         )
     raise SharedSkeletonError(
         f"large RefSkeleton not found (min_bones={min_bones}, max_bones={max_bones})")
@@ -207,9 +216,60 @@ def full_skeleton_catalog(
         pos = list(vals[4:7])
         scale = list(vals[7:10])
         bones.append({"name": name, "parent_idx": parent_idx,
+                       "fname_base": loc.fnames[i][0], "fname_number": loc.fnames[i][1],
                        "quat": quat, "pos": pos, "scale": scale})
     return {"source_uasset": uasset_path, "source_uexp": uexp_path,
             "bone_count": len(bones), "bones": bones}
+
+
+def fname_identities_for_job(job_dir):
+    """Read exact donor identities, including jobs with pre-Reborn.9 caches.
+
+    Older catalogs contain display names only. Re-extract the small shared
+    Skeleton from the configured game PAK instead of guessing suffix syntax.
+    Callers cache this result for the whole build (all genders and outfits).
+    """
+    import json
+    import os
+    import tempfile
+    import vp_core
+    import pak_live_extract
+
+    catalog_path = os.path.join(job_dir, "vanilla", "sk_palhuman_full.json")
+    catalog = None
+    if os.path.isfile(catalog_path):
+        with open(catalog_path, encoding="utf-8-sig") as stream:
+            catalog = json.load(stream)
+    bones = catalog.get("bones", []) if isinstance(catalog, dict) else []
+    if not bones or any("fname_base" not in b or "fname_number" not in b for b in bones):
+        job = vp_core.load_job(os.path.join(job_dir, "job.json"))
+        pak_path = job["paths"].get("palworld_pak")
+        if not pak_path or not os.path.isfile(pak_path):
+            raise SharedSkeletonError(
+                "Cannot read shared Skeleton FName identities: the old bone catalog "
+                "has no raw identity metadata and Palworld's PAK is unavailable. "
+                "Restore the game path and rebuild; numeric suffixes cannot be guessed.")
+        package = "Pal/Content/Pal/Model/Character/Skeleton/Human/SK_PalHuman_Skeleton"
+        extracted = pak_live_extract.extract_files(
+            pak_path, [package + ext for ext in (".uasset", ".uexp")])
+        with tempfile.TemporaryDirectory(prefix="uchinoko_fname_") as folder:
+            ua = os.path.join(folder, "SK_PalHuman_Skeleton.uasset")
+            ux = os.path.join(folder, "SK_PalHuman_Skeleton.uexp")
+            for path, ext in ((ua, ".uasset"), (ux, ".uexp")):
+                with open(path, "wb") as stream:
+                    stream.write(extracted[package + ext])
+            bones = full_skeleton_catalog(ua, ux)["bones"]
+    identities = {}
+    for bone in bones:
+        name, base, number = bone["name"], bone["fname_base"], bone["fname_number"]
+        if (not isinstance(base, str) or not base or type(number) is not int
+                or not 0 <= number < 100000):
+            raise SharedSkeletonError(f"Invalid shared Skeleton FName: {name!r}")
+        display = base if number == 0 else f"{base}_{number - 1}"
+        if display.casefold() != name.casefold() or name in identities:
+            raise SharedSkeletonError(f"Ambiguous shared Skeleton FName: {name!r}")
+        identities[name] = (base, number)
+    return identities
 
 
 # =====================================================================

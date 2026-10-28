@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import os
+import work_paths
 import sys
 import tkinter as tk
 from dataclasses import dataclass
@@ -217,6 +218,7 @@ def _open_equipment_filter_dialog(
 ) -> tk.Toplevel:
     ctx = equipment_select_dialog.EquipmentSelectContext(
         app_root=self.app_root,
+        cache_dir=os.path.join(work_paths.shared_cache_root(self.work_root), "equipment_names"),
         palworld_pak=_resolve_palworld_pak(self),
         lang=i18n.current_lang,
         append_log=getattr(self, "_log", lambda msg: None),
@@ -260,6 +262,7 @@ def _open_headequip_toggle_dialog(
 ) -> tk.Toplevel:
     ctx = headequip_select_dialog.HeadEquipSelectContext(
         app_root=self.app_root,
+        cache_dir=os.path.join(work_paths.shared_cache_root(self.work_root), "headequip_names"),
         palworld_pak=_resolve_palworld_pak(self),
         lang=i18n.current_lang,
         append_log=getattr(self, "_log", lambda msg: None),

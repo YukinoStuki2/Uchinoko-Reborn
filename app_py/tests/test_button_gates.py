@@ -47,6 +47,8 @@ def _make_full_build(work_root: str, vrm_path: str) -> None:
         os.path.join(build, "build_provenance.json"), "w", encoding="utf-8"
     ) as fh:
         fh.write("{}")
+    with open(os.path.join(build, "job_snapshot.json"), "w", encoding="utf-8") as fh:
+        fh.write("{}")
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +152,7 @@ class _FakeSelfForGates:
             "statusLabel": _FakeButton(),
         }
 
-    def _is_preview_fresh(self, _vrm_path: str) -> bool:
+    def _is_preview_fresh(self, _vrm_path: str, **_kwargs) -> bool:
         # convertButtonの鮮度判定(_refresh_convert_button_freshness経由)を
         # 呼び出し側が制御できるようにする最小フェイク。本ファイルの関心事は
         # blenderReady/busyゲートなので既定Trueにしておき、
@@ -290,6 +292,27 @@ def test_mats_button_enabled_when_noue_full_build_present(tmp_path):
     mw.MainWindow._update_button_states(fake_self)
     assert fake_self.widgets["matsButton"].state == "normal"
     assert fake_self.widgets["previewButton"].state == "normal"
+
+
+def test_materials_button_follows_current_size_against_cooked_snapshot(tmp_path):
+    vrm = tmp_path / "a.vrm"
+    vrm.write_bytes(b"")
+    fake = _FakeSelfForGates(vrm_path=str(vrm), full_build=True)
+    fake._blender_ready = True
+    fake._is_pipeline_running = False
+    fake._size_fit_var = _FakeEntry(True)
+    fake.widgets["heightScaleBar"] = _FakeEntry(100)
+    # The fixture's cooked snapshot is legacy/100%, so a new automatic fit
+    # cannot reuse it even though all old cache-presence gates pass.
+    mw.MainWindow._update_button_states(fake)
+    assert fake.widgets["matsButton"].state == "disabled"
+    assert fake.widgets["previewButton"].state == "normal"
+    fake._size_fit_var = _FakeEntry(False)
+    mw.MainWindow._update_button_states(fake)
+    assert fake.widgets["matsButton"].state == "normal"
+    fake.widgets["heightScaleBar"] = _FakeEntry(90)
+    mw.MainWindow._update_button_states(fake)
+    assert fake.widgets["matsButton"].state == "disabled"
 
 
 def test_mats_button_disabled_when_full_build_becomes_incomplete(tmp_path):

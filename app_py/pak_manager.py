@@ -36,6 +36,7 @@ import json
 import os
 import re
 import shutil
+import work_paths
 import subprocess
 import sys
 from typing import Callable, Iterable, List, Optional, Sequence, Tuple
@@ -481,6 +482,9 @@ def resolve_delete_targets(work_root: str, app_root: str, pak_path: str) -> dict
     戻り値: {"job_dir": str, "ue_project_dir": Optional[str]}
     """
     job_dir = os.path.dirname(os.path.dirname(pak_path))
+    work_paths.require_direct_job_child(work_root, job_dir)
+    if work_paths.is_directory_link(job_dir):
+        return {"job_dir": job_dir, "ue_project_dir": None}
     ue_project_dir = None
     job_json = os.path.join(job_dir, "job.json")
     if os.path.isfile(job_json):
@@ -505,10 +509,15 @@ def delete_avatar_artifacts(job_dir: str, ue_project_dir: Optional[str] = None) 
     そのまま伝播させる(MsgDeleteFailedFormatへの整形はmain_window.py側)。
     元のVRM/FBXファイル自体はこの関数の対象外(ツールの外にあるため無傷)。
     """
-    if os.path.isdir(job_dir):
-        shutil.rmtree(job_dir)
-    if ue_project_dir and os.path.isdir(ue_project_dir):
-        shutil.rmtree(ue_project_dir)
+    for directory in (job_dir, ue_project_dir):
+        if not directory:
+            continue
+        if os.path.islink(directory):
+            os.unlink(directory)
+        elif work_paths.is_directory_link(directory):
+            os.rmdir(directory)  # Remove the junction, never its external target.
+        elif os.path.isdir(directory):
+            shutil.rmtree(directory)
 
 
 # ---------------------------------------------------------------------------

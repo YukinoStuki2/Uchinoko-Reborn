@@ -95,6 +95,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import sway_abp_patcher  # noqa: E402
+import sway_abp_curves  # noqa: E402
 import vp_core  # noqa: E402
 import vp_pakwrite  # noqa: E402
 
@@ -378,8 +379,20 @@ def build_spec_nodes(
         params = params_for(node_hardness, raw_override)
         if override is not None and override.get("limit_angle") is not None:
             params["limit_angle"] = override["limit_angle"]
+        if override is not None and override.get("motion") is not None:
+            from sway_motion import adapt_motion_params
+            params = adapt_motion_params(params, override["motion"], HARDNESS)
         curves = curves_for()
-        nodes.append({"root_bone": rb, "params": params, "curves": curves})
+        node = {"root_bone": rb, "params": params, "curves": curves}
+        if override is not None and override.get("source_profile") is not None:
+            profile = override["source_profile"]
+            from sway_auto import validate_profile
+            validate_profile(profile)
+            if raw_override:
+                raise SwayAbpBuildError("Lab raw parameters cannot override automatic PhysBone curves; select a manual sway mode first")
+            node["params"] = dict(profile["params"])
+            node["extended_curves"] = profile["extended_curves"]
+        nodes.append(node)
     return nodes
 
 
@@ -389,8 +402,8 @@ def patch_template_bytes(
     node_overrides: Optional[Dict[str, Dict[str, object]]] = None,
 ) -> Tuple[bytes, bytes]:
     """1テンプレ(load_template_manifest()の1要素)をパッチし、
-    (uasset_bytes, patched_uexp_bytes) を返す(uassetはNameMap等を含み
-    パッチ対象外のためテンプレのバイトをそのまま返す)。
+    (uasset_bytes, patched_uexp_bytes) を返す。固定長パラメータのみなら
+    headerは不変。extended_curvesがあれば配列長とserial offsetも更新する。
 
     raw_params/node_overrides: build_spec_nodes()へそのまま渡す
     (既定None=no-op)。"""
@@ -410,7 +423,9 @@ def patch_template_bytes(
     try:
         patched_uexp = sway_abp_patcher.patch_kawaii_physics_nodes(
             uexp_bytes, names, spec_nodes)
-    except sway_abp_patcher.AbpStructureError as e:
+        uasset_bytes, patched_uexp = sway_abp_curves.patch_curves(
+            uasset_bytes, patched_uexp, spec_nodes)
+    except (sway_abp_patcher.AbpStructureError, sway_abp_curves.CurveStructureError) as e:
         raise SwayAbpBuildError(
             f"failed to patch sway ABP template {template['target_abp']}: {e}") from e
     return uasset_bytes, patched_uexp

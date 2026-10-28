@@ -117,6 +117,7 @@ class _FakeSelf:
             "statusLabel": _FakeLabel(),
             "pakList": _FakePakList(None),
         }
+        self._size_fit_var = _FakeScale(True)
         self._shoulder_offset_deg = 0
         self._merge_fingers = False
         self._unlit = False
@@ -245,6 +246,31 @@ def test_apply_restored_settings_uniform_scale_missing_key_keeps_current(tmp_pat
     mw.MainWindow._apply_restored_settings(fake, job_dir, set_vrm_path=False)
 
     assert fake.widgets["heightScaleBar"].get() == 140
+
+
+@pytest.mark.parametrize("saved,expected", [(None, False), ("legacy", False), ("vanilla", True)])
+def test_restore_saved_size_mode_preserves_legacy_jobs(tmp_path, saved, expected):
+    work_root = str(tmp_path / "work")
+    job_dir = os.path.join(work_root, "SizeTest")
+    os.makedirs(job_dir)
+    data = {"vrm_path":"C:/avatars/SizeTest.vrm"}
+    if saved is not None:
+        data["size_fit_mode"] = saved
+    with open(os.path.join(job_dir, "job.json"), "w", encoding="utf8") as out:
+        json.dump(data, out)
+    fake = _FakeSelf(str(tmp_path / "app"), work_root)
+    fake._size_fit_var.set(not expected)
+    assert fake._apply_restored_settings(job_dir, set_vrm_path=False)
+    assert fake._size_fit_var.get() is expected
+
+
+def test_new_avatar_selection_resets_size_mode_to_vanilla(tmp_path):
+    app_root = tmp_path / "app"
+    app_root.mkdir()
+    fake = _FakeSelf(str(app_root), str(tmp_path / "work"))
+    fake._size_fit_var.set(False)
+    fake._set_vrm_path(str(tmp_path / "BrandNew.vrm"))
+    assert fake._size_fit_var.get() is True
 
 
 def test_apply_restored_settings_uniform_scale_clamped_to_dev158_range(tmp_path):
@@ -436,6 +462,22 @@ def test_apply_restored_settings_sway_migration_unknown_intensity_value_becomes_
 
     idx = fake.widgets["swayIntensityBar"].get()
     assert mw.SWAY_INTENSITY_VALUES[idx] == "none"
+
+
+@pytest.mark.parametrize("extra,expected", [
+    ({"sway_adaptation": "physbone-v1", "sway_enable": True, "sway_intensity": "normal"}, "auto"),
+    ({"sway_adaptation": "physbone-v1", "sway_enable": False}, "none"),
+    ({"sway_adaptation": "physbone-v1", "sway_enable": None}, "none"),
+    ({"sway_adaptation": "future-version", "sway_enable": True, "sway_intensity": "hard"}, "hard"),
+    ({"sway_intensity": "normal", "sway_enable": True}, "normal"),
+])
+def test_auto_restore_is_explicit_and_legacy_jobs_do_not_migrate(tmp_path, extra, expected):
+    work_root = str(tmp_path / "work")
+    job_dir = _write_job_dir(work_root, "Avatar", "C:/avatars/Avatar.vrm", **extra)
+    fake = _FakeSelf(str(tmp_path / "app_root"), work_root)
+    assert mw.SWAY_INTENSITY_VALUES[mw._SWAY_INTENSITY_DEFAULT_INDEX] == "auto"
+    mw.MainWindow._apply_restored_settings(fake, job_dir, set_vrm_path=False)
+    assert mw.SWAY_INTENSITY_VALUES[fake.widgets["swayIntensityBar"].get()] == expected
 
 
 def test_apply_restored_settings_negative_shadow_lift_is_ignored(tmp_path):

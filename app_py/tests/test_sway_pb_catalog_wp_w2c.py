@@ -216,7 +216,7 @@ def test_sample_pb_units_matches_legacy_sample_chains_count_and_anchors():
 # ---------------------------------------------------------------------------
 
 def test_is_unit_biased_matches_sway_allocator_on_synthetic_fixture():
-    """Catalog and allocator agree on 26 artificial biased components."""
+    """Eight offset Angle cones are now retained; 18 constraints need opt-in."""
     import sway_allocator
 
     doc = _load_synthetic_doc()
@@ -226,11 +226,10 @@ def test_is_unit_biased_matches_sway_allocator_on_synthetic_fixture():
     allocator_units = sway_allocator.parse_physbones(doc)
     biased_via_allocator = sum(1 for u in allocator_units if u.is_biased)
 
-    assert biased_via_new_module == biased_via_allocator == 26
+    assert biased_via_new_module == biased_via_allocator == 18
     expected_anchors = (
         {f"hinge_{i:02}" for i in range(10)}
         | {f"polar_{i:02}" for i in range(8)}
-        | {f"offset_{i:02}" for i in range(8)}
     )
     assert {u["anchor"] for u in units if m.is_unit_biased(u)[0]} == expected_anchors
     assert {u.anchor for u in allocator_units if u.is_biased} == expected_anchors

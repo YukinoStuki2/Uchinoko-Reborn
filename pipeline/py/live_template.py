@@ -1755,8 +1755,8 @@ _U50_SINGLE_MATERIAL_SRC_DIR = os.path.join(HERE, "..", "..", "work", "u50_diag"
 #   BaseColor = A×(1-k) / Emissive Texture Intensity = A×k
 #   (A = UNIFY_BASECOLOR_A = 0.598958 = このバニラMIのBaseColor)
 # で、Emissive Texture には Base Texture と同一のオブジェクト(t00/t01)を
-# 挿入する。**k=0 のときは ops が空になり、MIバイトは一切変更されない**
-# (=統一のみ適用した状態と完全にバイト一致する)。
+# 挿入する。Reborn also writes explicit BaseColor=1 / Emissive=0 at k=0
+# so cached or previously brightened materials cannot retain emission.
 # k=1.0 で実機の環境光被りが R/G=1.0000 まで消える(真のunlit)ことは
 # work\u50_unify\shadow_metrics.txt で実測済み。
 #
@@ -1797,8 +1797,8 @@ UNIFY_SPECULAR = 0.0
 def unify_shadow_ops(shadow_lift, unlit=False):
     """shadow_lift(0.0-1.0)から vp_matparam 用の編集opsを作る。
 
-    k=0 なら**空リスト**を返す = MIバイトを一切変更しない。
-    これが「shadow_lift=0 は従来と完全に同一」を構造的に保証している。
+    k=0 explicitly restores BaseColor=1 and Emissive=0. This also clears
+    emission when reusing a previously brightened material or cached template.
 
     **unlit=True は k=1.0 として扱う**(2026-07-26 責任者裁定)。
     `unlit` は元々 UEモードで マスターを MSM_UNLIT へ切り替えるための設定だった。
@@ -1818,8 +1818,6 @@ def unify_shadow_ops(shadow_lift, unlit=False):
         k = 1.0
     else:
         k = max(0.0, min(1.0, float(shadow_lift or 0.0)))
-    if k <= 0.0:
-        return [], 0.0
     base = UNIFY_BASECOLOR_A * (1.0 - k)
     emis = UNIFY_BASECOLOR_A * k
     return ([("vector", "BaseColor", (base, base, base, 1.0)),
@@ -2157,9 +2155,8 @@ def build_shadow_mi_overrides(job, dst_dir, out_dir, pak=None, manifest=None):
     `out_dir` へ書き出す(**テンプレートには触らない**)。
 
     返り値: (out_dir or None, n_files, info)
-      k=0(または unlit)なら **(None, 0, ...)** を返し、1バイトも書かない。
-      → テンプレートのMI(k非依存)がそのまま使われる。
-      「k=0 のときMIを一切触らない」という構造的保証はここで維持されている。
+      k=0 also emits overrides with BaseColor=1 and Emissive=0, so reusing
+      the template or fast-repacking cannot retain a previous shadow lift.
 
     速度: バニラpakからMI 2ファイルを抽出 → パッチ → 79件へ改名複製、だけ。
     実測1秒未満。テンプレート再構築(数分)は不要になる。
@@ -2184,10 +2181,6 @@ def build_shadow_mi_overrides(job, dst_dir, out_dir, pak=None, manifest=None):
         # 意図(統一なしの絵を見る)を無言で壊す。何もしない。
         print(f"[{TAG}] U50-fast: D2P_U50_DISABLE_UNIFY=1, skipping shadow-depth "
               f"MI replacement (using the old path)")
-        return None, 0, info
-    if not k_ops:
-        print(f"[{TAG}] U50-fast: shadow_lift k={k:.4f} -> no MI replacement needed "
-              f"(using the template's unified MI as-is)")
         return None, 0, info
     if pak is None:
         pak = job["paths"]["palworld_pak"]

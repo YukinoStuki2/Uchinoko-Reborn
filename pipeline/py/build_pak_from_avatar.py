@@ -60,7 +60,9 @@ import vp_refskel_extend  # noqa: E402 (dev#19 R3統合: sway extra donor骨のR
 import sway_assign  # noqa: E402 (dev#19 swayfix: リーフボーン名解決にSWAY_DONOR_FAMILIESを再利用)
 import sway_abp_build  # noqa: E402 (dev#19 揺れものpak生成の製品パイプライン結線)
 import sway_allocator_wire  # noqa: E402 (dev#1508 W2a: sway_node_overrides.jsonファイル名の共有定数)
+from sway_node_overrides import load_node_overrides, SwayNodeMetadataError
 import sway_shared_skeleton  # noqa: E402 (dev#1508 W2a-2: 汎用ハブ配線、共有Skeleton reparentパッチ)
+import sway_reparent_store
 import vp_texinject  # noqa: E402
 import vp_parallel  # noqa: E402 (rd_120: Phase1/Phase2並列化の共有ヘルパー)
 # U51(research\ue_exit→pipeline\py移設): build_avatar_variant*.py/dump_avatar_mesh.py
@@ -113,10 +115,8 @@ DT_VANILLA_REL = f"Pal/Content/Pal/DataTable/CharacteCreation/{DT_PACKAGE_NAME}"
 SWAY_HUB_SK_PACKAGE_NAME = "SK_PalHuman_Skeleton"
 SWAY_HUB_SK_VANILLA_REL = (
     f"Pal/Content/Pal/Model/Character/Skeleton/Human/{SWAY_HUB_SK_PACKAGE_NAME}")
-# job_dir/converted/配下、sway_hub_placement.plan_reparent_steps()の出力を
-# ReparentStep相当のjsonへシリアライズしたもの(将来のstep02_retarget.py
-# 結線が書き出す想定、本WPでは未結線——モジュールdocstring/_run_sway_hub_
-# reparent_patch()参照)。
+# Combined compatibility view, emitted by the packager after merging the
+# current per-gender Blender outputs.
 SWAY_HUB_REPARENT_FILENAME = "sway_hub_reparent.json"
 # dev#1508 W2a-2d(G3ゲート昇格): _run_sway_hub_reparent_patch()が実際に
 # 共有Skeletonへ適用した内容(骨名・親・座標)を記録するサイドカー。
@@ -341,6 +341,76 @@ def _refskel_extend_overrides(pairs, template, variant_dir, dumps):
 
     refskel_extra_cache = {}
     leaf_needed_cache = {}
+    preserved_bones_cache = {}
+    fname_identities_cache = {}
+
+    def _preserved_bones_for(gender):
+        """Require final adapted subtrees, including unweighted tips.
+
+        Weight-based discovery cannot see the last physics bone. The job's
+        final hub plan is authoritative for preserved components; the legacy
+        donor-family synthetic tip may create an unwanted second child there.
+        """
+        if gender in preserved_bones_cache:
+            return preserved_bones_cache[gender]
+        preserved = set()
+        converted = ((dumps or {}).get(gender) or {}).get("_job_converted_dir")
+        job_path = os.path.join(os.path.dirname(converted), "job.json") if converted else None
+        if job_path and os.path.isfile(job_path):
+            with open(job_path, encoding="utf-8-sig") as stream:
+                job = json.load(stream)
+            from sway_hub_wire import preserve_chain_anchors_from_overrides
+            anchors = preserve_chain_anchors_from_overrides(job.get("sway_chain_overrides"))
+            auto = job.get("sway_adaptation") == "physbone-v1" and bool(job.get("sway_enable"))
+            if auto:
+                try:
+                    manifest_path = os.path.join(converted, f"sway_adaptation_{gender.lower()}.json")
+                    with open(manifest_path, encoding="utf-8") as stream:
+                        manifest = json.load(stream)
+                    if (not isinstance(manifest, dict)
+                            or manifest.get("format") != "uchinoko-reborn-sway-adaptation-1"
+                            or manifest.get("mode") != "physbone-v1"
+                            or manifest.get("gender") != gender.lower()
+                            or not isinstance(manifest.get("active_physbone_anchors"), list)
+                            or any(not isinstance(n, str) or not n for n in manifest["active_physbone_anchors"])):
+                        raise ValueError("invalid source-adaptation manifest")
+                    anchors = anchors | frozenset(manifest["active_physbone_anchors"])
+                except (OSError, ValueError, TypeError) as exc:
+                    raise vp_refskel_extend.RefskelExtendError(
+                        f"incomplete source-adaptation metadata ({gender}): {exc}; "
+                        "run a full conversion before building the pak") from exc
+            if anchors:
+                try:
+                    sidecars = []
+                    for stem in ("sway_source_donor_map", "sway_hub_refskel"):
+                        path = os.path.join(converted, f"{stem}_{gender.lower()}.json")
+                        with open(path, encoding="utf-8") as stream:
+                            value = json.load(stream)
+                        if not isinstance(value, dict):
+                            raise ValueError(f"{path} must contain an object")
+                        sidecars.append(value)
+                    source_map, hub = sidecars
+                    if auto and any(a not in source_map for a in manifest["active_physbone_anchors"]):
+                        raise ValueError("active source-adaptation anchor is absent from final mapping")
+                    children = {}
+                    for name, entry in hub.items():
+                        children.setdefault(entry["parent"], []).append(name)
+                    # An unassignable component has no source mapping. It must
+                    # not adopt some other component's hub or legacy family.
+                    pending = [source_map[a] for a in sorted(anchors) if a in source_map]
+                    while pending:
+                        name = pending.pop()
+                        if name not in hub:
+                            raise ValueError(f"preserved hub {name!r} is absent from the final plan")
+                        if name not in preserved:
+                            preserved.add(name)
+                            pending.extend(children.get(name, ()))
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    raise vp_refskel_extend.RefskelExtendError(
+                        f"incomplete preserved sway chain metadata ({gender}): {exc}; "
+                        "run a full conversion before building the pak") from exc
+        preserved_bones_cache[gender] = preserved
+        return preserved
 
     def _refskel_extra_for(gender):
         """donorexp WP(2026-08-11、issue#19、要件1/2): 複数家系を同時抽出
@@ -476,7 +546,9 @@ def _refskel_extend_overrides(pairs, template, variant_dir, dumps):
                             by_bone.setdefault(sib_leaf, set()).update(sib_chain)
                 leaf_needed_cache[gender] = (set(by_bone), by_bone)
         _all_leaves, by_bone = leaf_needed_cache[gender]
-        return {leaf for leaf, chain in by_bone.items() if chain & used_names}
+        preserved = _preserved_bones_for(gender)
+        return {leaf for leaf, chain in by_bone.items()
+                if chain & used_names and not chain & preserved}
 
     ext_src_dir = os.path.join(os.path.dirname(variant_dir), "refskel_ext_src")
     overrides = {}
@@ -485,16 +557,20 @@ def _refskel_extend_overrides(pairs, template, variant_dir, dumps):
         used_names = used_names_by_gender.get(gender) or set()
         if not used_names:
             continue
+        preserved_names = _preserved_bones_for(gender)
         try:
             refskel_full = core.load_refskel(uasset_path)
             bone_names = set(refskel_full)
         except Exception as e:
+            if preserved_names:
+                raise vp_refskel_extend.RefskelExtendError(
+                    f"cannot inspect mesh RefSkeleton for preserved sway chain: {uasset_path}") from e
             print(f"[{TAG}][WARN] refskel extend: could not read RefSkeleton "
                   f"of {os.path.basename(uasset_path)} to check for sway "
                   f"donor bones ({e}); leaving it as-is")
             continue
 
-        missing = sorted(used_names - bone_names)
+        missing = sorted((used_names | preserved_names) - bone_names)
         refskel_extra = _refskel_extra_for(gender)
         new_bones = []
         resolved_names = set()
@@ -511,6 +587,9 @@ def _refskel_extend_overrides(pairs, template, variant_dir, dumps):
                 new_bones = vp_refskel_extend.family_bones_from_refskel(refskel_extra, chain)
                 resolved_names = set(chain)
             except vp_refskel_extend.RefskelExtendError as e:
+                if preserved_names:
+                    raise vp_refskel_extend.RefskelExtendError(
+                        f"cannot resolve preserved sway chain for {os.path.basename(uasset_path)}: {e}") from e
                 print(f"[{TAG}][WARN] refskel extend: cannot resolve sway donor "
                       f"bones {missing} for {os.path.basename(uasset_path)}: {e}")
                 continue
@@ -565,6 +644,21 @@ def _refskel_extend_overrides(pairs, template, variant_dir, dumps):
 
         cur_uexp_path, cur_uasset_path = uexp_path, uasset_path
         if new_bones:
+            # Raw FName identity must agree with the shared Skeleton. Two
+            # display strings can be equal while UE maps the mesh bone to -1.
+            # Resolve once per job; legacy catalogs are upgraded from game PAK.
+            converted = ((dumps or {}).get(gender) or {}).get("_job_converted_dir")
+            if converted:
+                job_dir = os.path.dirname(os.path.abspath(converted))
+                if job_dir not in fname_identities_cache:
+                    fname_identities_cache[job_dir] = (
+                        sway_shared_skeleton.fname_identities_for_job(job_dir))
+                identities = fname_identities_cache[job_dir]
+                for bone in new_bones:
+                    if bone["name"] in identities:
+                        bone["fname_base"], bone["fname_number"] = identities[bone["name"]]
+                    # Legacy synthetic terminal bones have no vanilla identity.
+                    # Preserve their existing literal encoding without guessing.
             info = vp_refskel_extend.extend_sk_refskeleton(
                 uasset_path, uexp_path, new_bones, out_uasset, out_uexp)
             # swayfix WP(dev#19): 必須(重み付き)分とリーフ(best-effort)分を
@@ -589,6 +683,9 @@ def _refskel_extend_overrides(pairs, template, variant_dir, dumps):
                     reparented_names.append((name, want_parent))
                     n_reparented += 1
                 except vp_refskel_extend.RefskelExtendError as e:
+                    if name in preserved_names:
+                        raise vp_refskel_extend.RefskelExtendError(
+                            f"cannot reparent preserved sway bone {name!r} -> {want_parent!r}: {e}") from e
                     # トポロジ制約(親は常に子より前の配列インデックス)は
                     # content-only patchでは原理的に越えられない場合がある
                     # (例: 新規追加ボーンを親にしたい既存の早い配列位置の骨)。
@@ -1012,23 +1109,12 @@ def _run_sway_abp_patch(job_json, work):
               "(disabled/unknown, pak output unaffected)")
         return []
 
-    # dev#1508 W2a(2026-08-16): step02_retarget.py(Blenderプロセス、骨配線)が
-    # job_dir/converted/配下に書き出したノード単位override(グループごとの
-    # 量子化プリセット値+limit_angle写し)を読む。ファイルが無い場合
-    # (sway_enable無効だった/古いキャッシュ等)は空dict=旧来の全ノード一律
-    # 挙動のまま(完全no-opフォールバック、sway_abp_build.build_spec_nodes()
-    # のnode_overrides=None相当)。
-    node_overrides = {}
-    overrides_path = os.path.join(
-        job["job_dir"], "converted", sway_allocator_wire.NODE_OVERRIDES_FILENAME)
-    if os.path.isfile(overrides_path):
-        try:
-            with open(overrides_path, encoding="utf-8") as f:
-                node_overrides = json.load(f)
-        except (OSError, json.JSONDecodeError) as e:
-            print(f"[{TAG}][WARN] failed to read sway node overrides "
-                  f"({overrides_path}): {e} -- falling back to uniform hardness")
-            node_overrides = {}
+    # Share final donor metadata with fast repack. Missing legacy metadata may
+    # use uniform hardness; opted-in motion requires a complete conversion.
+    try:
+        node_overrides = load_node_overrides(job)
+    except SwayNodeMetadataError as e:
+        die(str(e))
 
     print(f"[{TAG}] === Phase 3.6: sway ABP patch (dev#19/dev#1508, sway_intensity="
           f"{intensity!r}, {len(node_overrides)} node override(s)) ===")
@@ -1050,46 +1136,30 @@ def _run_sway_abp_patch(job_json, work):
 
 
 def _run_sway_hub_reparent_patch(job_json, work):
-    """dev#1508 W2a-2(汎用ハブ配線、指揮者指示書「本体」項目2「pak結線」):
-    `job_dir/converted/sway_hub_reparent.json`(`sway_hub_placement.
-    plan_reparent_steps()`の出力を`sway_shared_skeleton.ReparentStep`相当の
-    json配列へシリアライズしたもの、将来の`step02_retarget.py`結線が書き
-    出す想定——本WPではまだ書き出されないため、常にファイル無し=no-op)が
-    存在すれば、ユーザー自身のPalworldインストールから共有Skeleton
-    (`SK_PalHuman_Skeleton.uasset/uexp`)をその場ライブ抽出し
-    (`pak_live_extract`、`_run_dt_patch()`と同じ「著作物を配布物に含めない」
-    既存原則を踏襲)、`sway_shared_skeleton.apply_reparent_chain()`で
-    「内容だけ」reparentパッチしてcommon_mount_filesへ合流させるための
-    (abs_path, rel)リストを返す。
+    """Merge current per-gender plans and patch a live vanilla skeleton.
 
-    共有Skeletonは通常の426件vanillaテンプレ(`noue_template_manifest.json`)
-    にも既存のreplace_map系(tex_replace/mat_override/targets_rel)にも
-    含まれない資産——`_run_sway_abp_patch()`/`_run_dt_patch()`と同じ
-    「常時呼ぶが内部で条件判定してno-opになる」設計の**追加**entryとして
-    common_mount_filesへ合流させる(既存のreplace_map/all_filesとの
-    rel_path重複は発生しない、build_pak()はrel_path重複を検出しないため
-    重複させると壊れる——重複させない設計であることが安全性の前提)。
-
-    ファイルが無い(=このWP時点でstep02がまだ書き出さない/揺れ無効/ハブ
-    割当0件)場合は空リスト(pak出力は本WP適用前と完全に一致)。抽出・
-    パッチのいずれかが失敗したら**変換全体を停止する**(`_run_dt_patch()`と
-    同じ方針、黙ってスキップしない)。
+    Legacy exports without per-gender files still read the combined plan.
+    Missing, malformed or conflicting new plans stop before game pak access.
+    Empty plans also invalidate old cooked output used by fast repack.
     """
     if not os.path.exists(job_json):
         die("cannot resolve sway hub reparent settings (dev#1508 W2a-2): "
             f"job.json not found: {job_json}")
     job = core.load_job(job_json)
-    reparent_path = os.path.join(
-        job["job_dir"], "converted", SWAY_HUB_REPARENT_FILENAME)
-    if not os.path.isfile(reparent_path):
-        return []
+    converted = os.path.join(job["job_dir"], "converted")
     try:
-        with open(reparent_path, encoding="utf-8") as f:
-            steps_raw = json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
-        die(f"failed to read sway hub reparent steps ({reparent_path}) "
-            f"(dev#1508 W2a-2): {e}")
+        steps_raw = sway_reparent_store.read_for_build(converted, job["genders"])
+    except (OSError, ValueError) as e:
+        die(f"failed to read current sway hub reparent steps: {e}")
     if not steps_raw:
+        # A full rebuild with no chains must invalidate the binary cache too,
+        # or a later material-only repack could resurrect the previous bones.
+        stale = [os.path.join(converted, SWAY_HUB_PATCH_MANIFEST_FILENAME)]
+        stale.extend(os.path.join(work, "sway_hub_reparent", SWAY_HUB_SK_PACKAGE_NAME + ext)
+                     for ext in (".uasset", ".uexp"))
+        for path in stale:
+            if os.path.isfile(path):
+                os.remove(path)
         return []
 
     print(f"[{TAG}] === Phase 3.7: sway hub shared-skeleton reparent patch "

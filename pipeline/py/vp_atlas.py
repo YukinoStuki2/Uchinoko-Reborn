@@ -35,7 +35,17 @@ body(0)/parka(1)の2セクションへ分類する際にこの関数を使う。
 場合は必ず本関数も同時に変更すること(FIX3a 2026-07-24: "mohu"/"mofu"追加を
 両ファイル同時に反映済み)。
 
-## グリッド分割・キャンバス解像度(枠内判断、実測に基づく)
+## Current full-build layout
+
+Reborn detail packing keeps one 4096-square atlas, but allocates rectangular
+regions from source dimensions. Solid colors and small inputs no longer take
+the same area as detailed source textures. Each region has an extruded border;
+resampling uses linear-light area filtering. Existing scale/offset UVs are
+reused, with no tile rotation or extra runtime material. See vp_atlas_detail.
+The legacy grid APIs below remain available for explicit legacy-grid jobs and
+their original callers.
+
+## Legacy grid layout
 
 - グリッド: `compute_grid(n)`で `cols=ceil(sqrt(n))`, `rows=ceil(n/cols)`。
   bin-packingはしない(タスク指示どおりYAGNI)。alicia実測: body系distinct
@@ -62,6 +72,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import vp_tex          # noqa: E402
 import vp_texinject    # noqa: E402
+from vp_atlas_detail import plan_detail_atlas, build_detail_atlas_image, resize_detail, compose_detail_atlas
 
 
 # ------------------------------------------------------------ マテリアル分類
@@ -514,6 +525,11 @@ def build_atlas_from_paths(paths, cell_size=2048, max_canvas=4096):
     要素が`tinted_texture_key()`で作った合成キーの場合は、埋め込まれた実
     ファイルパスを読んでからtintを乗算する(dev#505、texture有りマテリアルの
     非白_Colorタイント)。"""
+    images = _load_atlas_images(paths)
+    return build_atlas_image(images, cell_size=cell_size, max_canvas=max_canvas)
+
+
+def _load_atlas_images(paths):
     images = []
     for p in paths:
         if is_solid_color_key(p):
@@ -525,7 +541,40 @@ def build_atlas_from_paths(paths, cell_size=2048, max_canvas=4096):
         else:
             _, _, rgba = vp_tex.decode_png(p)
             images.append(rgba)
-    return build_atlas_image(images, cell_size=cell_size, max_canvas=max_canvas)
+    return images
+
+
+def build_detail_atlas_from_paths(paths, canvas_size=4096, padding=8):
+    """Preserve native detail with small solid tiles and rectangular packing.
+
+    The cooked material is opaque. Extend each source's transparent RGB before
+    filtering, so undefined transparent colors cannot darken the result or get
+    filled from another atlas tile during final texture injection.
+    """
+    import struct
+    sizes=[]
+    for source in paths:
+        if is_solid_color_key(source):
+            sizes.append((16,16));continue
+        filename=parse_tinted_texture_key(source)[0] if is_tinted_texture_key(source) else source
+        with open(filename,'rb') as stream:
+            header=stream.read(24)
+        if len(header)!=24 or header[:8]!=b'\x89PNG\r\n\x1a\n' or header[12:16]!=b'IHDR':
+            raise ValueError(f'Invalid PNG header for atlas source: {filename}')
+        sizes.append(struct.unpack('>II',header[16:24]))
+    layout=plan_detail_atlas(sizes,canvas_size,padding)
+    def images():
+        for source in paths:
+            if is_solid_color_key(source):
+                image=solid_color_image(parse_solid_color_key(source),size=16)
+            else:
+                image=_load_atlas_images([source])[0]
+            # Keep source alpha until filtering selects the safe method for
+            # extrapolated transparent colors. The cooked atlas stays opaque.
+            yield vp_tex.extend_opaque_color(image)
+    canvas,transforms,layout=compose_detail_atlas(images(),layout)
+    canvas[:,:,3]=255
+    return canvas,transforms,layout
 
 
 # -------------------------------------------------------- 診断可能な入力エラー
