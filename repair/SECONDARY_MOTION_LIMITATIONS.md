@@ -116,6 +116,9 @@ in this source metadata. Donor names containing `ear` are reused for other
 head-attached source chains and do not prove source ears are simulated.
 
 The cooked templates provide **nine available independent allocation slots**.
+Reborn 13 additionally offers an opt-in shared-response garment node with
+independent roots; see [the conservative garment notes](REBORN_13_CONSERVATIVE_GARMENT.md).
+It does not expand the default allocator or reproduce Polar collision behavior.
 The baseline truncates candidates before removing two nested followers, so
 two slots remain unused. Refilling capacity can improve coverage without
 increasing that budget; it cannot preserve dozens of independent components

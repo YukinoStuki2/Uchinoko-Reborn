@@ -112,3 +112,14 @@ def test_manifest_cannot_claim_user_job_metadata(installation):
     with pytest.raises(ValueError, match='Unsafe'):
         builder.update(installation)
     assert job.read_text() == '{"avatar": "private"}'
+
+
+def test_reviewed_static_document_allows_a_second_source_update(installation):
+    source = builder.REPO / 'pipeline/py/sway_abp_templates/README.md'
+    source.parent.mkdir(parents=True)
+    source.write_text('Reviewed template documentation')
+    builder.update(installation)
+    assert builder.update(installation)['changed'] == 0
+    source.write_text('Updated template documentation')
+    builder.update(installation)
+    assert (installation / 'res/pipeline/py/sway_abp_templates/README.md').read_text() == source.read_text()

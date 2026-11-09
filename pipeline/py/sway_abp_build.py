@@ -400,6 +400,7 @@ def patch_template_bytes(
     template: Dict, hardness_key: str, cooked_dir: str = COOKED_DIR,
     raw_params: Optional[Dict[str, Dict[str, float]]] = None,
     node_overrides: Optional[Dict[str, Dict[str, object]]] = None,
+    garment_request: Optional[Dict] = None,
 ) -> Tuple[bytes, bytes]:
     """1テンプレ(load_template_manifest()の1要素)をパッチし、
     (uasset_bytes, patched_uexp_bytes) を返す。固定長パラメータのみなら
@@ -417,14 +418,26 @@ def patch_template_bytes(
         uasset_bytes = f.read()
     with open(uexp_path, "rb") as f:
         uexp_bytes = f.read()
-    names = vp_core.read_names(uasset_path)
+    roots = template["root_bones"]
+    if garment_request is not None:
+        import sway_garment_abp
+        try:
+            uasset_bytes, uexp_bytes, roots = sway_garment_abp.load_garment_template(template, cooked_dir)
+            names = sway_abp_curves._metadata(uasset_bytes, uexp_bytes)[1]
+        except (sway_abp_curves.CurveStructureError, OSError) as exc:
+            raise SwayAbpBuildError(f"Cannot load garment template for {template['target_abp']}: {exc}") from exc
+    else:
+        names = vp_core.read_names(uasset_path)
     spec_nodes = build_spec_nodes(
-        template["root_bones"], hardness_key, raw_params, node_overrides)
+        roots, hardness_key, raw_params, node_overrides)
     try:
         patched_uexp = sway_abp_patcher.patch_kawaii_physics_nodes(
             uexp_bytes, names, spec_nodes)
         uasset_bytes, patched_uexp = sway_abp_curves.patch_curves(
             uasset_bytes, patched_uexp, spec_nodes)
+        if garment_request is not None:
+            uasset_bytes, patched_uexp = sway_garment_abp.patch_garment_node(
+                uasset_bytes, patched_uexp, garment_request)
     except (sway_abp_patcher.AbpStructureError, sway_abp_curves.CurveStructureError) as e:
         raise SwayAbpBuildError(
             f"failed to patch sway ABP template {template['target_abp']}: {e}") from e
@@ -493,9 +506,16 @@ def sway_abp_pak_entries(
 
     os.makedirs(out_dir, exist_ok=True)
     entries: List[Tuple[str, str]] = []
+    import sway_garment_profile
+    garment_requests = {gender: (sway_garment_profile.load_request(job, gender)
+                                if gender in {g.lower() for g in job.get("genders", ["Female", "Male"])}
+                                else None)
+                        for gender in ("female", "male")}
     for template in manifest:
+        gender = "female" if template["uasset_name"].startswith("ABP_F_") else "male"
         uasset_bytes, patched_uexp = patch_template_bytes(
-            template, hardness_key, cooked_dir, raw_params, node_overrides)
+            template, hardness_key, cooked_dir, raw_params, node_overrides,
+            garment_requests[gender])
         rel = _rel_from_target_abp(template["target_abp"])
         uasset_out = os.path.join(out_dir, template["uasset_name"])
         uexp_out = os.path.join(out_dir, template["uexp_name"])

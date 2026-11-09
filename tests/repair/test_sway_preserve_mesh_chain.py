@@ -189,3 +189,52 @@ def test_auto_global_disable_does_not_require_manifest(tmp_path, monkeypatch, en
     (tmp_path / "job.json").write_text(json.dumps({"sway_adaptation": "physbone-v1", "sway_enable": enabled}))
     run()
     assert "free_terminal" not in {b["name"] for b in captured}
+
+
+def garment_fixture(tmp_path, monkeypatch, gender):
+    import sway_auto
+    import sway_garment_profile
+    run, captured, _, planned, _, converted = fixture(tmp_path, monkeypatch, gender, overrides=[])
+    job = {"job_dir": str(tmp_path), "sway_adaptation": "physbone-v1", "sway_enable": True,
+           "conservative_garment": True}
+    (tmp_path / "job.json").write_text(json.dumps(job))
+    manifest = {"format": "uchinoko-reborn-sway-adaptation-1", "mode": "physbone-v1",
+                "gender": gender.lower(), "active_physbone_anchors": []}
+    (converted / f"sway_adaptation_{gender.lower()}.json").write_text(json.dumps(manifest))
+    report = {"format": sway_garment_profile.FORMAT, "enabled": True, "gender": gender.lower(),
+              "input_fingerprint": sway_auto.input_fingerprint(job), "source_keys": ["pb:tail#0"],
+              "request": {"simulation_root": TAIL + "01", "additional_roots": []},
+              "source_to_donor": {"tail": TAIL + "01", "tail.001": "free_donor"},
+              "adaptation": dict(manifest, active_physbone_anchors=["tail"], components=[{
+                  "unit_key": "pb:tail#0", "anchor": "tail", "target_root": TAIL + "01"}])}
+    report_path = converted / f"sway_garment_{gender.lower()}.json"
+    report_path.write_text(json.dumps(report))
+    return run, captured, planned, report, report_path, converted
+
+
+@pytest.mark.parametrize("gender", ["Female", "Male"])
+def test_garment_subtree_keeps_unweighted_tips_without_changing_nine_node_manifest(tmp_path, monkeypatch, gender):
+    run, captured, planned, _, _, _ = garment_fixture(tmp_path, monkeypatch, gender)
+    run()
+    names = {b["name"] for b in captured}
+    assert "free_terminal" in names
+    assert TAIL + "06" not in names
+    assert set(planned) - {TAIL + "01"} <= names
+
+
+@pytest.mark.parametrize("corruption", ["missing", "stale", "wrong_anchor", "missing_final_mapping"])
+def test_garment_cannot_silently_drop_endpoint_from_incomplete_metadata(tmp_path, monkeypatch, corruption):
+    run, _, _, report, report_path, converted = garment_fixture(tmp_path, monkeypatch, "Female")
+    if corruption == "missing":
+        report_path.unlink()
+    elif corruption == "stale":
+        report["input_fingerprint"] = "old-build"
+        report_path.write_text(json.dumps(report))
+    elif corruption == "wrong_anchor":
+        report["adaptation"]["active_physbone_anchors"] = ["other-source"]
+        report_path.write_text(json.dumps(report))
+    else:
+        path = converted / "sway_source_donor_map_female.json"
+        path.write_text(json.dumps({"tail.001": "free_donor"}))
+    with pytest.raises(build.vp_refskel_extend.RefskelExtendError, match="full conversion"):
+        run()

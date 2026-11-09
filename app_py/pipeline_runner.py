@@ -246,6 +246,7 @@ def write_job(
     uniform_scale: float = 1.0,
     size_fit_mode: str = "legacy",
     sway_intensity: str = "auto",
+    conservative_garment: bool = False,
 ) -> str:
     """WriteJob() L.1771-1817相当。job.jsonを書き出し、そのファイルパスを返す。
 
@@ -274,6 +275,9 @@ def write_job(
     sway_intensity: "auto" (new default), "none", or the existing
     "soft"/"normal"/"hard" presets. Auto writes sway_adaptation="physbone-v1"
     with normal as the fallback preset. Explicit old presets do not opt in.
+
+    conservative_garment: explicit experimental opt-in for small independent
+    skirt-chain motion. Applies only in auto mode; legacy builds stay unchanged.
 
     job["sway_intensity"]は有効時に"soft"/"normal"/"hard"として
     書く("none"のときはキー自体を省略する——dev#19プロトタイプ時代からの
@@ -449,6 +453,8 @@ def write_job(
         job["sway_enable"] = True
         if sway_intensity == "auto":
             job["sway_adaptation"] = "physbone-v1"
+            if conservative_garment is True:
+                job["conservative_garment"] = True
 
     # dev#19揺れものUIプロトタイプ(仕様2-3): ラボ「揺れもの詳細設定」で
     # 保存済みのチェーン単位の上書き(ON/OFF・かたさ・手動追加・安全域)の
@@ -1394,6 +1400,17 @@ def size_settings_match_build(
         return False
 
 
+def garment_settings_match_build(
+    work_root: str, vrm_path: str, *, conservative_garment: bool = False,
+) -> bool:
+    """A material-only rebuild cannot change the cooked skirt skeleton."""
+    name = sanitize_name(os.path.splitext(os.path.basename(vrm_path))[0])
+    snapshot = read_job(os.path.join(work_root, name, "build", "job_snapshot.json"))
+    if not isinstance(snapshot, dict):
+        return False
+    return (snapshot.get("conservative_garment") is True) == (conservative_garment is True)
+
+
 def run_pipeline(
     app_root: str,
     work_root: str,
@@ -1413,6 +1430,7 @@ def run_pipeline(
     uniform_scale: float = 1.0,
     size_fit_mode: str = "legacy",
     sway_intensity: str = "auto",
+    conservative_garment: bool = False,
     log: Optional[Callable[[str], None]] = None,
 ):
     """RunPipeline() L.2547-2607相当。job.json書き出し→convert.ps1起動までを
@@ -1441,6 +1459,11 @@ def run_pipeline(
         work_root, vrm_path, size_fit_mode=size_fit_mode, uniform_scale=uniform_scale,
     ):
         raise ValueError("Size settings differ from the cooked build; Full Convert is required.")
+    if materials_only and not garment_settings_match_build(
+        work_root, vrm_path,
+        conservative_garment=conservative_garment is True and sway_intensity == "auto",
+    ):
+        raise ValueError("Skirt physics settings differ from the cooked build; Full Convert is required.")
     job_json = write_job(
         app_root,
         work_root,
@@ -1455,12 +1478,16 @@ def run_pipeline(
         uniform_scale=uniform_scale,
         size_fit_mode=size_fit_mode,
         sway_intensity=sway_intensity,
+        conservative_garment=conservative_garment,
     )
     script = build_convert_script_path(app_root)
     args = build_convert_args(script, job_json, preview_only, materials_only)
     shell = find_pwsh(app_root, log=log)
 
-    if not _sway_fallback_eligible(sway_intensity, preview_only, materials_only):
+    # Experimental skirt conversion must not silently succeed by removing
+    # the avatar's existing hair/tail physics after a failed build.
+    experimental_garment = conservative_garment is True and sway_intensity == "auto"
+    if experimental_garment or not _sway_fallback_eligible(sway_intensity, preview_only, materials_only):
         handle = ProcessHandle(shell, args, on_line, on_exit)
         handle.job_dir = os.path.dirname(job_json)
         handle.start()
@@ -1484,6 +1511,7 @@ def run_pipeline(
             license_confirmed=license_confirmed,
             uniform_scale=uniform_scale,
             size_fit_mode=size_fit_mode,
+            conservative_garment=conservative_garment,
         ),
         on_line=on_line,
         on_exit=on_exit,

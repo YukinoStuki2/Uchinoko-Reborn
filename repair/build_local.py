@@ -16,7 +16,7 @@ from datetime import datetime
 import uuid
 
 REPO=Path(__file__).resolve().parents[1]
-VERSION = '2.13.0-reborn.12'
+VERSION = '2.13.0-reborn.13'
 BLENDER_DIR = 'res/assets/tools/blender-4.3.2-windows-x64'
 RUNTIME_PATHS = {
     'TCL_LIBRARY': 'res/python_embed/tcl/tcl8.6',
@@ -184,10 +184,13 @@ def update(target: Path) -> dict:
         return hashlib.sha256(path.read_bytes()).hexdigest()
 
     old_sources = old['source_files']
+    installed_static = {('app/' + key[len('app_py/'):] if key.startswith('app_py/') else key)
+                        for key in SOURCE_STATIC}
     for relative, expected in old_sources.items():
         parts = Path(relative).parts
         if (not parts or parts[0] not in {'app', 'pipeline', 'unity'} or '..' in parts
-                or Path(relative).suffix not in {'.py', '.ps1', '.cs', '.json'}):
+                or (Path(relative).suffix not in {'.py', '.ps1', '.cs', '.json'}
+                    and relative not in installed_static)):
             raise ValueError(f'Unsafe managed source path: {relative}')
         path = checked('res/' + relative)
         if not path.is_file() or digest(path) != expected:

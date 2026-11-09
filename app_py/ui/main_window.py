@@ -2131,6 +2131,8 @@ class MainWindow:
             idx = int(float(_value))
             if 0 <= idx < len(SWAY_INTENSITY_I18N_KEYS):
                 lbl.config(text=i18n.S(SWAY_INTENSITY_I18N_KEYS[idx]))
+            if "conservativeGarmentCheck" in self.widgets:
+                self._update_button_states()
 
         sway_intensity_bar.config(command=_on_sway_intensity_change)
 
@@ -2152,6 +2154,17 @@ class MainWindow:
         # -commandを起動しないため、_apply_restored_settings側から明示的に
         # テキストを更新する必要がある。下記_apply_restored_settings参照)。
         self.widgets["swayIntensityValueLabel"] = sway_intensity_value_label
+
+        self._conservative_garment_var = tk.BooleanVar(value=False)
+        garment_check = tk.Checkbutton(
+            kodawari_panel, text=i18n.S("CheckConservativeGarment"),
+            variable=self._conservative_garment_var, anchor="w",
+            command=self._update_button_states,
+        )
+        garment_check.place(x=488, y=row3_top + 3, width=550, height=28)
+        self._register_text(garment_check, "CheckConservativeGarment")
+        self._register_tip(garment_check, "TipConservativeGarment")
+        self.widgets["conservativeGarmentCheck"] = garment_check
 
         # ---- 削除ボーン行(dev#1186でラボへ移設) ----
         # 旧「削除ボーン(上級)」のLabel/Entry/Hintは ui\lab_window.py の
@@ -2465,6 +2478,9 @@ class MainWindow:
         size_fit_var = getattr(self, "_size_fit_var", None)
         if size_fit_var is not None:
             size_fit_var.set(True)
+        garment_var = getattr(self, "_conservative_garment_var", None)
+        if garment_var is not None:
+            garment_var.set(False)
         self._apply_restored_settings(job_dir, set_vrm_path=False)
         # dev#611: ApplyAvatarLoad() L.1591-1597相当。アバター登録の全経路
         # (browse/D&D/prefabのUnity輸出完了)がこの_set_vrm_pathへ集約している
@@ -2580,6 +2596,9 @@ class MainWindow:
                 self.widgets["swayIntensityValueLabel"].config(
                     text=i18n.S(SWAY_INTENSITY_I18N_KEYS[sway_idx])
                 )
+        garment_var = getattr(self, "_conservative_garment_var", None)
+        if garment_var is not None:
+            garment_var.set(data.get("conservative_garment") is True and sway_intensity == "auto")
 
         self._merge_fingers = bool(data.get("merge_fingers", self._merge_fingers))
         self._unlit = bool(data.get("unlit", self._unlit))
@@ -2672,6 +2691,13 @@ class MainWindow:
             "size_fit_mode": "vanilla" if size_fit_var is not None and size_fit_var.get() else "legacy",
             "uniform_scale": float(slider.get()) / 100.0 if slider is not None else 1.0,
         }
+
+    def _garment_settings(self) -> dict:
+        selected = getattr(self, "_conservative_garment_var", None)
+        slider = self.widgets.get("swayIntensityBar")
+        index = int(float(slider.get())) if slider is not None else -1
+        automatic = 0 <= index < len(SWAY_INTENSITY_VALUES) and SWAY_INTENSITY_VALUES[index] == "auto"
+        return {"conservative_garment": selected is not None and selected.get() is True and automatic}
 
     def _finalize_fresh_preview(self, vrm_path: str) -> None:
         """OnPipelineDone() L.2914-2915相当(`SavePreviewSig(); UpdateButtonStates();
@@ -3434,6 +3460,13 @@ class MainWindow:
             if not auto:
                 messagebox.showinfo(i18n.S("TitleConfirm"), i18n.S("MsgSizeNeedsFullConvert"))
             return
+        if materials_only and not pipeline_runner.garment_settings_match_build(
+            self.work_root, vrm_path, **MainWindow._garment_settings(self),
+        ):
+            self._log("[garment] materials update blocked: Full Convert is required")
+            if not auto:
+                messagebox.showinfo(i18n.S("TitleConfirm"), i18n.S("MsgGarmentNeedsFullConvert"))
+            return
         try:
             pipeline_runner.validate_output_job_dir(self.work_root, vrm_path)
         except ValueError as exc:
@@ -3501,6 +3534,7 @@ class MainWindow:
             license_confirmed=self._license_confirmed,
             **size_settings,
             sway_intensity=sway_intensity,
+            **MainWindow._garment_settings(self),
             # dev#1242申し送り②: find_pwsh()の探索ログをログ欄(self._log、
             # 「ログをコピー」に載る経路)へ結線する。_start_pipeline()は
             # ボタンハンドラから直接呼ばれる主スレッド実行のため、tkウィジェットに
@@ -4047,10 +4081,18 @@ class MainWindow:
             and not self._work_root_failed
         )
         preview_state = "normal" if base_enabled else "disabled"
+        garment_check = self.widgets.get("conservativeGarmentCheck")
+        if garment_check is not None:
+            sway_bar = self.widgets.get("swayIntensityBar")
+            index = int(float(sway_bar.get())) if sway_bar is not None else -1
+            automatic = 0 <= index < len(SWAY_INTENSITY_VALUES) and SWAY_INTENSITY_VALUES[index] == "auto"
+            garment_check.config(state="normal" if automatic and not self._is_pipeline_running else "disabled")
         mats_enabled = base_enabled and noue_full_build.has_noue_full_build(
             getattr(self, "work_root", ""), vrm_path
         ) and pipeline_runner.size_settings_match_build(
             getattr(self, "work_root", ""), vrm_path, **MainWindow._size_settings(self),
+        ) and pipeline_runner.garment_settings_match_build(
+            getattr(self, "work_root", ""), vrm_path, **MainWindow._garment_settings(self),
         )
         mats_state = "normal" if mats_enabled else "disabled"
         self.widgets["previewButton"].config(state=preview_state)

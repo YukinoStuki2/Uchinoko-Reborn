@@ -361,6 +361,7 @@ def _refskel_extend_overrides(pairs, template, variant_dir, dumps):
                 job = json.load(stream)
             from sway_hub_wire import preserve_chain_anchors_from_overrides
             anchors = preserve_chain_anchors_from_overrides(job.get("sway_chain_overrides"))
+            garment_roots = {}
             auto = job.get("sway_adaptation") == "physbone-v1" and bool(job.get("sway_enable"))
             if auto:
                 try:
@@ -375,6 +376,13 @@ def _refskel_extend_overrides(pairs, template, variant_dir, dumps):
                             or any(not isinstance(n, str) or not n for n in manifest["active_physbone_anchors"])):
                         raise ValueError("invalid source-adaptation manifest")
                     anchors = anchors | frozenset(manifest["active_physbone_anchors"])
+                    # Independent skirt roots have their own response report;
+                    # they must retain unweighted endpoints just like the
+                    # original nodes, without changing those nodes' manifest.
+                    import sway_garment_profile
+                    garment_roots = sway_garment_profile.preserved_anchor_map(
+                        {**job, "job_dir": os.path.dirname(os.path.abspath(converted))}, gender)
+                    anchors = anchors | frozenset(garment_roots)
                 except (OSError, ValueError, TypeError) as exc:
                     raise vp_refskel_extend.RefskelExtendError(
                         f"incomplete source-adaptation metadata ({gender}): {exc}; "
@@ -392,6 +400,8 @@ def _refskel_extend_overrides(pairs, template, variant_dir, dumps):
                     source_map, hub = sidecars
                     if auto and any(a not in source_map for a in manifest["active_physbone_anchors"]):
                         raise ValueError("active source-adaptation anchor is absent from final mapping")
+                    if any(source_map.get(anchor) != root for anchor, root in garment_roots.items()):
+                        raise ValueError("active garment root is absent or changed in final mapping")
                     children = {}
                     for name, entry in hub.items():
                         children.setdefault(entry["parent"], []).append(name)

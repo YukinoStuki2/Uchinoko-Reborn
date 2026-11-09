@@ -49,6 +49,8 @@ import sway_pivot_axiom  # dev#1508 hubwire final: オーナー制定公理(支�
 import sway_degrade  # dev#1508 graceful-degrade(night_20260817 laneI): 揺れ鎖の明示的縮退
 import sway_coverage
 import sway_motion
+import sway_garment_bridge
+import sway_garment_profile
 import vp_avatar_size
 import sway_chain_defaults  # dev#1572第3便: 既定enabled判定の唯一の共有関数
                              # (GUI側app_py\ui\sway_style_dialog.pyと同一関数を呼ぶ)
@@ -2939,7 +2941,7 @@ def place_hub_donor_chains(pal_arm, avatar_arm, wiring, gender, anchor_pal_map, 
     n_groups_placed = 0
     for gp in wiring.group_plans:
         hub_name = gp.hub_root_male if gender == "Male" else gp.hub_root_female
-        anchor_pal = anchor_pal_map.get(gp.group.anchor)
+        anchor_pal = anchor_pal_map.get(gp.anchor_target)
         if hub_name not in eb or anchor_pal is None or anchor_pal not in eb:
             print(f"[{TAG}][WARN] sway hub reposition: anchor "
                   f"{gp.group.anchor!r} -> pal bone unresolved, or hub root "
@@ -4240,6 +4242,7 @@ def main():
     physbone_entries = []
     source_parent_of = {}
     manual_node_overrides = {}
+    garment_state = None
     if job.get("sway_enable"):
         donor_bone_pairs = build_donor_bone_pairs_from_vanilla(vanilla, gender)
         if not donor_bone_pairs:
@@ -4300,6 +4303,13 @@ def main():
                                 weighted_bone_names=weighted_bone_names)
         auto_entries, manual_node_overrides, manual_diagnostics_lines, sway_report = \
             auto_assign_sway_chains(job, gender, source_parent_of, donor_bone_pairs)
+
+        garment_state = sway_garment_bridge.prepare(
+            job, gender, hub_wiring, sway_raw_physbone_entries, source_parent_of,
+            weighted_bone_names, anchor_pal_map, common, pal_map, avatar_arm, meshes,
+            _sway_gate_donor_transforms_and_weights)
+        if garment_state:
+            hub_refskel_dict.update(garment_state["refskel"])
 
         diagnostics_lines = list(hub_diagnostics_lines) + list(manual_diagnostics_lines)
         # dev#1508 W2a(2026-08-16オーナー追加指示): 変換ログ(「ログをコピー」
@@ -4585,6 +4595,20 @@ def main():
             with open(os.path.join(conv, f"sway_adaptation_{gender.lower()}.json"),
                       "w", encoding="utf-8") as stream:
                 json.dump(adaptation, stream, ensure_ascii=False, indent=2)
+        if garment_state:
+            extra_wiring = garment_state["wiring"]
+            hub_donor_quats.update(place_hub_donor_chains(
+                pal_arm, avatar_arm, extra_wiring, gender, anchor_pal_map, dz))
+            garment_report = sway_garment_profile.make_report(
+                job, extra_wiring, gender,
+                {b.name: tuple(b.head_local) for b in pal_arm.data.bones},
+                sway_raw_physbone_entries, source_fit_scale,
+                sway_shared_skeleton.fname_identities_for_job(job["job_dir"]),
+                rejected=garment_state["plan"].diagnostics)
+            sway_garment_profile.write_report(job, gender, garment_report)
+            hub_wiring = sway_garment_bridge.combine(hub_wiring, garment_state)
+            hub_refskel_dict.update(garment_state["refskel"])
+            group_targets.update(sway_hub_wire.source_to_donor_bone_map(extra_wiring, gender))
         overrides_path = os.path.join(conv, sway_allocator_wire.NODE_OVERRIDES_FILENAME)
         with open(overrides_path, "w", encoding="utf-8") as f:
             json.dump(node_overrides_final, f, ensure_ascii=False)
@@ -4611,6 +4635,7 @@ def main():
             filtered_springbone_entries=job.get("springbones"),
             initial_assignments=job_lab_assignments, wiring=hub_wiring,
             exclusions=sway_exclusion_entries, gender=gender, job=job)
+        sway_garment_bridge.annotate_coverage(coverage, garment_state)
         coverage_path = os.path.join(conv, f"sway_coverage_{gender.lower()}.json")
         with open(coverage_path, "w", encoding="utf-8") as f:
             json.dump(coverage, f, ensure_ascii=False, indent=2)
@@ -4879,6 +4904,10 @@ def main():
             avatar_arm, pal_arm, meshes, group_targets, conv, vanilla,
             hub_wiring, dz, pal_map, source_parent_of,
             lab_assignments=sway_lab_overrides)
+
+        sway_garment_bridge.finish_gate(
+            garment_state, job, gender, avatar_arm, pal_arm, meshes, group_targets, dz,
+            _sway_gate_live_source_transforms, _sway_gate_donor_transforms_and_weights)
 
     rebind(meshes, pal_arm)
     bpy.data.objects.remove(avatar_arm, do_unlink=True)

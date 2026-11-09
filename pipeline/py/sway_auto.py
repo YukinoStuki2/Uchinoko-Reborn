@@ -35,6 +35,8 @@ def input_fingerprint(job):
         "sway_adaptation", "sway_enable", "uniform_scale", "size_fit_mode", "sway_chain_overrides",
         "sway_lab_assignments", "drop_bones")}
     inputs["adaptation_revision"] = ADAPTATION_REVISION
+    if job.get("conservative_garment") is True:
+        inputs["conservative_garment"] = True
     for key in ("physbones_json", "humanoid_json"):
         path = Path(job[key]) if job.get(key) else None
         inputs[key] = hashlib.sha256(path.read_bytes()).hexdigest() if path and path.is_file() else None

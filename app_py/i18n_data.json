@@ -1,4 +1,13 @@
 {
+ "CheckConservativeGarment": {
+  "ja": "控えめな裾揺れ（実験的）", "en": "Subtle skirt motion (experimental)", "ko": "작은 치맛단 흔들림 (실험적)", "zhTW": "保守裙擺（實驗）", "zhCN": "保守裙摆（实验）"
+ },
+ "TipConservativeGarment": {
+  "ja": "自動モード専用。対応する独立した裾のボーン鎖を小さく揺らします。元の方向制限と脚への衝突は再現しません。変更後は全体を再変換してください。", "en": "Auto mode only. Adds small motion to supported independent skirt chains. Does not reproduce the source directional limits or leg collisions. Requires Full Convert after changing.", "ko": "자동 모드 전용입니다. 지원되는 독립 치마 본 체인을 작게 움직입니다. 원본 방향 제한이나 다리 충돌을 재현하지 않습니다. 변경 후 전체 변환이 필요합니다.", "zhTW": "僅在自動適配模式生效。讓支援的獨立裙擺骨鏈小幅擺動，不還原源方向限制與腿部碰撞。更改後需要完整轉換。", "zhCN": "仅在自动适配模式生效。让支持的独立裙摆骨链小幅摆动，不还原源方向限制与腿部碰撞。更改后需要完整转换。"
+ },
+ "MsgGarmentNeedsFullConvert": {
+  "ja": "裾の物理設定が前回のビルドと異なります。全体を再変換してください。", "en": "Skirt physics settings differ from the last build. Use Full Convert.", "ko": "치마 물리 설정이 이전 빌드와 다릅니다. 전체 변환을 실행하세요.", "zhTW": "裙擺物理設定與上次構建不同，請執行完整轉換。", "zhCN": "裙摆物理设置与上次构建不同，请执行完整转换。"
+ },
  "MotionTitle": {
   "ja": "部位ごとの揺れ調整", "en": "Component motion", "ko": "부위별 흔들림", "zhTW": "部件動態調節", "zhCN": "部件动态调节"
  },
