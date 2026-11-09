@@ -61,7 +61,9 @@ def fixture(tmp_path, monkeypatch, gender="Female", overrides=None):
     template = tmp_path / "template"
     base = template / f"SK_Pal_{gender}_Test"
 
-    def run():
+    def run(job_json_path=None):
+        if job_json_path is not None:
+            build._attach_job_context(dump, str(job_json_path))
         return build._refskel_extend_overrides(
             [(str(base.with_suffix(".uexp")), str(base.with_suffix(".uasset")))],
             str(template), str(tmp_path / "build" / "variant"), {gender: dump})
@@ -196,7 +198,7 @@ def garment_fixture(tmp_path, monkeypatch, gender):
     import sway_garment_profile
     run, captured, _, planned, _, converted = fixture(tmp_path, monkeypatch, gender, overrides=[])
     job = {"job_dir": str(tmp_path), "sway_adaptation": "physbone-v1", "sway_enable": True,
-           "conservative_garment": True}
+           "conservative_garment": True, "uniform_scale": 1.0, "drop_bones": []}
     (tmp_path / "job.json").write_text(json.dumps(job))
     manifest = {"format": "uchinoko-reborn-sway-adaptation-1", "mode": "physbone-v1",
                 "gender": gender.lower(), "active_physbone_anchors": []}
@@ -238,3 +240,58 @@ def test_garment_cannot_silently_drop_endpoint_from_incomplete_metadata(tmp_path
         path.write_text(json.dumps({"tail.001": "free_donor"}))
     with pytest.raises(build.vp_refskel_extend.RefskelExtendError, match="full conversion"):
         run()
+
+
+@pytest.mark.parametrize("gender", ["Female", "Male"])
+def test_prefab_build_preserves_skirt_using_actual_resolved_job(tmp_path, monkeypatch, gender):
+    import sway_auto
+    run, captured, _, report, report_path, _ = garment_fixture(tmp_path, monkeypatch, gender)
+    original = json.loads((tmp_path / "job.json").read_text())
+    original["vrm_path"] = str(tmp_path / "avatar.prefab")
+    (tmp_path / "job.json").write_text(json.dumps(original))
+    exported = tmp_path / "unity_export"
+    exported.mkdir()
+    resolved = dict(original, vrm_path=str(exported / "avatar.fbx"))
+    for key in ("humanoid_json", "physbones_json"):
+        path = exported / (key + ".json")
+        path.write_text(json.dumps({"exported": key}))
+        resolved[key] = str(path)
+    job_path = tmp_path / "job.resolved.json"
+    job_path.write_text(json.dumps(resolved), encoding="utf-8-sig")
+    report["input_fingerprint"] = sway_auto.input_fingerprint(resolved)
+    report_path.write_text(json.dumps(report))
+
+    # A stale .prefab input is not the job used by the actual conversion.
+    with pytest.raises(build.vp_refskel_extend.RefskelExtendError, match="Stale garment"):
+        run()
+    assert run(job_path)
+    assert "free_terminal" in {b["name"] for b in captured}
+
+    # Keep the real stale-input protection after correcting job selection.
+    Path(resolved["physbones_json"]).write_text('{"changed": true}')
+    with pytest.raises(build.vp_refskel_extend.RefskelExtendError, match="Stale garment"):
+        run(job_path)
+
+
+def test_build_uses_explicit_job_not_leftover_resolved_file(tmp_path, monkeypatch):
+    run, captured, _, _, _, _ = garment_fixture(tmp_path, monkeypatch, "Female")
+    (tmp_path / "job.resolved.json").write_text('{"conservative_garment": false}')
+    assert run(tmp_path / "job.json")
+    assert "free_terminal" in {b["name"] for b in captured}
+
+
+def test_missing_explicit_build_job_cannot_fall_back_to_original(tmp_path, monkeypatch):
+    run, _, _, _, _, _ = garment_fixture(tmp_path, monkeypatch, "Female")
+    with pytest.raises(build.vp_refskel_extend.RefskelExtendError, match="build job"):
+        run(tmp_path / "missing.resolved.json")
+
+
+def test_explicit_build_job_uses_same_defaults_as_conversion(tmp_path, monkeypatch):
+    run, captured, _, _, _, _ = garment_fixture(tmp_path, monkeypatch, "Female")
+    path = tmp_path / "job.json"
+    job = json.loads(path.read_text())
+    job.pop("uniform_scale")
+    job.pop("drop_bones")
+    path.write_text(json.dumps(job))
+    assert run(path)
+    assert "free_terminal" in {b["name"] for b in captured}

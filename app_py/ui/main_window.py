@@ -82,7 +82,7 @@ from ui import workarea  # noqa: E402
 # DiveToPalworld.cs L.704 (devtools\release.py がリリース時にスタンプする値。
 # WP-A1の骨格では固定値で近似し、実際の版管理はB1/D1側の課題とする)
 TOOL_VERSION = "v2.13.0"
-REPAIR_VERSION = TOOL_VERSION + "-reborn.12"
+REPAIR_VERSION = TOOL_VERSION + "-reborn.14"
 TOOL_DISPLAY_NAME = "Uchinoko Reborn"
 
 # オンラインマニュアルのURL(指揮者裁定: マニュアルを開く導線があれば既定

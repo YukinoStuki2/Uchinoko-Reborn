@@ -4,10 +4,11 @@ Uchinoko Reborn 是面向 Palworld（幻兽帕鲁）的独立社区维护版模�
 
 源码与问题反馈：[YukinoStuki2/Uchinoko-Reborn](https://github.com/YukinoStuki2/Uchinoko-Reborn)。
 
-当前开发版本：**2.13.0-reborn.12**。模型兼容性判定仍沿用 `TOOL_VERSION = v2.13.0`；界面显示独立的 Reborn 版本。
+当前开发版本：**2.13.0-reborn.14**。模型兼容性判定仍沿用 `TOOL_VERSION = v2.13.0`；界面显示独立的 Reborn 版本。
 
 ## 当前修复
 
+- Reborn.14 修复 prefab 完整转换的配置传递，避免新生成的裙摆报告被误判为过期。保守裙摆功能和限制见 [Reborn.13 说明](repair/REBORN_13_CONSERVATIVE_GARMENT.md)。
 - 修复长曲骨链合并后的姿态误判及嵌套权重核算；完整包含的子动态随父组件运行，避免尾尖固定在骨盆，详见 [尾链兼容说明](repair/TAIL_CHAIN_COMPATIBILITY.md)。
 - 转换结束显示独立动态、随父动态及最终检查结果，并生成逐部件中文诊断报告；同一部件跨男女去重，保留骨名、原因及建议。见 [诊断说明](repair/PHYSBONE_DIAGNOSTICS.md)。
 - 修复分叉动态骨链根方向被子骨位置覆盖的问题；带旋转的 Angle 限制在可保留的范围内转换，保留姿态与支点检查。

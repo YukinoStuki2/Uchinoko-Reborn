@@ -310,6 +310,13 @@ def _dump_used_bone_names(dump):
     return names
 
 
+def _attach_job_context(dump, job_json_path):
+    """Keep the exact build input when the source prefab was resolved to FBX."""
+    path = os.path.abspath(job_json_path)
+    dump['_job_json_path'] = path
+    dump['_job_converted_dir'] = os.path.join(os.path.dirname(path), 'converted')
+
+
 def _refskel_extend_overrides(pairs, template, variant_dir, dumps):
     """dev#19 R3統合(rd_19_refskel PROPOSAL手順4)の唯一の未実装ピース:
     kept確定直後・注入タスク組み立て前に呼ばれ、sway donorが要求する
@@ -354,11 +361,27 @@ def _refskel_extend_overrides(pairs, template, variant_dir, dumps):
         if gender in preserved_bones_cache:
             return preserved_bones_cache[gender]
         preserved = set()
-        converted = ((dumps or {}).get(gender) or {}).get("_job_converted_dir")
-        job_path = os.path.join(os.path.dirname(converted), "job.json") if converted else None
-        if job_path and os.path.isfile(job_path):
-            with open(job_path, encoding="utf-8-sig") as stream:
-                job = json.load(stream)
+        dump = (dumps or {}).get(gender) or {}
+        converted = dump.get("_job_converted_dir")
+        job_path = dump.get("_job_json_path")
+        job = None
+        if job_path is not None:
+            # The GUI resolves prefab exports into job.resolved.json. Reading
+            # the original job.json here loses the exported PhysBone paths and
+            # falsely marks a fresh garment report stale. Do not guess another
+            # job if the explicitly selected input is missing or malformed.
+            try:
+                job = core.load_job(job_path)
+            except (OSError, ValueError, TypeError) as exc:
+                raise vp_refskel_extend.RefskelExtendError(
+                    f"cannot read build job ({gender}): {job_path}: {exc}") from exc
+        elif converted:
+            # Compatibility for callers predating explicit build context.
+            job_path = os.path.join(os.path.dirname(converted), "job.json")
+            if os.path.isfile(job_path):
+                with open(job_path, encoding="utf-8-sig") as stream:
+                    job = json.load(stream)
+        if job is not None:
             from sway_hub_wire import preserve_chain_anchors_from_overrides
             anchors = preserve_chain_anchors_from_overrides(job.get("sway_chain_overrides"))
             garment_roots = {}
@@ -1535,8 +1558,7 @@ def main():
         # バグ: source_blendのdirnameから逆算すると見つからず、パッチが
         # 常にサイレントno-opになっていた)。job.jsonの場所から直接
         # job_dir/convertedを解決する方が確実なので、こちらを明示的に渡す。
-        dumps[gender]['_job_converted_dir'] = os.path.join(
-            os.path.dirname(os.path.abspath(args.job_json)), "converted")
+        _attach_job_context(dumps[gender], args.job_json)
         # dev#157 / WP-I157: サイズ可変。build_avatar_variant.build_uexp_variant()が
         # dump.get('uniform_scale', 1.0)を読む(apply_uniform_scale参照)。
         dumps[gender]['uniform_scale'] = args.uniform_scale

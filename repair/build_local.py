@@ -16,7 +16,7 @@ from datetime import datetime
 import uuid
 
 REPO=Path(__file__).resolve().parents[1]
-VERSION = '2.13.0-reborn.13'
+VERSION = '2.13.0-reborn.14'
 BLENDER_DIR = 'res/assets/tools/blender-4.3.2-windows-x64'
 RUNTIME_PATHS = {
     'TCL_LIBRARY': 'res/python_embed/tcl/tcl8.6',
